@@ -566,6 +566,14 @@ def selftest() -> int:
         # A heredoc BODY is text, not a command. Writing a doc that quotes the rule,
         # or a commit message that explains it, must not trip the rule it quotes.
         ("git commit -F - -- docs/A.md <<MSG\nnever git add -A in a worktree\nMSG\n", None),
+        # A commit message quoting the rule is prose, not a command. This exact shape was
+        # refused on 2026-08-19 while staging three explicit paths.
+        ('git add -- CLAUDE.md docs/X.md && git commit -m "what stays: never git add -A here"',
+         None),
+        ("git commit -m 'the rule is: git add -A is banned'", None),
+        ('git commit --message="never git add -A"', None),
+        # The quotes end where they end. A real violation chained after a commit still blocks.
+        ('git commit -m "docs" && git add -A', "rule_add_all"),
         ("python3 - <<'PY'\nprint('the git add -A rule')\nPY\n", None),
         # ...unless a shell is reading it, because then the body executes.
         ("bash <<EOF\ngit add -A\nEOF\n", "rule_add_all"),
@@ -573,7 +581,7 @@ def selftest() -> int:
     bad = 0
     for cmd, want in cases:
         got = None
-        cmd = strip_heredocs(cmd)
+        cmd = strip_commit_messages(strip_heredocs(cmd))
         for rule in RULES:
             if rule.__name__ in ("rule_pr_size", "rule_commit_in_shared_checkout",
                                  "rule_merge_red_pr"):
@@ -768,6 +776,27 @@ def strip_heredocs(cmd: str) -> str:
             out.append(lines[i])
             i += 1
     return "".join(out)
+
+
+_COMMIT_MSG = re.compile(r"""(-m|--message)(=|\s+)(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
+                         re.DOTALL)
+
+
+def strip_commit_messages(cmd: str) -> str:
+    """Drop `-m "..."` bodies before the rules judge a command.
+
+    Same reason as strip_heredocs, and found the same way: on 2026-08-19 this guard refused
+    `git add -- CLAUDE.md .claude/skills docs/... && git commit -m "... never git add -A ..."`.
+    The staged paths were explicit. The only match was the rule being QUOTED in the message that
+    explains it.
+
+    A commit message is text. It cannot execute, so nothing is lost by not judging it, and a
+    guard that blocks writing down its own rule is a guard people learn to bypass.
+
+    Only the quoted body goes. `git commit -m` with an unquoted word is left alone, and so is
+    everything outside the quotes -- including anything chained after the commit with && or ;.
+    """
+    return _COMMIT_MSG.sub(lambda m: f"{m.group(1)}{m.group(2)}{m.group('q')}{m.group('q')}", cmd)
 
 
 def main() -> int:
