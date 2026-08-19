@@ -67,14 +67,31 @@ def tail_text(path, n=TAIL):
         return ""
 
 
+def is_compaction_boundary(rec):
+    """True for the pair of records a compaction writes.
+
+    Measured on transcript 5a5eafd3 (2026-08-19): a `system` record carrying
+    `compactMetadata`, immediately followed by a `user` record with `isCompactSummary`.
+    Either one is enough to know that every usage figure ABOVE it describes a context that
+    no longer exists.
+    """
+    return bool(rec.get("compactMetadata") or rec.get("isCompactSummary"))
+
+
 def resident(path):
     r = 0
     for line in tail_text(path).splitlines():
-        if '"usage"' not in line:
+        if '"usage"' not in line and "ompact" not in line:
             continue
         try:
             rec = json.loads(line)
         except Exception:
+            continue
+        # A compaction throws the context away. Anything measured before it is history, and
+        # quoting it makes the guard fire hardest at the moment the session got CHEAP -- the
+        # exact mismatch the founder caught on 2026-08-19 (guard said 165K, statusline 73K).
+        if is_compaction_boundary(rec):
+            r = 0
             continue
         if rec.get("type") != "assistant":
             continue
@@ -184,6 +201,53 @@ def selftest():
             failures.append(f"  assess{args}: want fires={want_fires} strong={want_strong}, "
                             f"got fires={fires} strong={strong}")
 
+    # A COMPACTION throws the context away. Everything measured above the boundary describes
+    # a context that no longer exists, so quoting it makes the guard fire hardest at the moment
+    # the session got cheap. Caught by the founder on 2026-08-19: the guard said 165K while the
+    # statusline said 73K, and both were reading the same file with the same formula.
+    def _fat(n):
+        return json.dumps({"type": "assistant", "message": {"usage": {
+            "input_tokens": 0, "cache_read_input_tokens": n,
+            "cache_creation_input_tokens": 0}}}) + "\n"
+
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as fh:
+        fh.write(_fat(166_070))
+        fh.write(json.dumps({"type": "system", "subtype": "compact_boundary",
+                             "compactMetadata": {"trigger": "auto"}}) + "\n")
+        fh.write(json.dumps({"type": "user", "isCompactSummary": True,
+                             "message": {"content": "summary"}}) + "\n")
+        compacted = fh.name
+    # No assistant turn after the boundary yet -- the exact window in which PreToolUse fires
+    # first in a continued session, and the only window where last-record-wins reads stale.
+    got = resident(compacted)
+    if got != 0:
+        failures.append(f"  resident(compacted, no new turn yet) = {got}, want 0 "
+                        "(the pre-compaction figure must not survive the boundary)")
+    os.unlink(compacted)
+
+    # ...and once a new turn lands, that is the figure.
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as fh:
+        fh.write(_fat(166_070))
+        fh.write(json.dumps({"type": "user", "isCompactSummary": True,
+                             "message": {"content": "summary"}}) + "\n")
+        fh.write(_fat(69_181))
+        resumed = fh.name
+    got = resident(resumed)
+    if got != 69_181:
+        failures.append(f"  resident(resumed after compaction) = {got}, want 69181")
+    os.unlink(resumed)
+
+    # ...and the same shape WITHOUT a boundary must still report the last figure. Without this
+    # case, a reset that fired on every record would read as a pass above and disarm the guard.
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as fh:
+        fh.write(_fat(166_070))
+        fh.write(_fat(169_000))
+        plain = fh.name
+    got = resident(plain)
+    if got != 169_000:
+        failures.append(f"  resident(no compaction) = {got}, want 169000")
+    os.unlink(plain)
+
     # `resident` must read the LAST assistant usage block, and must sum all three input
     # counters -- reading only input_tokens under-reports a cached turn by an order of
     # magnitude, which would silence the hook exactly when it matters most.
@@ -276,12 +340,16 @@ BLOCK_MSG = (
     "This refuses {what}s only. Write, Edit and every non-reading shell command still work, "
     "so you can finish and save right now:\n"
     "  1. Finish the step you are on -- you are not being cut off mid-edit.\n"
-    "  2. Write the handoff (task+goal, decisions, files touched, exact next steps) to\n"
-    "     {ckpt}\n"
+    "  2. Write the handoff to {ckpt}\n"
+    "     Its FIRST section must be `## RESUME HERE` naming the one next action, so any\n"
+     "     word the founder types afterwards is enough to restart the work.\n"
     "  3. Commit and push what is done.\n"
-    "  4. End your reply with: Safe point -- type /clear (state saved, nothing will be lost).\n"
-    "The SessionStart memory-loop hook re-injects that handoff into the next session, so "
-    "/clear costs nothing but the reading you would have had to redo anyway.\n"
+    "  4. End your reply with: Safe point -- type /compact (nothing is lost, and you do\n"
+    "     not have to retype anything).\n"
+    "RECOMMEND /compact, NOT /clear. /compact keeps the thread and needs no prompt from the\n"
+    "founder; the global CLAUDE.md already declares what a compaction must preserve. Offer\n"
+    "/clear only when the NEXT task is a different task -- then the handoff is the carrier\n"
+    "and the SessionStart memory-loop hook re-injects it.\n"
     "If this block is WRONG -- the remaining work genuinely cannot be split -- the escape is "
     "one line, and it is the user's call, not yours:\n"
     "  touch ~/.claude/state/contextguard/OFF     # off for every session until removed\n"
@@ -361,13 +429,15 @@ def main():
         msg = (f"[session-guard] MARATHON SHAPE: {'; '.join(signals)}. "
                f"Claude: finish the current step only, then (1) write a concise handoff "
                f"(task+goal, decisions, files touched, exact next steps) to {ckpt} and "
-               f"(2) end your reply with the single line: \"Safe point — type /clear "
+               f"(2) end your reply with the single line: \"Safe point — type /compact "
                f"(state saved, nothing will be lost)\". The memory-loop hook auto-restores "
                f"that handoff in the next session. Do this without asking.")
     else:
         msg = (f"[session-guard] Session going long ({'; '.join(signals)}). Claude: at the "
                f"next task boundary, write a handoff to {ckpt} and tell the user: "
-               f"\"Safe point — type /clear (state saved)\". Loss-proof via memory-loop.")
+               f"\"Safe point — type /compact (nothing lost, nothing to retype)\". Use /clear only "
+               "when the next task is a DIFFERENT task; then LATEST.md is the carrier and "
+               "the memory-loop SessionStart hook re-injects it.")
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",
