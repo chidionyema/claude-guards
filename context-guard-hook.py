@@ -25,7 +25,26 @@ checkpoints/LATEST.md into the next fresh session automatically.
 Per-session state lives next to the transcript: <session>.jsonl.guard.json
 Cost when it fires: ~70 tokens of injected context. Silent otherwise. Never blocks.
 """
-import json, os, sys, time
+import json, os, re, sys, time
+
+#: Above this, the PreToolUse half REFUSES context-growing calls. Same number as
+#: RESIDENT_HARD on purpose: the nudge and the block must not disagree about when a
+#: session is too fat, or the nudge trains you to ignore the block.
+RESIDENT_BLOCK = 140_000
+BLOCK_OFF = os.path.expanduser("~/.claude/state/contextguard/OFF")
+
+#: Tools that GROW resident context. Everything not named here is allowed at any size,
+#: which is the whole design: the way out of a fat session is to write the handoff and
+#: commit, so Write, Edit, TodoWrite and the git half of Bash must never be refused.
+_GROWING_TOOLS = {"Read", "Grep", "Glob", "WebFetch", "WebSearch", "Agent", "Task",
+                  "NotebookRead"}
+
+#: In auto mode reading happens through Bash (`cat`, `sed -n`, `rg`), so refusing the
+#: Read tool alone would be a hole big enough to drive the session through. Only pure
+#: readers are refused; git, tests, builds, redirects and the handoff write all pass.
+_BASH_READER_RE = re.compile(
+    r"^\s*(cat|bat|less|more|head|tail|rg|ag|ack|find|jq)\b"
+    r"|^\s*grep\b|^\s*sed\s+-n\b|^\s*ls\s+-[a-zA-Z]*R")
 
 RESIDENT_WARN = 85_000             # tokens re-billed every turn (= measured mean-of-medians)
 RESIDENT_HARD = 140_000            # BELOW the ~167K compaction knee, so it can actually fire
@@ -182,13 +201,108 @@ def selftest():
     if got != 1110:
         failures.append(f"  resident(): want 1110 (last record, all three counters), got {got}")
 
-    total = len(cases) + 1
+    # The BLOCKING half. This is the first guard here that can stop work, so both
+    # directions are pinned: what it refuses, and -- more important -- what it must never
+    # refuse, because those are the calls that write the handoff and get the work saved.
+    under, over = RESIDENT_BLOCK - 1, RESIDENT_BLOCK
+    block_cases = [
+        ("Read", {}, under, False),                 # under the ceiling nothing is refused
+        ("Read", {}, over, True),
+        ("Grep", {}, over, True),
+        ("Agent", {}, over, True),
+        ("WebFetch", {}, over, True),
+        ("Write", {}, over, False),                 # the handoff must always be writable
+        ("Edit", {}, over, False),
+        ("TodoWrite", {}, over, False),
+        ("Bash", {"command": "cat foo.py"}, over, True),
+        ("Bash", {"command": "rg pattern src/"}, over, True),
+        ("Bash", {"command": "sed -n '1,50p' a.py"}, over, True),
+        ("Bash", {"command": "grep x a.py"}, over, True),
+        # Everything needed to finish and ship. If any of these ever blocks, the guard has
+        # trapped the session instead of ending it.
+        ("Bash", {"command": "git commit -m 'x'"}, over, False),
+        ("Bash", {"command": "git push"}, over, False),
+        ("Bash", {"command": "gh pr create"}, over, False),
+        ("Bash", {"command": "pytest -q"}, over, False),
+        ("Bash", {"command": "cat > handoff.md <<EOF"}, over, False),
+        # A redirect sends the bytes to a file, not into the transcript. Not this guard\'s harm.
+        ("Bash", {"command": "rg pattern src/ > /tmp/hits.txt"}, over, False),
+    ]
+    for tool, ti, r_in, want_block in block_cases:
+        got = block_reason(tool, ti, r_in) is not None
+        if got != want_block:
+            failures.append(f"  block_reason({tool}, {ti}, {r_in}): want block={want_block}, "
+                            f"got {got}")
+
+    total = len(cases) + 1 + len(block_cases)
     if failures:
         print(f"context-guard selftest: {len(failures)}/{total} FAILED")
         print("\n".join(failures))
         return 1
     print(f"context-guard selftest: {total}/{total} passed")
     return 0
+
+
+def block_reason(tool: str, tool_input: dict, r: int) -> str | None:
+    """Should this tool call be refused at `r` tokens resident? None means allow.
+
+    Pure, and tested below, because a guard that fails open looks exactly like a guard with
+    nothing to say. This one can also fail CLOSED -- it can stop work -- so it is the first
+    hook in this estate that has to be right in both directions.
+    """
+    if r < RESIDENT_BLOCK:
+        return None
+    if tool in _GROWING_TOOLS:
+        return f"{tool} call"
+    if tool == "Bash":
+        cmd = str((tool_input or {}).get("command") or "")
+        # A redirect means the bytes land in a FILE, not in the transcript, so it is not
+        # the harm this guard exists for. `cat > handoff.md <<EOF` is how the handoff gets
+        # written -- refusing it would trap the session in exactly the state it is trying
+        # to escape.
+        if re.search(r">>?\s*\S", cmd):
+            return None
+        if _BASH_READER_RE.search(cmd):
+            return "read-only shell command"
+    return None
+
+
+BLOCK_MSG = (
+    "BLOCKED by context-guard: this session is at ~{k}K resident context, above the "
+    "{lim}K ceiling.\n"
+    "Every turn now re-bills that whole context. Measured 2026-08-06 across 37 sessions: "
+    "cache_read is 55.6% of spend, so a turn at 165K costs roughly 5x the same turn at the "
+    "35K floor. Reading MORE makes every remaining turn worse.\n"
+    "This refuses {what}s only. Write, Edit and every non-reading shell command still work, "
+    "so you can finish and save right now:\n"
+    "  1. Finish the step you are on -- you are not being cut off mid-edit.\n"
+    "  2. Write the handoff (task+goal, decisions, files touched, exact next steps) to\n"
+    "     {ckpt}\n"
+    "  3. Commit and push what is done.\n"
+    "  4. End your reply with: Safe point -- type /clear (state saved, nothing will be lost).\n"
+    "The SessionStart memory-loop hook re-injects that handoff into the next session, so "
+    "/clear costs nothing but the reading you would have had to redo anyway.\n"
+    "If this block is WRONG -- the remaining work genuinely cannot be split -- the escape is "
+    "one line, and it is the user's call, not yours:\n"
+    "  touch ~/.claude/state/contextguard/OFF     # off for every session until removed\n"
+)
+
+
+def pretooluse(data: dict) -> int:
+    """The blocking half. Exit 2 refuses the call and shows stderr to the model."""
+    if os.path.exists(BLOCK_OFF):
+        return 0
+    path = data.get("transcript_path") or ""
+    if not path:
+        return 0
+    r = resident(path)
+    what = block_reason(data.get("tool_name") or "", data.get("tool_input") or {}, r)
+    if not what:
+        return 0
+    ckpt = os.path.join(os.path.dirname(path), "checkpoints", "LATEST.md")
+    sys.stderr.write(BLOCK_MSG.format(k=round(r / 1000), lim=RESIDENT_BLOCK // 1000,
+                                      what=what, ckpt=ckpt))
+    return 2
 
 
 def main():
@@ -198,6 +312,11 @@ def main():
         data = json.load(sys.stdin)
     except Exception:
         sys.exit(0)
+    # One file, two hook events. They share the resident-context reader and the ceiling on
+    # purpose -- a nudge and a block that disagreed about when a session is too fat would
+    # teach you to ignore whichever fired first.
+    if data.get("hook_event_name") == "PreToolUse":
+        sys.exit(pretooluse(data))
     path = data.get("transcript_path") or ""
     if not path:
         sys.exit(0)
