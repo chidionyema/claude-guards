@@ -17,7 +17,17 @@ Reads JSON on stdin (incl. transcript_path). Project dir is derived from transcr
 import json, os, sys, hashlib, subprocess
 from datetime import datetime
 
-PROBE_TIMEOUT = 30     # seconds; a project's state probe must answer fast or be skipped
+# Seconds. A project's state probe must answer fast or be skipped — but "skipped" means the
+# injected VERIFIED LIVE STATE block, which CLAUDE.md says outranks every doc, memory and
+# checkpoint, is replaced by a timeout notice and the session starts blind. That is the more
+# expensive failure.
+#
+# Raised 30 -> 45 on 2026-08-17. Measured on prospector, three consecutive runs of the same
+# unchanged probe: 22.9s, 21.4s and 26.7s. Nothing was wrong on the slow run; the box simply had
+# CI jobs on it. At a 30s ceiling that spread puts the probe one busy afternoon away from
+# vanishing, silently, exactly when a session most needs to know what is in flight. 45s buys the
+# headroom the variance needs. It costs nothing on a fast probe: this is a timeout, not a wait.
+PROBE_TIMEOUT = 45
 
 INJECT_BUDGET = 8000   # chars of checkpoint to re-inject on restore (~2K tokens; one-time per session)
 TAIL = 400_000         # bytes of transcript to scan from the end
@@ -101,11 +111,23 @@ def archive(transcript_path):
         fh.write(h + "\n")
 
 def latest_checkpoint(transcript_path):
+    """The NEWEST checkpoint file, not LATEST.md.
+
+    LATEST.md is a single name that every concurrent session writes, so the last writer wins and a
+    hand-written handoff is silently replaced by another session's. This happened twice on
+    2026-08-16. Sessions now write a dated file and this picks the newest by mtime, so no handoff
+    can be lost by a peer. LATEST.md is still read when it is the newest thing there, which keeps
+    the old behaviour for a single-session project.
+    """
     d = os.path.join(os.path.dirname(transcript_path), "checkpoints")
-    f = os.path.join(d, "LATEST.md")
-    if not os.path.exists(f):
+    if not os.path.isdir(d):
         return None
+    files = [os.path.join(d, n) for n in os.listdir(d) if n.endswith(".md")]
+    if not files:
+        return None
+    f = max(files, key=lambda p: os.path.getmtime(p))
     txt = open(f, errors="replace").read()
+    txt = f"_(checkpoint: {os.path.basename(f)})_\n\n" + txt
     if len(txt) > INJECT_BUDGET:
         txt = txt[:INJECT_BUDGET] + "\n…(checkpoint truncated; full copy in checkpoints/)…"
     return txt
@@ -158,7 +180,104 @@ def inject(transcript_path):
         }
     }))
 
+def selftest():
+    """Check the checkpoint loop end to end on a throwaway project dir. Graded by process_audit.py.
+
+    Added 2026-08-19. This hook is the only thing that carries state across a /clear, and it fails
+    SILENT on every error path -- so a broken archive and a session with nothing to resume from
+    look exactly the same. The two properties that must not rot are tested here with real files:
+    archiving the same summary twice must produce ONE checkpoint, and the injector must pick the
+    NEWEST file rather than LATEST.md, because concurrent sessions all write that one name.
+
+    No network, no probe of the real estate: the state probe under test is `echo`.
+    """
+    import shutil
+    import tempfile
+    import time as _time
+
+    failures = []
+
+    def check(name, got, want):
+        if got != want:
+            failures.append(f"  {name}: want {want!r}, got {got!r}")
+
+    # _text flattens whatever shape the transcript used.
+    check("_text(str)", _text("hello"), "hello")
+    check("_text(blocks)", _text([{"type": "text", "text": "a"},
+                                  {"type": "tool_use", "name": "Bash"},
+                                  {"type": "text", "text": "b"}]), "a\nb")
+    check("_text(None)", _text(None), "")
+
+    tmp = tempfile.mkdtemp(prefix="memory-loop-selftest-")
+    try:
+        transcript = os.path.join(tmp, "sess.jsonl")
+        with open(transcript, "w") as fh:
+            fh.write(json.dumps({"type": "user", "message": {"content": "hi"}}) + "\n")
+            fh.write(json.dumps({"isCompactSummary": True,
+                                 "message": {"content": [{"type": "text",
+                                                          "text": "THE SUMMARY"}]}}) + "\n")
+            fh.write(json.dumps({"subtype": "compact_boundary", "timestamp": "2026-08-19T00:00:00Z",
+                                 "compactMetadata": {"trigger": "auto", "preTokens": 170000,
+                                                     "postTokens": 20000}}) + "\n")
+
+        summary, meta = find_summary(transcript)
+        check("find_summary text", summary, "THE SUMMARY")
+        check("find_summary trigger", meta.get("trigger"), "auto")
+
+        d = ckpt_dir(transcript)
+        archive(transcript)
+        archive(transcript)   # PostCompact and SessionStart both fire on the same compaction
+        saved = [n for n in os.listdir(d) if n.startswith("checkpoint-") and n.endswith(".md")]
+        check("archive is idempotent", len(saved), 1)
+        check("archive wrote LATEST.md", os.path.exists(os.path.join(d, "LATEST.md")), True)
+        check("archived summary is in the file",
+              "THE SUMMARY" in open(os.path.join(d, "LATEST.md")).read(), True)
+
+        # A hand-written handoff written AFTER the auto-archive must be the one that comes back.
+        # LATEST.md is a single name every concurrent session overwrites, so newest-by-mtime is
+        # the rule; picking LATEST.md by name is how a peer's handoff silently replaced one.
+        _time.sleep(0.01)
+        hand = os.path.join(d, "handoff-by-hand.md")
+        with open(hand, "w") as fh:
+            fh.write("HAND WRITTEN HANDOFF\n")
+        os.utime(hand, (_time.time() + 5, _time.time() + 5))
+        got = latest_checkpoint(transcript) or ""
+        check("latest_checkpoint picks the newest file", "HAND WRITTEN HANDOFF" in got, True)
+        check("latest_checkpoint names its source", "handoff-by-hand.md" in got, True)
+
+        # The injection is budgeted. Without the cap a long handoff is billed on every restore.
+        with open(hand, "w") as fh:
+            fh.write("x" * (INJECT_BUDGET * 3))
+        os.utime(hand, (_time.time() + 5, _time.time() + 5))
+        big = latest_checkpoint(transcript) or ""
+        check("injection is truncated to the budget", len(big) <= INJECT_BUDGET + 80, True)
+        check("truncation is admitted", "truncated" in big, True)
+
+        # The state probe: absent means silent, present means its output travels.
+        check("no .state-probe -> nothing", run_state_probe(transcript), None)
+        with open(os.path.join(tmp, ".state-probe"), "w") as fh:
+            fh.write("echo PROBE-OK\n")
+        check("state probe output travels", run_state_probe(transcript), "PROBE-OK")
+
+        # A probe that fails must degrade to a readable note, never raise -- a hook that throws
+        # on a bad probe would break session startup, which is worse than any stale doc.
+        with open(os.path.join(tmp, ".state-probe"), "w") as fh:
+            fh.write("exit 3\n")
+        check("failing probe is silent, not fatal", run_state_probe(transcript), None)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    total = 15
+    if failures:
+        print(f"memory-loop selftest: {len(failures)}/{total} FAILED")
+        print("\n".join(failures))
+        return 1
+    print(f"memory-loop selftest: {total}/{total} passed")
+    return 0
+
 def main():
+    if "--selftest" in sys.argv:
+        sys.exit(selftest())
     data = read_stdin()
     path = data.get("transcript_path") or ""
     if not path:

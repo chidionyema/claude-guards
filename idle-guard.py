@@ -1,0 +1,1 @@
+/Users/chidionyema/Documents/code/prospector/scripts/claude_guards/idle-guard.py
