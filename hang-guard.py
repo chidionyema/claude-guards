@@ -142,7 +142,41 @@ SELFTEST_CASES: list[tuple[str, int]] = [
     ("npm run build", 0),
     ("npm test", 0),
     ("", 0),
+
+    # Rule 3 is not a rule, it is a carve-out: a heredoc BODY is a file being written, not a
+    # command. This exact shape was refused on 2026-08-19 while writing a subagent definition
+    # whose text told the reader to prefer rg. Nothing recursive was going to run.
+    ("cat > a.md <<'EOF'\nuse rg, never a recursive grep -r, it walks the estate\nEOF\n", 0),
+    # ...but a shell READING the heredoc executes the body, so that still blocks.
+    ("bash <<'EOF'\ngrep -r pattern /\nEOF\n", 2),
 ]
+
+
+def _strip_heredocs(cmd: str) -> str:
+    """Drop heredoc BODIES before judging, borrowing rule-guard's implementation.
+
+    Found on 2026-08-19: writing a subagent definition whose text recommended rg over a recursive
+    search was refused by this guard. Nothing recursive was going to run. The body of
+    `cat > file <<'EOF'` is a FILE being written, and every pattern above matches the raw string.
+    rule-guard hit the identical class an hour earlier, with a commit message that quoted the rule
+    it was explaining. A guard that blocks writing down its own advice is one people learn to
+    bypass, and after that it is not a guard.
+
+    rule-guard.py solved this first, and its version carries the carve-out that matters: when a
+    shell READS the heredoc (`bash <<EOF`) the body is executed and must still be judged. One
+    implementation, imported by path because the module name has a hyphen in it. If the import
+    fails the command is judged unstripped, which is the old behaviour -- a guard may be noisy,
+    but it may not silently stop guarding.
+    """
+    try:
+        import importlib.util
+        src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rule-guard.py")
+        spec = importlib.util.spec_from_file_location("_rule_guard", src)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod.strip_heredocs(cmd)
+    except Exception:
+        return cmd
 
 
 def selftest() -> int:
@@ -157,7 +191,7 @@ def selftest() -> int:
     failures = []
     for cmd, want in SELFTEST_CASES:
         with redirect_stderr(io.StringIO()):
-            got = check(cmd)
+            got = check(_strip_heredocs(cmd))
         if got != want:
             failures.append(f"  {cmd!r}\n    want exit {want}, got {got}")
     if failures:
@@ -179,7 +213,7 @@ def main() -> int:
         return 0
     if payload.get("tool_name") != "Bash":
         return 0
-    return check((payload.get("tool_input") or {}).get("command") or "")
+    return check(_strip_heredocs((payload.get("tool_input") or {}).get("command") or ""))
 
 
 if __name__ == "__main__":
