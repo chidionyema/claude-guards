@@ -270,7 +270,7 @@ def _session_rows(limit: int = 40) -> list[dict]:
 def _compliance(rows: list[dict]) -> dict:
     """Grade the sessions against the thresholds CLAUDE.md already states.
 
-    These are the founder's own numbers, not new ones: take the /clear safe point at ~85K
+    These are the founder's own numbers, not new ones: take the /compact safe point at ~85K
     resident and immediately at ~140K; batch every call into one round trip per intent;
     delegate before the second exploratory search.
     """
@@ -289,7 +289,7 @@ def _compliance(rows: list[dict]) -> dict:
         "median_calls_per_request": round(
             sorted(r["calls_per_request"] for r in rows)[n // 2], 2),
         "notes": {
-            "resident": "The thresholds are the founder's own: take the /clear safe point at "
+            "resident": "The thresholds are the founder's own: take the /compact safe point at "
                         "~85K resident, immediately at ~140K. Peak cache_read per request is "
                         "the resident size, so this grades the rule directly.",
             "calls_per_request": "Parallel tool use ONLY. Most batching in this estate happens "

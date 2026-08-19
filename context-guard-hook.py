@@ -19,7 +19,7 @@ when one turn dumps a lot before compaction triggers.
 v2 watches session SHAPE — user-prompt count, transcript size, session age, and
 resident context — and when the shape goes marathon it injects an instruction that
 tells Claude to (a) write a handoff to checkpoints/LATEST.md and (b) hand the user a
-one-keystroke /clear. This is loss-proof: memory-loop.py (SessionStart hook) re-injects
+one-keystroke /compact. Loss-proof either way: memory-loop.py (SessionStart hook) re-injects
 checkpoints/LATEST.md into the next fresh session automatically.
 
 Per-session state lives next to the transcript: <session>.jsonl.guard.json
