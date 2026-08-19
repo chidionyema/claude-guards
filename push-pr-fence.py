@@ -15,6 +15,23 @@ THE RULE.
                               opened before the branch exists on the remote.
   later pushes, PR open       allowed. The work is visible; that was the whole point.
   later pushes, no PR         REFUSED. Open the pull request, then push again.
+  push while its CI is live   REFUSED. See below.
+
+THE SECOND RULE: DO NOT CANCEL THE RUN THAT WOULD HAVE MERGED IT.
+
+Measured 2026-08-19 across the last 60 CI runs: 7 success, 16 failure, 16 cancelled. Twenty-two
+pull requests sat open and nothing merged. `.github/workflows/automerge.yml` merges a PR the
+moment its CI run concludes `success`, so a CANCELLED run merges nothing, ever. And
+`.github/workflows/ci.yml` sets `cancel-in-progress` for every ref that is not main, so ANY push
+to a PR branch kills that branch's in-flight run. The python job takes about 25 minutes. A branch
+touched more often than that never produces a completed run.
+
+Several agents share this estate and cannot see each other. Each one independently found "CI is
+red", pushed a fix, and cancelled the run that was about to go green -- often a run carrying
+another agent's fix. The work was not wrong. It kept resetting the clock.
+
+So a push is refused while a CI run for that branch is queued or in progress. Wait for it. If the
+run is genuinely stuck, or the push must go now, set PUSH_ANYWAY=1 in the environment.
 
 So a branch may exist without a PR for exactly as long as it takes to open one, and no longer.
 Accumulating commits on an invisible branch is what stops being possible.
@@ -128,6 +145,31 @@ def selftest() -> int:
     return 0
 
 
+def live_ci_run(branch: str, cwd: str) -> tuple[str, str] | None | bool:
+    """The queued or in-progress CI run for `branch`, if there is one.
+
+    Returns (run id, status) when one is live, False when none is, and None when the answer
+    cannot be established -- the caller fails OPEN on None, same as every other unknown here.
+
+    Only ci.yml is consulted. The deploy and drill workflows do not gate a merge, and blocking a
+    push on one of those would fence work for a run nothing is waiting on.
+    """
+    if os.environ.get("PUSH_ANYWAY"):
+        return False
+    c, out = run("gh", "run", "list", "--workflow", "ci.yml", "--branch", branch,
+                 "--limit", "5", "--json", "databaseId,status", cwd=cwd)
+    if c != 0:
+        return None
+    try:
+        runs = json.loads(out or "[]")
+    except json.JSONDecodeError:
+        return None
+    for r in runs:
+        if r.get("status") in ("queued", "in_progress", "waiting", "requested", "pending"):
+            return str(r.get("databaseId")), str(r.get("status"))
+    return False
+
+
 def main() -> int:
     if "--selftest" in sys.argv:
         return selftest()
@@ -169,7 +211,29 @@ def main() -> int:
             return 0                       # gh unavailable or unauthenticated: fail open
         try:
             if json.loads(out or "[]"):
-                continue                    # a pull request is open: this is visible work
+                # A pull request is open, so the work is visible. One thing left to check:
+                # pushing now would cancel this branch's in-flight CI, and automerge.yml only
+                # merges on a run that COMPLETES green.
+                live = live_ci_run(branch, cwd)
+                if live is None:
+                    continue                # cannot tell: fail open
+                if not live:
+                    continue                # nothing running: push away
+                rid, status = live
+                print(
+                    f"BLOCKED by push-pr-fence: CI run {rid} for `{branch}` is {status}.\n"
+                    f"Pushing cancels it (ci.yml sets cancel-in-progress for every ref that is "
+                    f"not main), and automerge.yml only merges a PR whose CI run CONCLUDES "
+                    f"green. A cancelled run merges nothing.\n"
+                    f"Measured 2026-08-19: 7 of the last 60 CI runs succeeded, 16 were "
+                    f"cancelled, and 22 PRs sat open with nothing merging.\n\n"
+                    f"Watch it, then push when it lands:\n"
+                    f"  gh run watch {rid}\n"
+                    f"  gh run list --branch {branch} --limit 1\n\n"
+                    f"If the run is stuck or this genuinely cannot wait: PUSH_ANYWAY=1 git push ...",
+                    file=sys.stderr,
+                )
+                return 2
         except json.JSONDecodeError:
             return 0
 

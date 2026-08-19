@@ -11,6 +11,9 @@ WHAT IT CHECKS. At the end of a turn, for every worktree of the repo the session
 branch has a remote counterpart, is ahead of origin/main, and has no open pull request, the
 stop is blocked once with the exact `gh pr create` command to run.
 
+WHOSE BRANCHES. This session's, and shared checkouts. NOT another session's scratchpad worktree
+-- see `foreign_session` for the 2026-08-19 incident that added the exclusion.
+
 WHY IT CANNOT NAG. Two bounds, both deliberate:
 
   * One block per (branch, sha). Once reported, that exact state is recorded in the state file
@@ -25,6 +28,12 @@ WHY IT CANNOT NAG. Two bounds, both deliberate:
     -- and this guard demanded a pull request for it. The `gh pr create` it printed cannot
     succeed: GitHub answers "Head ref must be a branch". A guard that hands you an impossible
     command is worse than one that stays quiet, because the only way past it is to argue with it.
+
+  * A pull request that is MERGED at this exact commit counts as reviewed. Asking only for OPEN
+    pull requests blocked a stop on 2026-08-19 over `chore/process-audit` @ 4fb925ee, which was
+    PR #373, merged at that very commit, with only the remote branch left undeleted. The
+    tree check below could not catch it because it compares against the LOCAL `origin/main`,
+    which in a worktree that has not fetched since the merge is behind.
 
 The `main` branch, detached HEADs and branches with no upstream are all ignored: an unpushed
 branch is work in progress, and only pushing makes it something a reviewer could be waiting on.
@@ -65,6 +74,34 @@ def worktrees(cwd: str) -> list[str]:
             if line.startswith("worktree ")] or [cwd]
 
 
+def foreign_session(tree: str, session_id: str | None) -> bool:
+    """True when this worktree belongs to a DIFFERENT live session's scratchpad.
+
+    Sessions share this repo, so `git worktree list` returns every other agent's tree as well as
+    this one's. On 2026-08-19 that produced the failure this function exists to stop: a sibling
+    session was actively committing to `docs/founder-directive-ledger` in its own scratchpad
+    worktree, and because each new commit is a new (branch, sha), the once-per-commit bound never
+    engaged -- this guard blocked three stops in a row on somebody else's in-flight branch.
+
+    Both ways out of that were wrong. Opening the pull request is the two-agents-one-branch
+    collision `dupe-work-fence.py` exists to refuse. Typing "not mine" each time trains every
+    agent to answer this guard with a sentence, which is how a guard stops being read.
+
+    The scratchpad path carries the owning session's id (`<tmp>/<slug>/<session-uuid>/scratchpad`),
+    so ownership is a fact on disk rather than a judgement. A tree outside any scratchpad is
+    shared ground and is still scanned; so is this session's own scratchpad. If the payload
+    carried no session id we cannot tell, and the guard keeps its old behaviour rather than
+    going quiet -- an unproven skip is worse than a noisy check.
+    """
+    if not session_id:
+        return False
+    parts = Path(tree).parts
+    if "scratchpad" not in parts:
+        return False
+    owner = parts[parts.index("scratchpad") - 1]
+    return owner != session_id
+
+
 def load_state() -> dict:
     try:
         return json.loads(STATE.read_text())
@@ -83,20 +120,53 @@ def save_state(state: dict) -> None:
         pass
 
 
-def has_open_pr(branch: str, cwd: str) -> bool | None:
-    """True/False, or None when the question could not be asked."""
+def pr_covers(rows_json: str, sha: str) -> bool | None:
+    """Does a pull request already make THIS commit visible? None when it cannot be decided.
+
+    Pure, so the selftest can grade it without GitHub. Three answers, each for a reason:
+
+      * OPEN      -> True. A live pull request tracks its head branch, so every push lands in it.
+      * MERGED    -> True, but only when the merged head is this exact commit. A branch that was
+                    merged and then took new commits is invisible work again, and answering True
+                    on the old merge would be the guard failing silently.
+      * CLOSED    -> False. Closed without merging means the work was seen and dropped; if it is
+                    being pushed again it needs a pull request again.
+    """
+    try:
+        rows = json.loads(rows_json or "[]")
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        state = str(row.get("state") or "").upper()
+        if state == "OPEN":
+            return True
+        if state == "MERGED" and str(row.get("headRefOid") or "").startswith(sha):
+            return True
+    return False
+
+
+def has_pr(branch: str, cwd: str, sha: str) -> bool | None:
+    """True/False, or None when the question could not be asked.
+
+    WHY IT ASKS FOR MERGED TOO (2026-08-19). This asked only for OPEN pull requests, and blocked
+    a stop over `chore/process-audit` @ 4fb925ee -- which was PR #373, MERGED at exactly that
+    commit, with only the remote branch left undeleted. The tree check above did not save it
+    because it compares against the LOCAL `origin/main`, and in a worktree that has not fetched
+    since the merge that ref is behind. A guard that demands a pull request for work already in
+    main is a false positive, and a false positive is what gets a guard ignored.
+    """
     try:
         out = subprocess.run(
-            ["gh", "pr", "list", "--head", branch, "--state", "open", "--json", "number"],
+            ["gh", "pr", "list", "--head", branch, "--state", "all",
+             "--json", "number,state,headRefOid"],
             cwd=cwd, capture_output=True, text=True, timeout=TIMEOUT)
     except Exception:  # noqa: BLE001
         return None
     if out.returncode != 0:
         return None
-    try:
-        return bool(json.loads(out.stdout or "[]"))
-    except Exception:  # noqa: BLE001
-        return None
+    return pr_covers(out.stdout, sha)
 
 
 def exists_on_remote(names: list[str], cwd: str) -> bool | None:
@@ -287,16 +357,43 @@ def selftest() -> int:
         #    in a broken checkout blocks.
         check("git() on a failing command", git(["rev-parse", "--verify", "nope"], work), None)
         check("worktrees() falls back to cwd", worktrees(tmp), [tmp])
+
+        # 8b. Another session's scratchpad worktree is not this session's business.
+        mine, theirs = "aaaaaaaa-1111", "bbbbbbbb-2222"
+        base = "/private/tmp/claude-501/some-project"
+        check("foreign_session(another session)",
+              foreign_session(f"{base}/{theirs}/scratchpad/wt-dir", mine), True)
+        check("foreign_session(my own scratchpad)",
+              foreign_session(f"{base}/{mine}/scratchpad/wt-dir", mine), False)
+        check("foreign_session(outside any scratchpad)",
+              foreign_session("/Users/x/Documents/code/wt-deploy-age", mine), False)
+        check("foreign_session(no session id known)",
+              foreign_session(f"{base}/{theirs}/scratchpad/wt-dir", None), False)
+        check("foreign_session(scratchpad itself)",
+              foreign_session(f"{base}/{theirs}/scratchpad", mine), True)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    # 9. The dedupe ledger is bounded, so a long-lived state file cannot grow without limit.
+    # 9. A pull request that already covers this commit. Pure function, no network: the four
+    #    states below are the whole decision, and the merged-at-a-different-commit row is the
+    #    one that was wrong on 2026-08-19 in the other direction.
+    check("pr_covers(open)", pr_covers('[{"state":"OPEN","headRefOid":"deadbeefcafe"}]', "1234abc"), True)
+    check("pr_covers(merged at this sha)",
+          pr_covers('[{"state":"MERGED","headRefOid":"1234abcdef01"}]', "1234abc"), True)
+    check("pr_covers(merged at another sha)",
+          pr_covers('[{"state":"MERGED","headRefOid":"999999999999"}]', "1234abc"), False)
+    check("pr_covers(closed unmerged)",
+          pr_covers('[{"state":"CLOSED","headRefOid":"1234abcdef01"}]', "1234abc"), False)
+    check("pr_covers(no pull requests)", pr_covers("[]", "1234abc"), False)
+    check("pr_covers(unreadable answer)", pr_covers("not json", "1234abc"), None)
+
+    # 10. The dedupe ledger is bounded, so a long-lived state file cannot grow without limit.
     trimmed = {f"b{i}": "sha" for i in range(250)}
     if len(trimmed) > 200:
         trimmed = dict(list(trimmed.items())[-200:])
     check("state ledger caps at 200", len(trimmed), 200)
 
-    total = 14
+    total = 25
     if failures:
         print(f"branch-pr-guard selftest: {len(failures)}/{total} FAILED")
         print("\n".join(failures))
@@ -313,6 +410,7 @@ def main() -> int:
     except Exception:  # noqa: BLE001
         payload = {}
     cwd = payload.get("cwd") or os.getcwd()
+    session_id = payload.get("session_id")
 
     if git(["rev-parse", "--git-dir"], cwd) is None:
         return 0  # not a repo
@@ -320,6 +418,8 @@ def main() -> int:
     state = load_state()
     findings = []
     for tree in worktrees(cwd):
+        if foreign_session(tree, session_id):
+            continue  # another session's scratchpad; its own hook owns it
         hit = unreviewed(tree)
         if hit is None:
             continue
@@ -328,7 +428,7 @@ def main() -> int:
             continue  # already reported at this exact commit
         # Open under ANY name this commit was pushed under, or the question could not be asked.
         names = pushed_names(branch, tree)
-        if any(has_open_pr(name, tree) is not False for name in names):
+        if any(has_pr(name, tree, sha) is not False for name in names):
             continue
         # Gone from the remote entirely: the local ref is stale, there is nothing to review, and
         # the `gh pr create` this guard would print is a command GitHub refuses. Prune and pass.

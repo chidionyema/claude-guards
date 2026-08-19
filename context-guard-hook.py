@@ -27,10 +27,29 @@ Cost when it fires: ~70 tokens of injected context. Silent otherwise. Never bloc
 """
 import json, os, re, sys, time
 
-#: Above this, the PreToolUse half REFUSES context-growing calls. Same number as
-#: RESIDENT_HARD on purpose: the nudge and the block must not disagree about when a
-#: session is too fat, or the nudge trains you to ignore the block.
-RESIDENT_BLOCK = 140_000
+#: Above this, the PreToolUse half refuses ONE context-growing call per session. Same
+#: number as RESIDENT_HARD on purpose: the nudge and the block must not disagree about
+#: when a session is too fat, or the nudge trains you to ignore the block.
+#:
+#: It is one refusal, not a wall. Founder directive 2026-08-19: "have ne type sonethig is
+#: friction, the goal is autonony / i should not have to nanually be involced". A guard
+#: whose only escape is the founder typing `touch .../OFF` has moved the work onto the
+#: founder, which is the opposite of what a guard is for -- and on 2026-08-19 it is what
+#: stopped the tooling research the founder had asked for in the same session. The refusal
+#: exists to make Claude stop and write the handoff. Once that is done,
+#: CLAUDE_CODE_AUTO_COMPACT_WINDOW caps the context by itself and there is nothing left
+#: for this half to protect.
+#: DERIVED FROM THE WINDOW, NEVER HARDCODED. This number went stale twice for the same
+#: reason: it was tuned against one value of CLAUDE_CODE_AUTO_COMPACT_WINDOW and the window
+#: then moved. v1 set 170_000 against a 200K window and fired once in 37 sessions; v2.1 set
+#: 140_000, the window later moved to 150_000, and 140_000 sits ABOVE the ~118K autocompact
+#: trigger -- so autocompact always won the race and the resident path was dead AGAIN.
+#: Measured 2026-08-19: a 150_000 window compacted at ~118K, and the 200_000 window's knee was
+#: 160-167K. Both are ~0.79-0.80 of the window, so the trigger is a FRACTION of the window and
+#: the guard reads the same env var Claude Code does.
+_WINDOW = int(os.environ.get("CLAUDE_CODE_AUTO_COMPACT_WINDOW") or 200_000)
+_TRIGGER = int(_WINDOW * 0.79)          # where autocompact fires, measured
+RESIDENT_BLOCK = int(_TRIGGER * 0.90)   # ~10% of the window of room to write the handoff first
 BLOCK_OFF = os.path.expanduser("~/.claude/state/contextguard/OFF")
 
 #: Tools that GROW resident context. Everything not named here is allowed at any size,
@@ -46,8 +65,11 @@ _BASH_READER_RE = re.compile(
     r"^\s*(cat|bat|less|more|head|tail|rg|ag|ack|find|jq)\b"
     r"|^\s*grep\b|^\s*sed\s+-n\b|^\s*ls\s+-[a-zA-Z]*R")
 
-RESIDENT_WARN = 85_000             # tokens re-billed every turn (= measured mean-of-medians)
-RESIDENT_HARD = 140_000            # BELOW the ~167K compaction knee, so it can actually fire
+# The nudge and the block must not disagree about when a session is too fat, so HARD is the
+# same derived number as RESIDENT_BLOCK. WARN stays the measured mean-of-medians (85K) but is
+# clamped under HARD, so a small window can never invert the two.
+RESIDENT_HARD = RESIDENT_BLOCK
+RESIDENT_WARN = min(85_000, RESIDENT_HARD - 10_000)
 PROMPTS_WARN  = 25                 # user prompts in one session ≈ a task boundary passed
 SIZE_WARN     = 20 * 1024 * 1024   # transcript bytes ≈ proxy for turn count
 AGE_WARN      = 8 * 3600           # seconds; marathons ran ~3 days
@@ -298,7 +320,25 @@ def selftest():
             failures.append(f"  block_reason({tool}, {ti}, {r_in}): want block={want_block}, "
                             f"got {got}")
 
-    total = len(cases) + 1 + len(block_cases)
+    # The one-shot. Refusing twice would leave the founder typing `touch .../OFF` as the only
+    # way out, which is the manual step this hook is not allowed to create. Both directions are
+    # pinned: the first call must refuse (or the handoff never gets written) and the second must
+    # not (or the session is trapped, which is the failure the founder reported).
+    with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as fh:
+        fh.write(_fat(RESIDENT_BLOCK + 1))
+        fat_path = fh.name
+    call = {"hook_event_name": "PreToolUse", "transcript_path": fat_path,
+            "tool_name": "Read", "tool_input": {}}
+    first, second = pretooluse(dict(call)), pretooluse(dict(call))
+    if (first, second) != (2, 0):
+        failures.append(f"  pretooluse one-shot: want (2, 0), got ({first}, {second})")
+    for junk in (fat_path, fat_path + ".guard.json"):
+        try:
+            os.unlink(junk)
+        except OSError:
+            pass
+
+    total = len(cases) + 2 + len(block_cases)
     if failures:
         print(f"context-guard selftest: {len(failures)}/{total} FAILED")
         print("\n".join(failures))
@@ -332,41 +372,49 @@ def block_reason(tool: str, tool_input: dict, r: int) -> str | None:
 
 
 BLOCK_MSG = (
-    "BLOCKED by context-guard: this session is at ~{k}K resident context, above the "
-    "{lim}K ceiling.\n"
+    "context-guard: this session is at ~{k}K resident context, above the {lim}K ceiling.\n"
     "Every turn now re-bills that whole context. Measured 2026-08-06 across 37 sessions: "
     "cache_read is 55.6% of spend, so a turn at 165K costs roughly 5x the same turn at the "
     "35K floor. Reading MORE makes every remaining turn worse.\n"
-    "This refuses {what}s only. Write, Edit and every non-reading shell command still work, "
-    "so you can finish and save right now:\n"
-    "  1. Finish the step you are on -- you are not being cut off mid-edit.\n"
-    "  2. Write the handoff to {ckpt}\n"
-    "     Its FIRST section must be `## RESUME HERE` naming the one next action, so any\n"
-     "     word the founder types afterwards is enough to restart the work.\n"
-    "  3. Commit and push what is done.\n"
-    "  4. End your reply with: Safe point -- type /compact (nothing is lost, and you do\n"
-    "     not have to retype anything).\n"
-    "RECOMMEND /compact, NOT /clear. /compact keeps the thread and needs no prompt from the\n"
-    "founder; the global CLAUDE.md already declares what a compaction must preserve. Offer\n"
-    "/clear only when the NEXT task is a different task -- then the handoff is the carrier\n"
-    "and the SessionStart memory-loop hook re-injects it.\n"
-    "If this block is WRONG -- the remaining work genuinely cannot be split -- the escape is "
-    "one line, and it is the user's call, not yours:\n"
-    "  touch ~/.claude/state/contextguard/OFF     # off for every session until removed\n"
+    "\n"
+    "THIS IS THE ONLY REFUSAL YOU WILL GET IN THIS SESSION. The next {what} is allowed, and "
+    "so is every one after it. Nothing is blocked from here on, so do not stop, do not hand "
+    "back, and do not ask the founder to type anything -- auto-compact caps the context by "
+    "itself at CLAUDE_CODE_AUTO_COMPACT_WINDOW.\n"
+    "\n"
+    "Do these two things now, then carry straight on with the work:\n"
+    "  1. Write the handoff to {ckpt}\n"
+    "     Its FIRST section must be `## RESUME HERE` naming the one next action, so a\n"
+    "     compaction at any moment loses nothing.\n"
+    "  2. Commit and push what is already done.\n"
+    "Then continue. Prefer narrow reads over whole files for the rest of the session.\n"
 )
 
 
 def pretooluse(data: dict) -> int:
-    """The blocking half. Exit 2 refuses the call and shows stderr to the model."""
+    """The blocking half. Exit 2 refuses the call and shows stderr to the model.
+
+    It refuses ONCE per session and then never again. A guard that keeps refusing has only
+    one exit -- the founder typing `touch ~/.claude/state/contextguard/OFF` -- and that is a
+    manual step in a workflow whose whole point is that there are none. Refusing once still
+    lands the message that gets the handoff written; refusing forever just moves the work
+    onto the founder.
+    """
     if os.path.exists(BLOCK_OFF):
         return 0
     path = data.get("transcript_path") or ""
     if not path:
         return 0
+    state_path = path + ".guard.json"
+    st = load_state(state_path)
+    if st.get("blocked_at"):
+        return 0
     r = resident(path)
     what = block_reason(data.get("tool_name") or "", data.get("tool_input") or {}, r)
     if not what:
         return 0
+    st["blocked_at"] = r
+    save_state(state_path, st)
     ckpt = os.path.join(os.path.dirname(path), "checkpoints", "LATEST.md")
     sys.stderr.write(BLOCK_MSG.format(k=round(r / 1000), lim=RESIDENT_BLOCK // 1000,
                                       what=what, ckpt=ckpt))
@@ -427,17 +475,16 @@ def main():
     ckpt = os.path.join(os.path.dirname(path), "checkpoints", "LATEST.md")
     if strong:
         msg = (f"[session-guard] MARATHON SHAPE: {'; '.join(signals)}. "
-               f"Claude: finish the current step only, then (1) write a concise handoff "
-               f"(task+goal, decisions, files touched, exact next steps) to {ckpt} and "
-               f"(2) end your reply with the single line: \"Safe point — type /compact "
-               f"(state saved, nothing will be lost)\". The memory-loop hook auto-restores "
-               f"that handoff in the next session. Do this without asking.")
+               f"Claude: write a concise handoff (task+goal, decisions, files touched, exact "
+               f"next steps) to {ckpt} now, commit and push what is done, then KEEP WORKING. "
+               f"Auto-compact caps the context by itself and the memory-loop hook restores "
+               f"that handoff, so do NOT ask the founder to type /compact or /clear, and do "
+               f"NOT stop to hand back. Save silently, then carry on.")
     else:
         msg = (f"[session-guard] Session going long ({'; '.join(signals)}). Claude: at the "
-               f"next task boundary, write a handoff to {ckpt} and tell the user: "
-               f"\"Safe point — type /compact (nothing lost, nothing to retype)\". Use /clear only "
-               "when the next task is a DIFFERENT task; then LATEST.md is the carrier and "
-               "the memory-loop SessionStart hook re-injects it.")
+               f"next task boundary, write a handoff to {ckpt}, then carry on. Do not ask "
+               "the founder to type anything -- auto-compact fires on its own and the "
+               "memory-loop SessionStart hook re-injects the handoff.")
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": "UserPromptSubmit",

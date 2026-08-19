@@ -125,7 +125,12 @@ def rule_add_all(cmd: str) -> str | None:
     return None
 
 
-_NO_VERIFY_RE = re.compile(r"\bgit\s+commit\b[^|;&]*(?:--no-verify\b|\s-n\b)")
+# `[^|;&]*` also crosses NEWLINES, so in a multi-line script it scanned past the end of the
+# commit and matched a `-n` on any later line — `rg -n`, `tail -n`, `sort -n`. Measured
+# 2026-08-19: a `git commit` followed three lines later by `rg -n` was refused as
+# `--no-verify`. A guard that blocks correct commands is a guard sessions learn to route
+# around, so the line terminators are excluded too.
+_NO_VERIFY_RE = re.compile(r"\bgit\s+commit\b[^|;&\n\r]*(?:--no-verify\b|\s-n\b)")
 
 
 def rule_no_verify(cmd: str) -> str | None:
@@ -517,8 +522,183 @@ def rule_merge_red_pr(cmd: str) -> str | None:
 
 #: Rules that REFUSE the command. Each one matches on what the command does — a flag, a path — so
 #: it stays true whatever the repo's branches are called.
+# --- CI autoscale: switched OFF on 2026-08-19 by founder decision, and kept off ------------
+#
+# WHY. `.github/workflows/ci-autoscale.yml` landed on main as dad8cb7c (#396) at 13:15Z. It
+# calls `deploy/runners.sh autoscale`, whose scale-down loop reads the GitHub busy-runner list
+# with `|| true`. secrets.GITHUB_TOKEN cannot read that endpoint (it needs repo ADMIN), so the
+# list came back EMPTY, every started machine read as idle, and the loop stopped machines that
+# were mid-build. Measured: machine 8ee06eb7701628 got `stop stopping` at 14:50:51Z and
+# `crash stopped requested_stop=True` at 14:51:58Z while it was 15 minutes into PR #425's python
+# job. Nine PRs died the same way (#383 #387 #390 #391 #407 #414 #424 #427 #431), each with
+# step 6 concluding `null` and the annotation "The self-hosted runner lost communication with
+# the server" — which is indistinguishable from a failing test unless you read the annotation.
+# #396's OWN merge commit was one of the casualties, so main went red on the commit that
+# introduced the autoscaler and stayed red.
+#
+# Founder, 2026-08-19: "we cant have autoscaling until we are confident that machines that are
+# spun up are reliable" and "ensure it cant be reenabled by accident".
+#
+# The workflow is disabled at GitHub (`gh workflow disable 337731742`) and deleted from the
+# repo. This rule is the third layer: a machine refusal that reaches every agent on this box,
+# because the first two live in places a single command can undo.
+_AUTOSCALE_ENABLE_RE = re.compile(
+    r"\bgh\s+workflow\s+enable\b[^|;&\n]*(?:337731742|ci-autoscale|CI\s+autoscale)")
+_AUTOSCALE_RUN_RE = re.compile(r"runners\.sh\s+autoscale\b")
+_FLY_STOP_CI_RE = re.compile(r"\bfly\s+machine[s]?\s+stop\b[^|;&\n]*prospector-ci")
+
+
+def rule_ci_autoscale(cmd: str) -> str | None:
+    """CI autoscaling killed nine builds mid-run. It stays off until the fleet is proven."""
+    if "autoscale-intended" in cmd:
+        return None
+    if _AUTOSCALE_ENABLE_RE.search(cmd):
+        return ("BLOCKED by rule-guard: re-enabling the CI autoscale workflow.\n"
+                "It was turned off on 2026-08-19 by founder decision after it stopped Fly "
+                "machines mid-build and killed nine PRs, including its own merge commit.\n"
+                "It may only come back when the busy-runner read is proven (needs a repo-admin "
+                "PAT secret) AND the founder says the fleet is reliable."
+                + _escape("autoscale-intended"))
+    if _AUTOSCALE_RUN_RE.search(cmd):
+        return ("BLOCKED by rule-guard: `deploy/runners.sh autoscale`.\n"
+                "Its scale-down reads the busy-runner list with `|| true`; when that read fails "
+                "the list is empty, every machine reads as idle, and it stops runners that are "
+                "mid-build. That is what killed PRs #383 #387 #390 #391 #407 #414 #424 #427 "
+                "#431 on 2026-08-19.\n"
+                "Scale by hand with `fly machine start`, or fix the fail-open read first."
+                + _escape("autoscale-intended"))
+    if _FLY_STOP_CI_RE.search(cmd):
+        return ("BLOCKED by rule-guard: stopping a machine in the CI fleet `prospector-ci`.\n"
+                "A stopped runner mid-job fails as \"The self-hosted runner lost communication "
+                "with the server\", which reads as a failing test and costs a session to "
+                "diagnose. Check the GitHub busy list first, then re-run with the marker."
+                + _escape("autoscale-intended"))
+    return None
+
+
+# --- a CLONED runner machine is a spare tyre, not a worker ----------------------------------
+#
+# WHY. `fly machine clone` on an app with no services makes the clone a STANDBY of its source:
+# `config.standbys = ["<source id>"]`. A standby is meant to sit stopped and take over only if
+# its source's host fails, so Fly stops it again whenever something starts it -- through the
+# Machines API, which the machine event log records as `stop | user`, indistinguishable from a
+# person or a script.
+#
+# Measured 2026-08-19: 10 of prospector-ci's 12 machines were standbys cloned from
+# 8e4530a7712248. `fly machine list` said 12 machines, `fly status` said 12, and GitHub said 11
+# registered runners. The number that could actually hold a build was 2. The standbys DID
+# register as runners and DID take jobs, then Fly stopped them mid-build, which surfaces as
+# "The self-hosted runner lost communication with the server" and reads as a failing test.
+#
+# THE CLASS: an action whose result looks like capacity on every instrument and is not. Grow a
+# runner fleet with `fly scale count`, which makes real machines.
+_FLY_CLONE_RE = re.compile(r"\bfly\s+m(?:achine)?s?\s+clone\b")
+
+
+def rule_clone_makes_a_standby(cmd: str) -> str | None:
+    """A cloned machine in a service-less app is a standby and can never hold a CI job."""
+    if "clone-standby-intended" in cmd:
+        return None
+    if _FLY_CLONE_RE.search(cmd):
+        return ("BLOCKED by rule-guard: `fly machine clone`.\n"
+                "On an app with no services -- prospector-ci and hermes-ci are both service-less "
+                "by design -- a clone is created as a STANDBY of its source (`config.standbys`). "
+                "Fly stops a started standby on purpose, so it registers as a GitHub runner, "
+                "takes a job, and dies mid-build as \"The self-hosted runner lost communication "
+                "with the server\".\n"
+                "Measured 2026-08-19: 10 of 12 prospector-ci machines were clones. Real capacity "
+                "was 2 while every count on every screen said 12.\n"
+                "Grow the fleet with `fly scale count <n> -a <app>`, which makes real machines. "
+                "Repair an existing clone with "
+                "`fly machine update <id> -a <app> --standby-for \"\" --yes`."
+                + _escape("clone-standby-intended"))
+    return None
+
+
+# --- the stash stack is SHARED, and it is not yours -----------------------------------------
+#
+# WHY. `git stash` writes to `refs/stash` in the COMMON git dir. Every worktree of this repo
+# shares it, so `git stash pop` in one session takes the top entry off another session's stack.
+# Measured 2026-08-19: a `git stash -u` on an already-clean tree created nothing, and the
+# matching `git stash pop` popped `stash@{0}: WIP on fix/home-row-us-rules-chip-overflow` --
+# a different branch, a different session -- and conflicted in
+# store_platform/src/Store.Web/src/pages/index.tsx.
+#
+# It has happened before. `stash@{2}` in this repo is literally labelled
+# "On main: unrelated edits (restored by Claude 2026-08-07 after an accidental drop)".
+# Twice is a class, so this is a refusal rather than a third note.
+#
+# `git stash list` and `git stash show` are reads and stay allowed. `git stash push` is allowed
+# too: pushing only ever ADDS an entry, and the damage is in taking one off.
+_STASH_TAKE_RE = re.compile(r"\bgit\s+stash\s+(pop|apply|drop|clear)\b")
+
+
+def rule_shared_stash(cmd: str) -> str | None:
+    """Popping a stash in a shared checkout takes another session's work."""
+    if "stash-intended" in cmd:
+        return None
+    mm = _STASH_TAKE_RE.search(cmd)
+    if mm:
+        return (f"BLOCKED by rule-guard: `git stash {mm.group(1)}`.\n"
+                "refs/stash lives in the COMMON git dir, so every worktree and every concurrent "
+                "session shares one stack. The top entry is very likely not yours.\n"
+                "On 2026-08-19 this popped another branch's WIP into a detached worktree and "
+                "conflicted; on 2026-08-07 it dropped an entry that had to be recovered.\n"
+                "Read it first:  git stash list && git stash show -p stash@{0}\n"
+                "To save your own work, commit on a branch instead of stashing."
+                + _escape("stash-intended"))
+    return None
+
+
+# A bare force-push destroys whatever the remote gained since you last looked, and on this repo
+# the remote gains things by itself. `.github/workflows/automerge.yml` on main says so in its own
+# header: "this workflow now refuses to merge a PR that sits behind main. It updates the branch
+# instead and dispatches CI on it". So every time main moves, that workflow pushes a
+# `Merge branch 'main' into <branch>` commit onto every open PR branch, mine included.
+#
+# Measured 2026-08-19: two of my branches gained such a commit while I worked --
+# `fix/ci-autoscale-trigger` gained c2a85a4c and `ci/runner-carries-its-tools` gained 6534d51c.
+# Both of my pushes were rejected as non-fast-forward. That rejection is the ONLY thing that
+# stopped the branch being reset to a behind-main state, which would have restarted the whole
+# update-and-retest cycle and thrown away a CI run nobody would have known was lost.
+#
+# The class is: an agent action that silently destroys work the agent did not know existed.
+# git's own non-fast-forward rejection guards it, and `--force` is exactly the flag that turns
+# that guard off. So the bare flag is refused and the safe form is named.
+#
+# `--force-with-lease` stays ALLOWED: it compares against the remote-tracking ref and refuses
+# when the remote moved, which is the same protection by a different route. `--force-if-includes`
+# likewise. A leading `+` on a refspec is the same force, spelled differently, so it is caught.
+_FORCE_PUSH_RE = re.compile(
+    r"\bgit\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*push\b[^|;&\n]*?"
+    r"(?:(?P<flag>--force(?!-with-lease|-if-includes)\b|-f\b)"
+    r"|\s(?P<plus>\+(?:refs/)?[\w.][\w./\-]*:))")
+
+
+def rule_force_push(cmd: str) -> str | None:
+    """A bare force-push overwrites commits the remote gained while you were not looking."""
+    if "force-push-intended" in cmd:
+        return None
+    mm = _FORCE_PUSH_RE.search(cmd)
+    if mm:
+        what = mm.group("flag") or ("refspec " + (mm.group("plus") or "").strip())
+        return (f"BLOCKED by rule-guard: force-push ({what}).\n"
+                "The remote moves on its own here. automerge.yml updates every open PR branch "
+                "whenever main moves, so your branch very likely has a commit you have not "
+                "fetched -- measured twice on 2026-08-19 (c2a85a4c, 6534d51c).\n"
+                "git's non-fast-forward rejection is what catches that, and --force is the flag "
+                "that switches it off.\n"
+                "Do this instead:  git fetch origin && git merge origin/<branch>\n"
+                "If you truly must rewrite, use the form that still refuses a moved remote:\n"
+                "  git push --force-with-lease origin <branch>"
+                + _escape("force-push-intended"))
+    return None
+
+
 RULES = (rule_add_all, rule_runtime_state, rule_no_verify, rule_index_lock, rule_two_dot_diff,
-         rule_pr_size, rule_commit_in_shared_checkout, rule_merge_red_pr)
+         rule_pr_size, rule_commit_in_shared_checkout, rule_merge_red_pr,
+         rule_ci_autoscale, rule_clone_makes_a_standby, rule_shared_stash,
+         rule_force_push)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
@@ -530,6 +710,43 @@ WARN_RULES: tuple = ()
 def selftest() -> int:
     cases = [
         # (command, rule that must fire or None)
+        ("gh workflow enable 337731742", "rule_ci_autoscale"),
+        ("gh workflow enable ci-autoscale.yml", "rule_ci_autoscale"),
+        ("gh workflow enable 337731742  # autoscale-intended", None),
+        ("gh workflow disable 337731742", None),
+        ("bash deploy/runners.sh autoscale", "rule_ci_autoscale"),
+        ("./deploy/runners.sh autoscale --dry-run", "rule_ci_autoscale"),
+        ("bash deploy/runners.sh scale 12", None),
+        ("fly machine stop 8ee06eb7701628 -a prospector-ci", "rule_ci_autoscale"),
+        ("fly machines stop abc -a prospector-ci", "rule_ci_autoscale"),
+        ("fly machine stop abc -a prospector-engine", None),
+        ("fly machine start 8ee06eb7701628 -a prospector-ci", None),
+        ("fly machine clone 8e4530a7712248 -a prospector-ci", "rule_clone_makes_a_standby"),
+        ("fly machines clone abc --region lhr", "rule_clone_makes_a_standby"),
+        ("fly m clone abc -a hermes-ci", "rule_clone_makes_a_standby"),
+        ("fly machine clone abc  # clone-standby-intended", None),
+        ("fly scale count 12 -a prospector-ci", None),
+        ("fly machine update abc -a prospector-ci --standby-for \"\" --yes", None),
+        ("git push --force origin my-branch", "rule_force_push"),
+        ("git push -f origin my-branch", "rule_force_push"),
+        ("git push origin +main:main", "rule_force_push"),
+        ("git push origin +refs/heads/x:refs/heads/x", "rule_force_push"),
+        ("git push --force origin b  # force-push-intended", None),
+        ("git push --force-with-lease origin my-branch", None),
+        ("git push --force-if-includes origin my-branch", None),
+        ("git push origin my-branch", None),
+        ("git push --follow-tags origin main", None),
+        ("git push", None),
+        ("grep -f patterns.txt file.txt", None),
+        ("git stash pop", "rule_shared_stash"),
+        ("git stash pop  # stash-intended", None),
+        ("git stash drop stash@{0}", "rule_shared_stash"),
+        ("git stash clear", "rule_shared_stash"),
+        ("git stash apply stash@{1}", "rule_shared_stash"),
+        ("git stash list", None),
+        ("git stash show -p stash@{0}", None),
+        ("git stash -u", None),
+        ("git stash push -m wip", None),
         ("git add -A", "rule_add_all"),
         ("git add --all", "rule_add_all"),
         ("git add .", "rule_add_all"),
@@ -539,6 +756,10 @@ def selftest() -> int:
         ("git commit --no-verify -m x", "rule_no_verify"),
         ("git commit -n -m x", "rule_no_verify"),
         ("git commit -m 'no-verify is bad'", None),
+        ("git commit -m x\nrg -n PATTERN docs/", None),          # -n on a LATER line
+        ("git commit -m x && tail -n 5 log", None),               # -n after a separator
+        ("git add -- x\ngit commit -n -m x", "rule_no_verify"),   # still caught
+
         ("rm -f .git/index.lock", "rule_index_lock"),
         ("rm /Users/x/.git/worktrees/w/index.lock", "rule_index_lock"),
         ("git diff --stat origin/main HEAD", "rule_two_dot_diff"),

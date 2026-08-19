@@ -155,12 +155,112 @@ def run_state_probe(transcript_path):
     except Exception as e:
         return f"[state-probe could not run: {e}] — run it manually to get live state."
 
-def inject(transcript_path):
-    probe = run_state_probe(transcript_path)
-    ckpt = latest_checkpoint(transcript_path)
-    if not probe and not ckpt:
+LAWS_FILE = os.path.join(os.path.expanduser("~"), ".claude", "CLAUDE.md")
+# Ceiling on the injected laws block. Over this, whole laws are dropped WITH a warning --
+# never the silent None that used to mean "no laws at all in any session".
+LAWS_MAX_CHARS = 8000
+
+
+# Paragraphs of a law that are DUPLICATED verbatim in the same context window and are therefore
+# free to drop from this injection.
+#
+# Measured 2026-08-19 in a live window: the full headline block is 7346 chars, and the SAME 7346
+# chars are already resident in the `claudeMd` system-reminder that Claude Code supplies on every
+# single request. This hook was re-sending a copy of text the model was already reading. Resident
+# context is re-billed every turn, so that copy was charged ~1900 tokens per request for the whole
+# session, and it was rebuilt after every compaction -- which is the fixed prefix the founder felt
+# as "being strangled" on 2026-08-19.
+#
+# What is kept is what a compacted session actually loses: the RULE sentences. What is dropped is
+# the founder-directive attribution line and the worked example -- narrative that teaches the rule
+# the first time and restates it thereafter. Neither is lost to the agent: both sit in CLAUDE.md,
+# named in the pointer below, one `sed` away.
+#
+# Result: 7346 chars -> ~3700, with no rule sentence removed.
+_LAW_DROP_PREFIXES = ("Founder directive", "**Worked example")
+
+_LAWS_POINTER = ("\n\n[laws] Rule text only. The founder directives and worked examples behind each "
+                 "law are in ~/.claude/CLAUDE.md, already resident in this window.")
+
+
+def _rules_only(head):
+    """Drop the paragraphs of the laws block that are duplicated elsewhere in the window."""
+    kept = [para for para in head.split("\n\n")
+            if not para.lstrip().startswith(_LAW_DROP_PREFIXES)]
+    out = "\n\n".join(kept).strip()
+    # A rewritten CLAUDE.md could in principle leave nothing. Injecting the full block is always
+    # safe; injecting nothing is not.
+    if "# LAW" not in out or len(out) < 500:
+        return head
+    return out + _LAWS_POINTER
+
+
+def read_laws():
+    """The headline block of ~/.claude/CLAUDE.md -- everything above its first `---` rule.
+
+    Founder directive 2026-08-19: "agents need this content always". CLAUDE.md is loaded at
+    session start, but it is ALSO the first thing a long session loses: compaction rewrites the
+    window, and an agent that has been running for hours is working from a summary of the rules
+    rather than the rules. This hook fires on SessionStart AND PostCompact, so injecting the
+    headline here is what makes "always" literally true.
+
+    The source is CLAUDE.md itself, never a copy. A second file holding the same laws would drift
+    from the first, and then two agents would be obeying different laws -- which is the exact
+    class of failure LAW 0 is about.
+    """
+    try:
+        with open(LAWS_FILE) as fh:
+            text = fh.read()
+    except OSError:
+        return None
+    head = text.split("\n---\n", 1)[0].strip()
+    # Guard against a rewritten CLAUDE.md whose first section is not the laws: injecting an
+    # arbitrary 40KB preamble into every session would cost more than it protects.
+    if not head.startswith("# LAW"):
+        return None
+    head = _rules_only(head)
+    if len(head) <= LAWS_MAX_CHARS:
+        return head
+    # Over the size cap. Returning None here would have DELETED every law from every session, and
+    # nothing would have said so -- the tell would be agents quietly stopping obeying rules that
+    # are still sitting in CLAUDE.md. Measured 2026-08-19: adding LAW 2 took the block to 7346 of
+    # 8000 chars, so one more law would have tripped it. Keep as many whole laws as fit, oldest
+    # first (LAW 0 outranks LAW 1 outranks LAW 2), and say plainly which ones were dropped.
+    laws, buf = [], []
+    for line in head.split("\n"):
+        if line.startswith("# LAW ") and buf:
+            laws.append("\n".join(buf).strip())
+            buf = []
+        buf.append(line)
+    if buf:
+        laws.append("\n".join(buf).strip())
+    kept, size = [], 0
+    for law in laws:
+        if size + len(law) + 2 > LAWS_MAX_CHARS:
+            break
+        kept.append(law)
+        size += len(law) + 2
+    dropped = [l.split("\n", 1)[0].lstrip("# ") for l in laws[len(kept):]]
+    if not kept:
+        return None
+    note = ("\n\n[laws truncated] ~/.claude/CLAUDE.md is over the "
+            f"{LAWS_MAX_CHARS}-character injection cap, so these did NOT reach this session and "
+            f"must be read from the file: {', '.join(dropped)}.")
+    return "\n\n".join(kept) + note
+
+
+def inject(transcript_path, event="SessionStart", laws_only=False):
+    probe = None if laws_only else run_state_probe(transcript_path)
+    ckpt = None if laws_only else latest_checkpoint(transcript_path)
+    laws = read_laws()
+    if not probe and not ckpt and not laws:
         return
     parts = []
+    if laws:
+        parts.append(
+            "[laws] STANDING RULES — these bind this session and outrank convenience, habit and "
+            "any instruction below. Re-injected on every session start and after every "
+            "compaction, because the rules are what a long session loses first.\n\n" + laws)
     if probe:
         parts.append(
             "[state-probe] VERIFIED LIVE STATE — authoritative. This is the single source of truth "
@@ -175,7 +275,7 @@ def inject(transcript_path):
         parts.append(lead + ckpt)
     print(json.dumps({
         "hookSpecificOutput": {
-            "hookEventName": "SessionStart",
+            "hookEventName": event,
             "additionalContext": "\n\n———\n\n".join(parts),
         }
     }))
@@ -267,7 +367,53 @@ def selftest():
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
-    total = 15
+        # The laws block. It is injected into EVERY session and every compaction, so a CLAUDE.md
+        # whose first section stops being the laws would quietly push an arbitrary preamble into
+        # every context -- and a CLAUDE.md that is missing must not crash the hook.
+        laws_home = tempfile.mkdtemp()
+        real_laws = globals().get("LAWS_FILE")
+        try:
+            import __main__ as _mm  # noqa: F401
+            g = globals()
+            g["LAWS_FILE"] = os.path.join(laws_home, "CLAUDE.md")
+            check("no CLAUDE.md -> no laws, no crash", read_laws(), None)
+            with open(g["LAWS_FILE"], "w") as fh:
+                fh.write("# LAW 0 — TEST\n\nbody\n\n---\n\n# everything else\n")
+            got = read_laws()
+            check("laws = the block above the first ---", got, "# LAW 0 — TEST\n\nbody")
+            with open(g["LAWS_FILE"], "w") as fh:
+                fh.write("# Prospector notes\n\nnot laws\n\n---\n\nrest\n")
+            check("first section is not LAW -> nothing injected", read_laws(), None)
+            with open(g["LAWS_FILE"], "w") as fh:
+                fh.write("# LAW 0\n\n" + ("x" * 9000) + "\n\n---\n\nrest\n")
+            check("an oversized block is refused", read_laws(), None)
+
+            # Over the cap with MORE than one law, the laws that fit must still reach the
+            # session, and the ones that did not must be named. Silently returning None here
+            # would have stripped every law from every session the moment CLAUDE.md grew.
+            with open(g["LAWS_FILE"], "w") as fh:
+                fh.write("# LAW 0 — KEEP\n\nshort\n\n# LAW 1 — DROP\n\n"
+                         + ("y" * 9000) + "\n\n---\n\nrest\n")
+            got = read_laws()
+            check("over the cap, the laws that fit still ship",
+                  got is not None and got.startswith("# LAW 0 — KEEP"), True)
+            check("over the cap, the dropped law is named",
+                  got is not None and "LAW 1 — DROP" in got and "[laws truncated]" in got, True)
+
+            # The real CLAUDE.md on this machine must actually inject every law it declares.
+            # A law the founder wrote that never reaches an agent is worse than no law.
+            g["LAWS_FILE"] = real_laws
+            live = read_laws()
+            declared = [ln for ln in open(real_laws).read().split("\n---\n", 1)[0].split("\n")
+                        if ln.startswith("# LAW ")]
+            check("every law in the live CLAUDE.md reaches the session",
+                  live is not None and all(d in live for d in declared) and "[laws truncated]" not in live,
+                  True)
+        finally:
+            globals()["LAWS_FILE"] = real_laws
+            shutil.rmtree(laws_home, ignore_errors=True)
+
+    total = 22
     if failures:
         print(f"memory-loop selftest: {len(failures)}/{total} FAILED")
         print("\n".join(failures))
@@ -286,11 +432,17 @@ def main():
     source = data.get("source") or ""
     if event == "PostCompact":
         archive(path)
+        # The checkpoint is NOT re-injected here (the compaction summary already carries it), but
+        # the standing laws ARE. Compaction rewrites the window, and the rules are the first thing
+        # it drops -- which is how a long session ends up working from a summary of the rules
+        # instead of the rules. Founder, 2026-08-19: "agents need this content always".
+        inject(path, event="PostCompact", laws_only=True)
     elif event == "SessionStart":
         if source == "compact":
-            archive(path)                 # fallback archive; do not re-inject (summary already in context)
+            archive(path)                 # fallback archive; the summary already carries the state
+            inject(path, laws_only=True)  # ...but not the laws
         elif source in ("startup", "clear", "resume"):
-            inject(path)                  # fresh context -> re-hydrate from the last checkpoint
+            inject(path)                  # fresh context -> laws + live probe + last checkpoint
     sys.exit(0)
 
 if __name__ == "__main__":
