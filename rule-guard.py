@@ -99,11 +99,39 @@ def _sh(argv: list[str], timeout: int = 20) -> tuple[int, str]:
         return 1, ""
 
 
+# ---- shim-proof subprocess: a PATH shim must never be able to call this guard back --------
+# 2026-08-21, measured on this machine: a session installed a wrapper directory first on PATH
+# whose `git` re-invoked THIS guard. `_git` below then ran the bare name "git", which resolved
+# to that wrapper again, which ran the guard again, unbounded. Load 562, 1063 processes, 238
+# live children all under 21s old, 24 MB of free RAM. This guard runs on EVERY Bash call in
+# EVERY session, so one session's shim takes the whole machine down, and no session can see
+# the loop from inside its own window.
+#
+# The fix has to be here rather than in the shim, because the shim is not the only one that
+# will ever exist. Resolve the tool ONCE against a fixed system PATH and hand the child that
+# same PATH, so no wrapper directory can be on it whatever the parent's PATH looks like.
+# `shutil.which` returning None falls back to the bare name, which keeps this guard failing
+# OPEN — a guard that cannot find git must not start refusing commits.
+_SYSTEM_PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+
+def _real_tool(name: str) -> str:
+    """Absolute path to the real `name`, looked up on the system PATH only."""
+    return shutil.which(name, path=_SYSTEM_PATH) or name
+
+
+def _clean_env() -> dict:
+    """The current environment with PATH replaced by the system one. Nothing else changes."""
+    env = dict(os.environ)
+    env["PATH"] = _SYSTEM_PATH
+    return env
+
+
 def _git(*args: str, cwd: str | None = None) -> tuple[int, str]:
     cwd = cwd or _ACTIVE_REPO
     try:
-        p = subprocess.run(("git", *args), cwd=cwd, capture_output=True,
-                           text=True, timeout=20)
+        p = subprocess.run((_real_tool("git"), *args), cwd=cwd, capture_output=True,
+                           text=True, timeout=20, env=_clean_env())
         return p.returncode, (p.stdout + p.stderr).strip()
     except (OSError, subprocess.SubprocessError):
         return 1, ""
@@ -395,9 +423,11 @@ def _failed_jobs(run_id: str) -> list[str]:
     """
     try:
         p = subprocess.run(
-            ("gh", "api", f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}/jobs?per_page=100",
+            (_real_tool("gh"), "api",
+             f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}/jobs?per_page=100",
              "--jq", '.jobs[] | select(.conclusion == "failure") | select(.name != "ci-ok") | .name'),
-            cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30)
+            cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
+            env=_clean_env())
     except (OSError, subprocess.SubprocessError):
         return []
     if p.returncode != 0:
@@ -414,11 +444,12 @@ def _main_red_refusal() -> str | None:
     """
     try:
         p = subprocess.run(
-            ("gh", "run", "list", "--branch", "main", "--workflow", "ci.yml",
+            (_real_tool("gh"), "run", "list", "--branch", "main", "--workflow", "ci.yml",
              "--status", "completed", "--limit", "1",
              "--json", "conclusion,databaseId,headSha",
              "--jq", '.[] | "\\(.conclusion)\\t\\(.databaseId)\\t\\(.headSha)"'),
-            cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30)
+            cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
+            env=_clean_env())
     except (OSError, subprocess.SubprocessError):
         return None
     row = p.stdout.strip().split("\t")
@@ -475,9 +506,10 @@ def _pr_check_states(pr: str) -> list[tuple[str, str]] | None:
     """(name, state) for every check on `pr`, or None if the query itself failed."""
     try:
         p = subprocess.run(
-            ("gh", "pr", "checks", pr, "--json", "name,state",
+            (_real_tool("gh"), "pr", "checks", pr, "--json", "name,state",
              "--jq", '.[] | "\\(.name)\\t\\(.state)"'),
-            cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30)
+            cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
+            env=_clean_env())
     except (OSError, subprocess.SubprocessError):
         return None
     # `gh pr checks` exits 8 when checks are still pending and 1 when some failed, so the exit
@@ -520,8 +552,9 @@ def rule_merge_red_pr(cmd: str) -> str | None:
         if rc != 0:
             return None  # no branch to resolve a PR from; not our call to block
         try:
-            p = subprocess.run(("gh", "pr", "view", "--json", "number", "--jq", ".number"),
-                               cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30)
+            p = subprocess.run((_real_tool("gh"), "pr", "view", "--json", "number", "--jq", ".number"),
+                               cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
+            env=_clean_env())
         except (OSError, subprocess.SubprocessError):
             return None
         pr = p.stdout.strip()
