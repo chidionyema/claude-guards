@@ -21,11 +21,11 @@ Both reproduce to 7+ significant figures, which proves three things:
      -- so pushing work into a subagent is cheaper on the write side too, independent of model;
   3. the `[1m]` 1M-context variant bills at plain $5/$25 -- there is NO long-context premium.
 """
+import collections
+import glob
 import json
 import os
 import sys
-import glob
-import collections
 
 HOME = os.path.expanduser("~")
 

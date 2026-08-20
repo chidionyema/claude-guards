@@ -29,7 +29,8 @@ PROJECTS = HOME / ".claude" / "projects"
 # Harness-injected text that arrives shaped like a user turn but is not the founder speaking.
 NOISE = re.compile(
     r"^(<command-name>|<local-command|<system-reminder>|Caveat: The messages below|"
-    r"\[Request interrupted|<user-prompt-submit-hook>|This session is being continued)",
+    r"\[Request interrupted|<user-prompt-submit-hook>|This session is being continued|"
+    r"<cross-session-message|<task-notification)",
 )
 
 
@@ -50,6 +51,64 @@ def _text_of(msg: dict) -> str:
         parts = [b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text"]
         return "\n".join(p for p in parts if p)
     return ""
+
+
+
+def _queued_human_prompt(rec: dict) -> str | None:
+    """Text of a message the founder queued mid-turn, or None if this is not one.
+
+    The harness does not run UserPromptSubmit for these, so directive-capture.py never sees them.
+    The transcript records them as an attachment rather than as a user message. The origin check
+    keeps out queued work the harness itself enqueues.
+    """
+    if rec.get("type") != "attachment":
+        return None
+    att = rec.get("attachment") or {}
+    if att.get("type") != "queued_command":
+        return None
+    if (att.get("origin") or {}).get("kind") != "human":
+        return None
+    return att.get("prompt") or None
+
+
+
+def selftest() -> int:
+    """Prove the two things that were broken on 2026-08-20, so neither can come back silently.
+
+    Run:  python3 ~/.claude/scripts/directives.py --selftest
+    """
+    line = json.dumps({
+        "type": "attachment",
+        "attachment": {"type": "queued_command", "prompt": "nission cuticl",
+                       "commandMode": "prompt", "origin": {"kind": "human"},
+                       "timestamp": "2026-08-20T20:33:20.091Z"},
+        "timestamp": "2026-08-20T20:33:20.091Z",
+        "session_id": "s", "userType": "external",
+    })
+    failures = []
+    # 1. The cheap prefilter must let it through. It does NOT contain the substring '"user"'.
+    if '"user"' in line:
+        failures.append("the fixture no longer exercises the prefilter hole; rebuild it")
+    if not ('"user"' in line or "queued_command" in line):
+        failures.append("prefilter would drop a queued human directive")
+    # 2. The extractor must recognise it, and must reject a non-human queued command.
+    if _queued_human_prompt(json.loads(line)) != "nission cuticl":
+        failures.append("_queued_human_prompt does not read a queued human directive")
+    robot = json.loads(line)
+    robot["attachment"]["origin"] = {"kind": "harness"}
+    if _queued_human_prompt(robot) is not None:
+        failures.append("_queued_human_prompt accepts a queued command that is not the founder's")
+    # 3. Harness envelopes are not directives.
+    for envelope in ("<cross-session-message from=x>", "<task-notification>", "<system-reminder>"):
+        if not NOISE.match(envelope):
+            failures.append(f"NOISE does not filter {envelope!r}")
+    for real in ("nission cuticl", "we ned trackinng etrene"):
+        if NOISE.match(real):
+            failures.append(f"NOISE filters a real directive: {real!r}")
+    for f in failures:
+        print("FAIL:", f, file=sys.stderr)
+    print("selftest: PASS" if not failures else f"selftest: {len(failures)} FAILURE(S)")
+    return 1 if failures else 0
 
 
 def backfill(cwd: str) -> int:
@@ -74,16 +133,26 @@ def backfill(cwd: str) -> int:
             continue
         with fh:
             for line in fh:
-                if '"user"' not in line:
+                # Cheap prefilter, and it needs BOTH terms. A queued_command attachment does
+                # not contain the substring '"user"' at all -- its nearest field is "userType",
+                # which has no closing quote after "user" -- so matching on '"user"' alone drops
+                # every mid-turn directive. Measured 2026-08-20: that is exactly what it did.
+                if '"user"' not in line and "queued_command" not in line:
                     continue
                 try:
                     rec = json.loads(line)
                 except Exception:
                     continue
-                msg = rec.get("message") or {}
-                if msg.get("role") != "user" or rec.get("isMeta"):
-                    continue
-                text = _text_of(msg).strip()
+                queued = _queued_human_prompt(rec)
+                if queued is not None:
+                    text, rec = queued, {"timestamp": rec.get("timestamp", ""),
+                                         "sessionId": rec.get("session_id", "")}
+                else:
+                    msg = rec.get("message") or {}
+                    if msg.get("role") != "user" or rec.get("isMeta"):
+                        continue
+                    text = _text_of(msg)
+                text = text.strip()
                 if not text or text.startswith("/") or NOISE.match(text):
                     continue
                 key = text[:200]
@@ -136,11 +205,15 @@ def main() -> int:
     ap.add_argument("--cwd", default=str(HOME / "Documents" / "code" / "prospector"),
                     help="project root whose log to read (default: prospector)")
     ap.add_argument("--backfill", action="store_true", help="mine transcripts into the log, then exit")
+    ap.add_argument("--selftest", action="store_true", help="prove mid-turn capture still works")
     ap.add_argument("--grep", help="regex, case-insensitive")
     ap.add_argument("--since", help="ISO date, e.g. 2026-08-18")
     ap.add_argument("--limit", type=int, default=30)
     ap.add_argument("--full", action="store_true", help="print whole messages, not the first 600 chars")
     args = ap.parse_args()
+    if args.selftest:
+        return selftest()
+
     if args.backfill:
         return backfill(args.cwd)
     return read(args.cwd, args.grep, args.since, args.limit, args.full)

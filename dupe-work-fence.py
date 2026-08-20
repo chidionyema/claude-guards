@@ -29,6 +29,8 @@ blocks work when its own lookup breaks gets removed within the day.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import re
@@ -67,11 +69,21 @@ def _opt(argv: list[str], *names: str) -> str:
     return ""
 
 
-def _pr_text(argv: list[str], cwd: str) -> str:
-    """Everything the author wrote: title, body, and the body file if one was used."""
+def _pr_text(argv: list[str], cwd: str) -> tuple[str, str]:
+    """Everything the author wrote, and the body file that could not be read.
+
+    Returns `(text, unreadable_body_file)`. The second value exists because swallowing the
+    OSError produced a refusal with the WRONG REASON. On 2026-08-19 a session wrote the body
+    file and created the pull request in ONE Bash command; this hook runs BEFORE that command,
+    so the file did not exist yet, the read failed silently, and the fence said "names no
+    issue" about a body whose first line was `Closes #454`. The author then re-ran the same
+    command and was refused again, identically. A guard that reports a cause it did not
+    measure sends the reader to fix the wrong thing.
+    """
     # Joined with a NEWLINE, not a space: the No-Issue escape hatch is anchored to the start of
     # a line, and a space-joined title ran straight into the body so the hatch never matched.
     text = "\n".join([_opt(argv, "--title", "-t"), _opt(argv, "--body", "-b")])
+    missing = ""
     body_file = _opt(argv, "--body-file", "-F")
     if body_file:
         path = body_file if os.path.isabs(body_file) else os.path.join(cwd, body_file)
@@ -79,8 +91,8 @@ def _pr_text(argv: list[str], cwd: str) -> str:
             with open(path, encoding="utf-8") as fh:
                 text += "\n" + fh.read()
         except OSError:
-            pass
-    return text
+            missing = path
+    return text, missing
 
 
 def open_claims(cwd: str) -> dict[int, list[int]] | None:
@@ -126,11 +138,21 @@ def check(argv: list[str], cwd: str, claims_fn=open_claims) -> int:
         return 0
 
     if is_pr_create:
-        text = _pr_text(argv, cwd)
+        text, missing = _pr_text(argv, cwd)
         wanted = {int(n) for n in CLAIM_RE.findall(text)}
         if not wanted:
             if NO_ISSUE_RE.search(text):
                 return 0
+            if missing:
+                return _refuse(
+                    f"the body file {missing} does not exist, so this fence cannot read the "
+                    "claim.\n"
+                    "  This hook runs BEFORE your command. Writing the body file and running "
+                    "`gh pr create`\n"
+                    "  in the SAME call always fails here: at check time the file is not "
+                    "written yet.\n"
+                    "  Write the body file in one call, create the pull request in the next."
+                )
             return _refuse(
                 "this pull request names no issue, so no other session can see the work is "
                 "taken.\n"
@@ -208,6 +230,13 @@ def selftest() -> int:
             0,
         ),
         (
+            "an unwritten body file is refused for THAT reason, not for naming no issue",
+            'gh pr create --title "fix: x" --body-file /nonexistent/body-not-written-yet.md',
+            {},
+            2,
+            "does not exist",
+        ),
+        (
             "gh issue develop on a claimed issue is refused",
             "gh issue develop 404 --checkout",
             {404: [409]},
@@ -233,16 +262,25 @@ def selftest() -> int:
         ),
     ]
     failures = []
-    for name, cmd, claims, want in cases:
+    for case in cases:
+        name, cmd, claims, want = case[:4]
+        want_msg = case[4] if len(case) > 4 else ""
         got = 0
+        err = io.StringIO()
         for argv in _split_commands(cmd):
-            got = check(argv, os.getcwd(), claims_fn=lambda _cwd, c=claims: c)
+            with contextlib.redirect_stderr(err):
+                got = check(argv, os.getcwd(), claims_fn=lambda _cwd, c=claims: c)
             if got:
                 break
-        mark = "ok" if got == want else "FAIL"
+        why = ""
         if got != want:
+            why = f"exit {got}, want {want}"
+        elif want_msg and want_msg not in err.getvalue():
+            why = f"refusal did not say {want_msg!r}: {err.getvalue().strip()[:80]}"
+        mark = "ok" if not why else "FAIL"
+        if why:
             failures.append(name)
-        print(f"  [{mark}] {name}: exit {got} (want {want})")
+        print(f"  [{mark}] {name}: exit {got} (want {want}){' -- ' + why if why else ''}")
     print(f"dupe-work-fence selftest: {len(cases) - len(failures)}/{len(cases)} passed")
     return 1 if failures else 0
 

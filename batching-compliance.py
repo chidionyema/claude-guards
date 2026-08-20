@@ -32,7 +32,12 @@ Usage:
   batching-compliance.py --session <uuid>    # one session
   batching-compliance.py --per-record        # show the double-count for comparison
 """
-import json, os, glob, argparse, collections, datetime
+import argparse
+import collections
+import datetime
+import glob
+import json
+import os
 
 RATES = {  # $/Mtok: input, cache_write, cache_read, output
     "claude-opus-5": (5.0, 6.25, 0.5, 25.0), "claude-opus-5[1m]": (5.0, 6.25, 0.5, 25.0),
@@ -142,7 +147,7 @@ def main():
         print(f"  headroom  : merging single-call turns 3->1 removes ~{2*single['n']//3} requests "
               f"(~${2*single['usd']/3:.2f} at today's $/turn)")
     if per_session:
-        print(f"  worst sessions by single-call turns: "
+        print("  worst sessions by single-call turns: "
               + ", ".join(f"{s}:{n}" for s, n in per_session.most_common(5)))
 
     if a.per_record:
@@ -158,11 +163,11 @@ def main():
             # holding N calls looks like N single-call records + (R-N) conversational.
             rec_buckets["SINGLE-CALL (1)"] += min(t["ncalls"], t["records"])
             rec_buckets["conversational (0 calls)"] += max(t["records"] - t["ncalls"], 0)
-        print(f"\n  ── per-record (PRE-FIX, WRONG) ──")
+        print("\n  ── per-record (PRE-FIX, WRONG) ──")
         print(f"  records {rec_n}  $ {rec_usd:.2f}  "
               f"inflation {rec_usd/max(tot_usd,1e-9):.2f}x vs per-turn ${tot_usd:.2f}")
-        print(f"  it would report compliance 0.0% because no single record can hold >=2 "
-              f"tool_use blocks")
+        print("  it would report compliance 0.0% because no single record can hold >=2 "
+              "tool_use blocks")
 
 if __name__ == "__main__":
     main()

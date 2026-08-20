@@ -6,7 +6,11 @@ Pricing constants and the per-file dedupe are lifted verbatim from
 ~/.claude/scripts/token-audit.py, which reproduces Claude Code's own
 ~/.claude.json ledger to 7+ significant figures (see its docstring).
 """
-import json, os, sys, glob, collections, datetime
+import collections
+import glob
+import json
+import os
+import sys
 
 HOME = os.path.expanduser("~")
 ROOT = os.path.join(HOME, ".claude", "projects")
@@ -118,7 +122,9 @@ for i, path in enumerate(files):
 
 W = 78
 def hdr(t):
-    print("\n" + "=" * W); print(t); print("=" * W)
+    print("\n" + "=" * W)
+    print(t)
+    print("=" * W)
 
 print(f"ESTATE CLAUDE CODE COST AUDIT   generated over {nfiles:,} transcripts, {nreq:,} API requests")
 print(f"TOTAL RECONSTRUCTED SPEND: ${grand:,.2f}")

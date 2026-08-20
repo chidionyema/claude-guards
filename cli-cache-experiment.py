@@ -7,7 +7,12 @@ env-stripping, sequential, same binary. The CLI's own `total_cost_usd` is the me
 
 READ-ONLY w.r.t. the repo: writes nothing outside its temp dirs.
 """
-import json, os, shutil, subprocess, sys, tempfile
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
 
 CLAUDE = shutil.which("claude") or os.path.expanduser("~/.local/bin/claude")
 N = int(sys.argv[1]) if len(sys.argv) > 1 else 4

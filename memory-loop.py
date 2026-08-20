@@ -14,7 +14,7 @@ Wired to TWO hook events (one script, branch on the event):
 Reads JSON on stdin (incl. transcript_path). Project dir is derived from transcript_path
 (~/.claude/projects/<slug>/<session>.jsonl), so checkpoints live beside the session that made them.
 """
-import json, os, sys, hashlib, subprocess
+import json, os, re, sys, hashlib, subprocess
 from datetime import datetime
 
 # Seconds. A project's state probe must answer fast or be skipped — but "skipped" means the
@@ -158,7 +158,23 @@ def run_state_probe(transcript_path):
 LAWS_FILE = os.path.join(os.path.expanduser("~"), ".claude", "CLAUDE.md")
 # Ceiling on the injected laws block. Over this, whole laws are dropped WITH a warning --
 # never the silent None that used to mean "no laws at all in any session".
-LAWS_MAX_CHARS = 8000
+# Sized to the WHOLE rules-only block with headroom, deliberately. Measured 2026-08-20: the block
+# is 11,820 chars after `_rules_only` strips founder directives and worked examples, so 8000 would
+# have dropped LAW 5 onwards -- newest last, which is the worst order there is, because the newest
+# law is the one the founder just paid an incident for. Raise this WITH the file; a cap that lags
+# the laws deletes them without saying so.
+#
+# Raised 20000 -> 34000 on 2026-08-20, the day LAW 16 was written. It lagged, and it deleted six
+# laws without saying so to anyone who did not read to the bottom of the injection: measured that
+# day in a live window, the injector served LAW 1 through LAW 10 and printed
+# "[laws truncated] ... LAW 11 ... LAW 16" -- including the law the founder had just asked for.
+#
+# The number is measured, not tidy. Rules-only is 30,261 chars for sixteen laws once the trim below
+# drops whole worked-example SPANS. The six laws added since the last raise cost 2,690 chars each in
+# rules-only form, so 34000 is that block plus one more law of headroom. The selftest now fails if
+# the cap ever drops back under what `_rules_only` actually produces, so this cannot lag silently
+# again.
+LAWS_MAX_CHARS = 34000
 
 
 # Paragraphs of a law that are DUPLICATED verbatim in the same context window and are therefore
@@ -184,9 +200,34 @@ _LAWS_POINTER = ("\n\n[laws] Rule text only. The founder directives and worked e
 
 
 def _rules_only(head):
-    """Drop the paragraphs of the laws block that are duplicated elsewhere in the window."""
-    kept = [para for para in head.split("\n\n")
-            if not para.lstrip().startswith(_LAW_DROP_PREFIXES)]
+    """Drop the paragraphs of the laws block that are duplicated elsewhere in the window.
+
+    A worked example is a SPAN, not a paragraph. Until 2026-08-20 this dropped only the paragraph
+    that BEGINS "**Worked example" and kept every continuation paragraph of the same example, which
+    is where most of an example's bulk lives. The function reported itself as trimming while the
+    block sailed past the cap anyway. Measured that day on sixteen laws: paragraph-wise 31,581
+    chars, span-wise 30,261.
+
+    The span runs from "**Worked example" to whichever comes first: that law's own "**The class is"
+    line, or the next heading. "The class is" is KEPT deliberately -- it is the one-sentence form of
+    the law and the part LAW 6 is built on.
+
+    This is the same defect class as the rest of the estate's bad gates: grading a PROXY (a
+    paragraph prefix) for the thing being graded (the example).
+    """
+    kept, skipping = [], False
+    for para in head.split("\n\n"):
+        stripped = para.lstrip()
+        if stripped.startswith("# "):
+            skipping = False
+        elif skipping and stripped.startswith("**The class is"):
+            skipping = False
+        if stripped.startswith("**Worked example"):
+            skipping = True
+            continue
+        if skipping or stripped.startswith(_LAW_DROP_PREFIXES[0]):
+            continue
+        kept.append(para)
     out = "\n\n".join(kept).strip()
     # A rewritten CLAUDE.md could in principle leave nothing. Injecting the full block is always
     # safe; injecting nothing is not.
@@ -216,7 +257,14 @@ def read_laws():
     head = text.split("\n---\n", 1)[0].strip()
     # Guard against a rewritten CLAUDE.md whose first section is not the laws: injecting an
     # arbitrary 40KB preamble into every session would cost more than it protects.
-    if not head.startswith("# LAW"):
+    #
+    # It tests for a `# LAW ` HEADING ANYWHERE IN THE BLOCK, not for one at character zero.
+    # `startswith` was the check until 2026-08-20, and on that day the founder added a
+    # "# THE ORDER OF THE LAWS" precedence table above LAW 1 -- so this function returned None and
+    # every session since started with NO laws injected at all, which is exactly the silent failure
+    # the comment under the size cap warns about. A heading test asks "is this block the laws";
+    # the prefix test asked "does this block OPEN with a law", which was never the question.
+    if not (head.startswith("# LAW") or re.search(r"^# LAW ", head, re.M)):
         return None
     head = _rules_only(head)
     if len(head) <= LAWS_MAX_CHARS:
@@ -385,15 +433,19 @@ def selftest():
                 fh.write("# Prospector notes\n\nnot laws\n\n---\n\nrest\n")
             check("first section is not LAW -> nothing injected", read_laws(), None)
             with open(g["LAWS_FILE"], "w") as fh:
-                fh.write("# LAW 0\n\n" + ("x" * 9000) + "\n\n---\n\nrest\n")
+                fh.write("# LAW 0\n\n" + ("x" * (LAWS_MAX_CHARS + 1000)) + "\n\n---\n\nrest\n")
             check("an oversized block is refused", read_laws(), None)
 
             # Over the cap with MORE than one law, the laws that fit must still reach the
             # session, and the ones that did not must be named. Silently returning None here
             # would have stripped every law from every session the moment CLAUDE.md grew.
             with open(g["LAWS_FILE"], "w") as fh:
+                # Sized off LAWS_MAX_CHARS, never a literal. Both of these tests hardcoded 9000
+                # against an 8000 cap; when the cap moved to 20000 on 2026-08-20 they started
+                # asserting that a block UNDER the cap was refused, and failed for the change
+                # rather than for a defect. A test that pins a constant grades the constant.
                 fh.write("# LAW 0 — KEEP\n\nshort\n\n# LAW 1 — DROP\n\n"
-                         + ("y" * 9000) + "\n\n---\n\nrest\n")
+                         + ("y" * (LAWS_MAX_CHARS + 1000)) + "\n\n---\n\nrest\n")
             got = read_laws()
             check("over the cap, the laws that fit still ship",
                   got is not None and got.startswith("# LAW 0 — KEEP"), True)
@@ -427,6 +479,18 @@ def main():
     data = read_stdin()
     path = data.get("transcript_path") or ""
     if not path:
+        # SAY SO. The real hook always sends transcript_path, so this branch is only ever
+        # reached by a human probing the injector by hand -- and a bare exit(0) prints
+        # nothing, which is indistinguishable from "ran fine, no laws to inject". Measured
+        # 2026-08-20: that cost a session, because LAW 8's own worked example in
+        # ~/.claude/CLAUDE.md is a time this injector really did return nothing, so zero
+        # bytes reads as the known failure rather than as a bad test. stderr, never stdout,
+        # and still exit 0: stdout is injected into the session, and a non-zero exit from a
+        # SessionStart hook breaks session startup.
+        print("memory-loop: stdin had no transcript_path, so nothing was injected. This is "
+              "NOT a broken injector -- the SessionStart hook always supplies that field. "
+              "To probe by hand, pass a real .jsonl path from ~/.claude/projects/<slug>/.",
+              file=sys.stderr)
         sys.exit(0)
     event = data.get("hook_event_name") or ""
     source = data.get("source") or ""

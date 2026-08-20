@@ -19,7 +19,12 @@ Usage:
   cc-token-report.py --project foo   # only projects whose slug contains 'foo'
   cc-token-report.py --json out.json # also dump the full machine-readable report
 """
-import argparse, glob, json, os, statistics, sys
+import argparse
+import glob
+import json
+import os
+import statistics
+import sys
 from datetime import datetime, timedelta, timezone
 
 ROOT = os.path.expanduser("~/.claude/projects")
@@ -45,7 +50,8 @@ def _cost(u, model):
 def _parse_since(s):
     if not s:
         return None
-    unit = s[-1].lower(); n = float(s[:-1])
+    unit = s[-1].lower()
+    n = float(s[:-1])
     mult = {"d": 1, "w": 7, "h": 1/24}.get(unit)
     if mult is None:
         sys.exit(f"bad --since '{s}'; use e.g. 7d, 2w, 12h")
@@ -96,7 +102,6 @@ def main():
     by_model_cost, by_project_cost = {}, {}
     sessions = {}                          # session_id -> stats
     mcp_calls = {}                         # mcp tool name -> count
-    mcp_sessions_with_schema = 0           # sessions that show any mcp tool result (proxy: had calls)
     total_cost = 0.0
 
     for fp in files:
@@ -143,7 +148,6 @@ def main():
                 total_cost += cost
 
                 add(grand, u)
-                fam = _family(model)
                 add(by_model.setdefault(model, blank()), u)
                 by_model_cost[model] = by_model_cost.get(model, 0.0) + cost
                 add(by_project.setdefault(slug, blank()), u)
@@ -169,8 +173,12 @@ def main():
 
     if since:
         # recompute aggregates from surviving sessions only
-        grand = blank(); by_model = {}; by_project = {}
-        by_model_cost = {}; by_project_cost = {}; total_cost = 0.0
+        grand = blank()
+        by_model = {}
+        by_project = {}
+        by_model_cost = {}
+        by_project_cost = {}
+        total_cost = 0.0
         for s in sessions.values():
             add(grand, s["usage"])
             total_cost += s["cost"]
@@ -248,7 +256,8 @@ def _print_report(args, grand, total_cost, by_model, by_model_cost,
     if not mara:
         print("  (none — sessions are well-scoped. nice.)")
     for s, days in mara[:args.top]:
-        med = statistics.median(s["resident"]); mx = max(s["resident"])
+        med = statistics.median(s["resident"])
+        mx = max(s["resident"])
         short = s["slug"].split("-")[-1]
         print(f"  {s['turns']:>5}   {_fmt(med):>8}  {_fmt(mx):>7}  {days:>4.1f}  "
               f"{s['compactions']:>6}   ${s['cost']:>5,.0f}   {short}")

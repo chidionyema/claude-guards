@@ -39,6 +39,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -86,6 +87,16 @@ def _repo_for(cmd: str, session_cwd: str | None) -> str:
         if root:
             return root
     return _worktree_root(session_cwd or "") or REPO
+
+
+def _sh(argv: list[str], timeout: int = 20) -> tuple[int, str]:
+    """Run any CLI and return (rc, combined output). Never raises; rc != 0 means "cannot tell"."""
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
+                           stdin=subprocess.DEVNULL)
+        return p.returncode, (p.stdout + p.stderr).strip()
+    except (OSError, subprocess.SubprocessError):
+        return 1, ""
 
 
 def _git(*args: str, cwd: str | None = None) -> tuple[int, str]:
@@ -615,6 +626,79 @@ def rule_clone_makes_a_standby(cmd: str) -> str | None:
     return None
 
 
+# --- a machine repair restarts the machine, and a build was on it ---------------------------
+#
+# WHY. On 2026-08-19 at 20:26–20:32Z I repaired 10 standby machines with
+# `fly machine update <id> -a prospector-ci --standby-for "" --yes`. That command RESTARTS the
+# machine. A peer session's test suite was running on one of them. Their job died, and they
+# spent the next stretch hunting "a rolling restart of 10 of 12 runners, 15s apart, with no new
+# release" -- which was me, invisible to them, because sessions cannot see each other.
+#
+# THE CLASS is the one LAW 0's own worked example names: an agent action that silently destroys
+# another agent's in-flight work. `push-pr-fence.py` already guards the CI-cancel version of it.
+# This is the machine version. The fix is not "remember to check"; it is that the check runs
+# whether or not anyone remembers.
+#
+# `start` is deliberately NOT matched: starting a stopped machine cannot interrupt a build.
+# The check FAILS OPEN -- if gh is missing or GitHub is unreachable it allows the command --
+# because a fleet repair is most needed exactly when GitHub is unhappy, and a guard that walls
+# the box whenever it cannot see is a worse failure than the one it prevents.
+_FLY_DISRUPT_RE = re.compile(
+    r"\bfly\s+m(?:achine)?s?\s+(update|restart|stop|destroy)\b[^|;&\n]*?-a\s+(\S+)")
+
+# Which repository's runners live on which Fly app. An app that is not a runner fleet is not
+# this rule's business, so an unknown app is allowed through.
+_RUNNER_APP_REPOS = {
+    "prospector-ci": "chidionyema/prospector",
+    "hermes-ci": "chidionyema/hermes",
+}
+
+
+def _busy_runners(repo: str) -> list[str]:
+    """Names of `repo`'s runners that are mid-job. Empty when busy is zero OR unknowable.
+
+    Separate from the rule so the selftest can stub it: the rule must be provable without
+    depending on whatever CI happens to be doing when the selftest runs.
+    """
+    gh = shutil.which("gh") or "/opt/homebrew/bin/gh"
+    rc, out = _sh([gh, "api", f"repos/{repo}/actions/runners",
+                   "--jq", ".runners[] | select(.busy) | .name"])
+    if rc != 0:
+        return []
+    return [line.strip() for line in out.splitlines() if line.strip()]
+
+
+def rule_restart_kills_a_live_build(cmd: str) -> str | None:
+    """Refuse a machine restart while that fleet has a runner mid-job."""
+    if "runner-busy-intended" in cmd:
+        return None
+    m = _FLY_DISRUPT_RE.search(cmd)
+    if not m:
+        return None
+    verb, app = m.group(1), m.group(2).strip("'\"")
+    repo = _RUNNER_APP_REPOS.get(app)
+    if repo is None:
+        return None
+
+    busy = _busy_runners(repo)
+    if not busy:
+        return None  # empty OR unknowable; failing open is the deliberate choice above
+
+    return (f"BLOCKED by rule-guard: `fly machine {verb}` on {app} while "
+            f"{len(busy)} runner(s) are MID-JOB.\n"
+            f"Busy now: {', '.join(busy)}\n"
+            f"`fly machine {verb}` restarts or removes the machine. If the job you kill belongs "
+            f"to another session, they see a build that died as \"The self-hosted runner lost "
+            f"communication with the server\" -- which reads as a failing test, from a cause "
+            f"they cannot see. That is exactly what happened on 2026-08-19 at 20:26Z.\n"
+            f"Wait for the fleet to go idle:\n"
+            f"  gh api repos/{repo}/actions/runners --jq "
+            f"'[.runners[]|select(.busy)]|length'\n"
+            f"If the repair genuinely cannot wait, MESSAGE THE PEER SESSIONS FIRST "
+            f"(ListAgents, then SendMessage) so the dead build is explained before they hunt it."
+            + _escape("runner-busy-intended"))
+
+
 # --- the stash stack is SHARED, and it is not yours -----------------------------------------
 #
 # WHY. `git stash` writes to `refs/stash` in the COMMON git dir. Every worktree of this repo
@@ -697,7 +781,8 @@ def rule_force_push(cmd: str) -> str | None:
 
 RULES = (rule_add_all, rule_runtime_state, rule_no_verify, rule_index_lock, rule_two_dot_diff,
          rule_pr_size, rule_commit_in_shared_checkout, rule_merge_red_pr,
-         rule_ci_autoscale, rule_clone_makes_a_standby, rule_shared_stash,
+         rule_ci_autoscale, rule_clone_makes_a_standby,
+         rule_restart_kills_a_live_build, rule_shared_stash,
          rule_force_push)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
@@ -722,6 +807,8 @@ def selftest() -> int:
         ("fly machine stop abc -a prospector-engine", None),
         ("fly machine start 8ee06eb7701628 -a prospector-ci", None),
         ("fly machine clone 8e4530a7712248 -a prospector-ci", "rule_clone_makes_a_standby"),
+        # rule_restart_kills_a_live_build reads GitHub, so the harness skips it above and it is
+        # proved against a stubbed busy list further down.
         ("fly machines clone abc --region lhr", "rule_clone_makes_a_standby"),
         ("fly m clone abc -a hermes-ci", "rule_clone_makes_a_standby"),
         ("fly machine clone abc  # clone-standby-intended", None),
@@ -805,7 +892,7 @@ def selftest() -> int:
         cmd = strip_commit_messages(strip_heredocs(cmd))
         for rule in RULES:
             if rule.__name__ in ("rule_pr_size", "rule_commit_in_shared_checkout",
-                                 "rule_merge_red_pr"):
+                                 "rule_merge_red_pr", "rule_restart_kills_a_live_build"):
                 # These read live state -- the branch this process is standing on, or GitHub --
                 # so their answer here depends on where the selftest was launched, not on `cmd`.
                 # Covered separately below, against explicit inputs.
@@ -952,6 +1039,32 @@ def selftest() -> int:
         else:
             bad += 1
             print(f"  FAIL  {name}: {why}")
+    # A machine repair while a runner is mid-job. The busy lookup is stubbed, because a rule
+    # that can only be proved when CI happens to be busy is a rule that is never proved.
+    _real_busy = _busy_runners
+    for name, busy, cmd, want_block in [
+        ("busy_fleet_blocks_update", ["runner-7819644f116928"],
+         'fly machine update abc -a prospector-ci --standby-for "" --yes', True),
+        ("busy_fleet_blocks_restart", ["r1"], "fly machine restart abc -a prospector-ci", True),
+        ("busy_fleet_blocks_destroy", ["r1"], "fly machine destroy abc -a hermes-ci", True),
+        ("idle_fleet_allows_update", [],
+         'fly machine update abc -a prospector-ci --standby-for "" --yes', False),
+        # Starting a stopped machine cannot interrupt a build, so it is never this rule's business.
+        ("start_is_never_blocked", ["r1"], "fly machine start abc -a prospector-ci", False),
+        # An app that is not a runner fleet has no jobs to destroy.
+        ("non_runner_app_allowed", ["r1"], "fly machine restart abc -a prospector-engine", False),
+        ("escape_hatch_allows", ["r1"],
+         "fly machine restart abc -a prospector-ci  # runner-busy-intended", False),
+    ]:
+        globals()["_busy_runners"] = lambda _repo, _b=busy: list(_b)
+        got = bool(rule_restart_kills_a_live_build(cmd))
+        if got != want_block:
+            bad += 1
+            print(f"  FAIL  {name}: wanted block={want_block}, got {got}")
+        else:
+            cases.append((name, True))
+    globals()["_busy_runners"] = _real_busy
+
     print(f"selftest: {len(cases) - bad}/{len(cases)} passed")
     return 1 if bad else 0
 

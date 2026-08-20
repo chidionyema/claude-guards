@@ -13,7 +13,12 @@ Usage:
 Every figure is derived from usage counters the API returned, never estimated from
 character counts. Requests with no usage block are counted separately and excluded.
 """
-import json, os, glob, argparse, collections, datetime
+import argparse
+import collections
+import datetime
+import glob
+import json
+import os
 
 # $ per million tokens. Source: CLAUDE.md model routing ladder (in / cache_write / cache_read / out).
 RATES = {
@@ -83,7 +88,8 @@ def main():
                     unpriced[model] += 1
                     continue
                 d = agg[model]
-                d["n"] += 1; d["usd"] += c
+                d["n"] += 1
+                d["usd"] += c
                 d["in"] += u.get("input_tokens", 0)
                 d["cw"] += u.get("cache_creation_input_tokens", 0)
                 d["cr"] += u.get("cache_read_input_tokens", 0)
@@ -100,7 +106,8 @@ def main():
         toks = d["in"] + d["cw"] + d["cr"] + d["out"]
         crpct = 100 * d["cr"] / toks if toks else 0
         print(f"  {model:26s} {d['n']:6d} {d['usd']:10.2f} {d['usd']/d['n']:9.4f} {crpct:12.1f}%")
-        tot_usd += d["usd"]; tot_n += d["n"]
+        tot_usd += d["usd"]
+        tot_n += d["n"]
     print(f"  {'TOTAL':26s} {tot_n:6d} {tot_usd:10.2f} {tot_usd/tot_n:9.4f}")
 
     # The counterfactual: what the same token traffic would have cost on Sonnet.
