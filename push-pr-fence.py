@@ -208,6 +208,32 @@ SELFTEST_CASES: list[tuple[list[str], str | None]] = [
 ]
 
 
+def git_subcommand(argv: list[str]) -> str | None:
+    """The git SUBCOMMAND, with git's own global options skipped.
+
+    WHY (measured 2026-08-21, and it blocked a real command). The test used to be
+    `"push" not in argv[:4]`, which is true of `git stash push`, `git subtree push` and
+    `git commit -m "...push..."`. A `git stash push -m "<message>"` was refused by this fence,
+    which then parsed the STASH MESSAGE as a branch name and reported it "5 commits behind
+    origin/main". A guard that refuses an unrelated command teaches sessions to work around
+    the guard, which is how a fence gets uninstalled.
+
+    Global options come BEFORE the subcommand and some of them take a value, so a value has to
+    be consumed with its flag or the next word is mistaken for the subcommand.
+    """
+    takes_value = {"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"}
+    i = 1
+    while i < len(argv):
+        a = argv[i]
+        if not a.startswith("-"):
+            return a
+        if a in takes_value:
+            i += 2
+            continue
+        i += 1
+    return None
+
+
 def selftest_staleness() -> tuple[list[str], int]:
     """Prove `commits_behind_main` reports the three answers that decide the LAW 7 block.
 
@@ -362,7 +388,23 @@ def selftest() -> int:
     merged_failures, merged_total = selftest_merged_exemption()
     failures += merged_failures
 
-    total = len(SELFTEST_CASES) + 6 + staleness_total + merged_total
+    # The fence must fire on a push and ONLY on a push. Each of these was a real refusal or a
+    # real hole: `git stash push -m` was blocked and its message read as a branch name.
+    for argv, want, why in [
+        (["git", "push", "origin", "b"], "push", "a plain push is a push"),
+        (["git", "-C", "/tmp/x", "push", "origin", "b"], "push", "-C takes a value"),
+        (["git", "-c", "user.name=x", "push"], "push", "-c takes a value"),
+        (["git", "--no-pager", "push"], "push", "a valueless global option is skipped"),
+        (["git", "stash", "push", "-m", "note"], "stash", "git stash push is NOT a push"),
+        (["git", "subtree", "push", "--prefix", "x"], "subtree", "nor is subtree push"),
+        (["git", "commit", "-m", "push the fix"], "commit", "nor is the word in a message"),
+        (["git"], None, "bare git has no subcommand"),
+    ]:
+        got = git_subcommand(argv)
+        if got != want:
+            failures.append(f"  git_subcommand({argv}): want {want!r}, got {got!r} -- {why}")
+
+    total = len(SELFTEST_CASES) + 6 + staleness_total + merged_total + 8
     if failures:
         print(f"push-pr-fence selftest: {len(failures)}/{total} FAILED")
         print("\n".join(failures))
@@ -416,7 +458,7 @@ def main() -> int:
         if argv[:1] == ["cd"] and len(argv) > 1:
             cwd = follow_cd(cwd, argv[1])
             continue
-        if len(argv) < 2 or argv[0] != "git" or "push" not in argv[:4]:
+        if len(argv) < 2 or argv[0] != "git" or git_subcommand(argv) != "push":
             continue
         cwd = git_c_dir(argv, cwd)
         if any(a in ("--delete", "-d", "--dry-run", "--tags") for a in argv):
