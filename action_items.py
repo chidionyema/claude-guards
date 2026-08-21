@@ -98,14 +98,15 @@ def parse(path: str, text: str) -> list[dict]:
     return items
 
 
-def collect() -> dict:
-    rc, out = sh(["git", "-C", REPO, "ls-tree", "-r", "--name-only", REF, "docs/"])
+def collect(repo: str = "", ref: str = "") -> dict:
+    repo, ref = repo or REPO, ref or REF
+    rc, out = sh(["git", "-C", repo, "ls-tree", "-r", "--name-only", ref, "docs/"])
     if rc != 0 or not out.strip():
-        return {"error": f"git ls-tree {REF} docs/ returned nothing (rc={rc})", "items": []}
+        return {"error": f"git ls-tree {ref} docs/ returned nothing (rc={rc})", "items": []}
     items: list[dict] = []
     docs = [p for p in out.split("\n") if p.endswith(".md")]
     for path in docs:
-        rc, text = sh(["git", "-C", REPO, "show", f"{REF}:{path}"], timeout=30)
+        rc, text = sh(["git", "-C", repo, "show", f"{ref}:{path}"], timeout=30)
         if rc == 0 and text:
             items.extend(parse(path, text))
 
@@ -163,20 +164,48 @@ def selftest() -> int:
             fails.append(f"{k}: got {by.get(k)!r}, wanted {v!r}")
     if "not-an-id" in by:
         fails.append("a row with no id was counted as an item")
+    # IN ORDER. This was `sorted(boxes)` until 2026-08-21, and sorting made the assertion blind
+    # to the only thing it was checking: flip `- [ ]` to done and `- [x]` to open and the sorted
+    # list is identical. edge_test.py found it -- the mutant at the checkbox line survived.
     boxes = [i["state"] for i in got if i["status_cell"] == "checkbox"]
-    if sorted(boxes) != ["done", "open"]:
-        fails.append(f"checkboxes: {boxes}")
+    if boxes != ["open", "done"]:
+        fails.append(f"checkboxes, in document order: {boxes}, wanted ['open', 'done']")
     # The trap this vocabulary exists for: NOT DONE must never read as DONE.
     if classify(["**NOT DONE**"])[0] != "open":
         fails.append("'NOT DONE' classified as done")
     if classify(["NOT MEASURED"])[0] != "open":
         fails.append("'NOT MEASURED' classified as done by the MEASURED token")
+    # sh(): the shell helper every git read goes through. Untested until 2026-08-21.
+    if sh(["/bin/echo", "hi"]) != (0, "hi\n"):
+        fails.append(f"sh() on a working command: {sh(['/bin/echo', 'hi'])!r}")
+    if sh(["/nonexistent-binary-" + "x" * 12])[0] == 0:
+        fails.append("sh() reported success for a binary that does not exist")
+
+    # collect(): end to end against a repo built here, so the git plumbing is graded rather
+    # than assumed. Both branches: a real ref, and a ref that does not resolve.
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        os.makedirs(os.path.join(d, "docs"))
+        with open(os.path.join(d, "docs", "P.md"), "w") as fh:
+            fh.write("| Z9 | a tracked thing | **DONE** | — |\n| Z8 | another | OPEN | — |\n")
+        for cmd in (["git", "init", "-q"], ["git", "add", "docs/P.md"],
+                    ["git", "-c", "user.email=t@t", "-c", "user.name=t",
+                     "commit", "-qm", "seed"]):
+            sh(["git", "-C", d] + cmd[1:] if cmd[0] == "git" else cmd)
+        got_c = collect(repo=d, ref="HEAD")
+        ids = {i["id"]: i["state"] for i in got_c.get("items", [])}
+        if ids.get("Z9") != "done" or ids.get("Z8") != "open":
+            fails.append(f"collect() against a real repo: {ids!r} err={got_c.get('error')!r}")
+        bad = collect(repo=d, ref="refs/heads/no-such-ref")
+        if not bad.get("error") or bad.get("items"):
+            fails.append("collect() on an unresolvable ref did not report an error")
+
     if fails:
         print("selftest FAILED:")
         for f in fails:
             print("  -", f)
         return 1
-    print(f"PASS: {len(want)} statuses, a silent-miss row reports unknown, 'NOT DONE' is open.")
+    print(f"PASS: {len(want)} statuses, unknown on a miss, 'NOT DONE' is open, checkboxes in order, sh() both ways, collect() end to end.")
     return 0
 
 

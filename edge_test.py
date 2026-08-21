@@ -34,6 +34,8 @@ import shutil
 import signal
 import subprocess
 import sys
+import tokenize
+from io import StringIO
 
 BACKUP_SUFFIX = ".mutation-backup"
 
@@ -54,6 +56,41 @@ MUTATIONS: list[tuple[str, str, str]] = [
     ("+ 1 becomes + 0", r"\+ 1\b", "+ 0"),
     ("continue becomes pass", r"\bcontinue\b", "pass"),
 ]
+
+
+def _code_only(source: str) -> str:
+    """`source` with every comment and string literal blanked out, offsets preserved.
+
+    Measured 2026-08-21: the first version regex-matched the raw file, so mutating
+    `action_items.py` flipped an `and` inside a DOCSTRING and reported the test did not grade
+    it. No test can ever catch that -- the mutant is prose. Three of five survivors were this.
+    It is the estate's named class: a guard that greps source grades the source's own comments.
+
+    Offsets are preserved rather than the text removed, so a match position in the masked copy
+    is the same position in the real file and the mutation lands where it was found.
+    """
+    out = list(source)
+    try:
+        toks = list(tokenize.generate_tokens(StringIO(source).readline))
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return source  # unparseable: mutate raw rather than silently mutating nothing
+    lines = source.splitlines(keepends=True)
+    starts = []
+    n = 0
+    for ln in lines:
+        starts.append(n)
+        n += len(ln)
+    for tok in toks:
+        if tok.type not in (tokenize.COMMENT, tokenize.STRING):
+            continue
+        (r1, c1), (r2, c2) = tok.start, tok.end
+        if r1 - 1 >= len(starts) or r2 - 1 >= len(starts):
+            continue
+        a, b = starts[r1 - 1] + c1, starts[r2 - 1] + c2
+        for i in range(a, min(b, len(out))):
+            if out[i] != "\n":
+                out[i] = " "
+    return "".join(out)
 
 
 def _first_diff(a: str, b: str) -> int:
@@ -106,11 +143,18 @@ def mutate(path: str, test_cmd: str, cwd: str = ".", timeout: int = 900,
         return 2
 
     applied, survivors = 0, []
+    # Match against the masked copy so a mutation can only land on executable code, then splice
+    # into the REAL source at the same offset. Never mutate a comment or a docstring: no test
+    # anywhere can catch that, so the survivor it reports is always a false accusation.
+    masked = _code_only(original)
     for name, pat, rep in MUTATIONS:
         if applied >= limit:
             break
-        mutated, n = re.subn(pat, rep, original, count=1)
-        if not n or mutated == original:
+        m = re.search(pat, masked)
+        if not m:
+            continue
+        mutated = original[:m.start()] + rep + original[m.end():]
+        if mutated == original:
             continue
         try:
             ast.parse(mutated)
@@ -220,6 +264,24 @@ def selftest() -> int:
             fails.append(f"a non-grading test was not caught (rc={rc}, wanted 1)")
         if "line 2" not in buf.getvalue():
             fails.append("a survivor was reported without the line it survived on")
+
+        # The mask. A file whose ONLY `and` is inside a comment and a docstring has nothing a
+        # test could grade, so a correct tool applies zero mutations to it. The version before
+        # 2026-08-21 applied two and blamed the tests for both.
+        prose = os.path.join(d, "prose.py")
+        open(prose, "w").write(
+            '"""A docstring with and in it."""\n'
+            "# a comment with and in it\n"
+            "def f(x):\n"
+            "    return x\n"
+        )
+        masked = _code_only(open(prose).read())
+        if "and" in masked:
+            fails.append("_code_only left `and` visible inside a comment or a docstring")
+        if "def f(x):" not in masked:
+            fails.append("_code_only blanked out real code")
+        if len(masked) != len(open(prose).read()):
+            fails.append("_code_only changed the offsets, so mutations would land in the wrong place")
 
         # The trap this tool exists to close: a mutation left behind by a crash is restored
         # on the NEXT run, before anything else happens.
