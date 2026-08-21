@@ -77,6 +77,20 @@ def harvest(transcript: Path) -> dict:
             msg = d.get("message") or {}
             content = msg.get("content")
 
+            # A message typed while a turn is RUNNING is not a `user` row at all. It lands
+            # as queue-operation/enqueue and fires no UserPromptSubmit. Measured on this
+            # estate's own transcripts; prompt-ledger.py:1 records the same finding. Miss
+            # these and you lose exactly the messages the founder sent while waiting.
+            if d.get("type") == "queue-operation" and d.get("operation") == "enqueue":
+                for key in ("prompt", "content", "text", "value"):
+                    v = d.get(key)
+                    if isinstance(v, str) and v.strip():
+                        s_ = v.strip()
+                        if not s_.startswith(SKIP_PREFIXES):
+                            turns.append(s_)
+                        break
+                continue
+
             if d.get("type") == "user":
                 for t in _text_blocks(content):
                     s = t.strip()
@@ -245,6 +259,7 @@ def selftest() -> int:
                 {"type": "tool_use", "name": "Bash", "input": {"command": "cat > /x/b.md <<'E'\nhi\nE"}},
                 {"type": "text", "text": "I did the thing."}]}},
             {"type": "user", "message": {"content": [{"type": "text", "text": "second ask"}]}},
+            {"type": "queue-operation", "operation": "enqueue", "prompt": "typed mid-turn"},
         ]
         tr.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
         p = record(tr, "abcdef1234", td)
@@ -256,6 +271,7 @@ def selftest() -> int:
         check("Write target recorded", "/x/a.py" in body)
         check("a file created by a heredoc is recorded", "/x/b.md" in body)
         check("the last reply is carried", "I did the thing." in body)
+        check("a message typed MID-TURN is captured", "typed mid-turn" in body)
         check("RECOVERY-LATEST.md written too",
               (PROJECTS / _slug(td) / "checkpoints" / "RECOVERY-LATEST.md").exists())
         check("no .tmp left behind",
