@@ -125,6 +125,18 @@ def state_path(session: str) -> Path:
     return STATE_DIR / f"{safe}.json"
 
 
+def prune(days: int = 7) -> None:
+    """The estate turns over about 190 sessions a day and each gets a file. Cheap sweep,
+    best-effort, never raises. Peer edge case, 2026-08-21."""
+    try:
+        cut = time.time() - days * 86400
+        for f in STATE_DIR.glob("*.json"):
+            if f.stat().st_mtime < cut:
+                f.unlink()
+    except Exception:
+        pass
+
+
 def read_state(session: str) -> dict:
     try:
         return json.loads(state_path(session).read_text())
@@ -177,8 +189,14 @@ def walk_back(st: dict, lane_name: str, limit: int) -> str:
         f"nothing has changed state in that time (lane limit {limit}).\n"
         f"  GOAL      {goal}\n"
         f"  LAST MOVE {last}{ago}\n"
-        f"  Answer one question before the next call: does it move the GOAL line? "
-        f"If yes, say how. If no, this is a rabbit hole -- ticket it and go back."
+        f"  A long read-only run is often CORRECT and this is not an accusation. "
+        f"LAW 2 requires reading the data before acting, and LAW 1 says that while the "
+        f"critical path is waiting, waiting is the work. If either is why the count is "
+        f"high, say which and carry on.\n"
+        f"  Otherwise answer one question before the next call: does it move the GOAL "
+        f"line? If yes, say how. If no, this is a rabbit hole -- ticket it and go back.\n"
+        f"  Do NOT make a state-changing call merely to reset this counter. That is the "
+        f"substitution LAW 1 exists to kill, and it is worse than the drift."
     )
 
 
@@ -357,6 +375,19 @@ def selftest() -> int:
     return 1 if bad[0] else 0
 
 
+def _deadline(seconds: int = 3) -> None:
+    """Self-limit. A PreToolUse hook that hangs wedges the turn it was meant to help,
+    and this laptop has been measured at load average 282 with 90.7% CPU steal -- which
+    is exactly when the most tool calls are firing. On the alarm we exit 0: no message,
+    no refusal, the call proceeds. Peer edge case, 2026-08-21."""
+    try:
+        import signal
+        signal.signal(signal.SIGALRM, lambda *_: os._exit(0))
+        signal.alarm(seconds)
+    except Exception:
+        pass
+
+
 def main() -> int:
     if "--selftest" in sys.argv:
         return selftest()
@@ -385,9 +416,23 @@ def main() -> int:
         return 0                    # fail open: a guard must never block on its own bug
     ev = payload.get("hook_event_name", "")
     if ev in ("SessionStart", "PostCompact", "SessionStart:compact"):
+        prune()                        # once a session, not once a call
         return inject(payload)
     return handle(payload)
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    # The outermost guarantee, and it is the whole safety story: this process exits 0 on
+    # ANY path. The designed paths already do (corrupt state, garbage stdin, missing
+    # fields). This covers the ones I did not design -- a disk-full write, a bug of mine,
+    # an import failure. A governance hook that refuses work because IT broke is worse
+    # than no hook. --selftest is exempt: a test that cannot fail grades nothing.
+    if "--selftest" in sys.argv:
+        raise SystemExit(main())
+    _deadline()
+    try:
+        raise SystemExit(main())
+    except SystemExit as e:
+        raise SystemExit(0 if e.code not in (0, None) else 0) from None
+    except BaseException:
+        raise SystemExit(0) from None
