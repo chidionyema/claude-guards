@@ -338,9 +338,10 @@ def hook() -> int:
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
-    fails = []
+    fails, total = [], [0]
 
     def ck(name, cond):
+        total[0] += 1
         print("  %-64s %s" % (name[:64], "ok" if cond else "FAIL"))
         if not cond:
             fails.append(name)
@@ -363,10 +364,26 @@ def selftest() -> int:
     ck("the alert carries the CAUSE, not just the colour", p[0]["why"] == "d")
 
     # --- it repairs NOTHING: the whole point of the rewrite -------------------
-    src = Path(os.path.abspath(__file__)).read_text()
-    body = src.split('"""', 2)[2]      # grade the CODE, not the header that explains the cut
-    for danger in ("run rerun", "workflow run", "pr merge", "pr close", "push"):
-        ck("it never shells out to %r" % danger, danger not in body)
+    # Grade the parsed CODE, never the text. A previous version of this check grepped the
+    # source for "pr merge", "workflow run" and so on -- and failed, because the list of
+    # forbidden strings is itself in the source. That is the estate's own recorded trap:
+    # a guard that greps source grades its comments, its help text and its own checker.
+    import ast
+    tree = ast.parse(Path(os.path.abspath(__file__)).read_text())
+    shells, gh = 0, []
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                and getattr(node.func.value, "id", "") == "subprocess"
+                and node.func.attr in ("run", "Popen", "call", "check_output", "check_call")):
+            shells += 1
+            if node.args and isinstance(node.args[0], ast.List):
+                lits = [e.value for e in node.args[0].elts if isinstance(e, ast.Constant)]
+                if lits and lits[0] == "gh":
+                    gh.append(lits)
+    ck("it shells out in exactly the three places this file documents", shells == 3)
+    ck("it makes at least one call to gh", len(gh) == 1)
+    ck("and every gh call is a READ -- it can never merge, close, re-run or dispatch",
+       all(c[1:3] == ["pr", "list"] for c in gh))
     every = list(OWNED) + list(NEEDS_A_PERSON) + list(NOTHING_TO_DO) + ["DRAFT", "??"]
     ck("no verdict anywhere is routed to a repair",
        set(x["action"] for x in plan([pr(n, v) for n, v in enumerate(every)], {}, T))
@@ -478,7 +495,7 @@ def selftest() -> int:
        prune({"old": {"first_seen": T - 30 * 86400}, "new": {"first_seen": T}}, T)
        == {"new": {"first_seen": T}})
 
-    print("\n%d checks, %d failed" % (27 + 2 * len(OWNED), len(fails)))
+    print("\n%d checks, %d failed" % (total[0], len(fails)))
     return 1 if fails else 0
 
 
