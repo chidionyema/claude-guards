@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""Every action item in every programme doc, extracted and tracked without anyone asking.
+
+The founder, 2026-08-21: "alsi i need a report of acion itens fron this report and tracked and
+actions ... should nt be having to do this, should be auto", and "we need to know deliverbles",
+and "and track ruthlessly".
+
+Until this ran, the estate's action items lived as markdown table rows in 26 programme docs.
+Every one of them was written down and NONE of them was counted: nothing on this machine could
+answer "how many things did we say we would do, and how many are done", so the founder answered
+it by reading the docs himself, which is the loop he is asking to be taken out of.
+
+WHAT IT READS. `origin/main`, through git, never a working tree -- a checkout can be dirty, or
+26 commits behind (memory: the-main-checkout-is-26-behind-main), and grading a stale tree would
+report deliverables that shipped days ago as open.
+
+WHAT AN ITEM IS. A table row whose first cell is an id (R12, E-101, A3b, Q4), or a markdown
+checkbox. The status is read from the row's own status cell against a fixed vocabulary.
+
+A row whose status matches NOTHING is reported UNKNOWN and counted separately. It is never
+counted as done and never silently dropped: an allow-list with a silent miss case dropped 10
+criticals in 18 hours on this estate and no test failed (memory: an-allow-list-whose-miss-case-
+is-silent).
+
+    python3 action_items.py            # the summary
+    python3 action_items.py --json     # for the board
+    python3 action_items.py --selftest
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+
+HOME = os.path.expanduser("~")
+REPO = os.environ.get("PROSPECTOR_REPO", os.path.join(HOME, "Documents", "code", "prospector"))
+REF = os.environ.get("ACTION_ITEMS_REF", "origin/main")
+LEDGER = os.path.join(HOME, ".claude", "state", "action_items.json")
+
+ID = re.compile(r"^(?:\*\*)?([REAQD]-?\d+[a-z]?)(?:\*\*)?$")
+
+# Read as whole words against a cell, so "NOT STARTED" cannot be read as "STARTED" and a row
+# saying "not done" cannot be read as "DONE". Order matters: the negatives are tested first.
+OPEN_TOKENS = ("NOT STARTED", "NOT MEASURED", "NOT DONE", "NOT RUN", "TBD", "PARTLY",
+               "IN PROGRESS", "RUNNING", "BLOCKED", "OPEN", "TODO", "PENDING", "PROPOSED",
+               "DEGENERATE", "NO RESOLUTION", "NEEDS")
+DONE_TOKENS = ("DONE", "SHIPPED", "MERGED", "CLOSED", "COMPLETE", "MEASURED", "LANDED")
+
+
+def sh(cmd: list[str], timeout: int = 60) -> tuple[int, str]:
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        return p.returncode, p.stdout
+    except (subprocess.TimeoutExpired, OSError):
+        return 1, ""
+
+
+def classify(cells: list[str]) -> tuple[str, str]:
+    """(state, the cell that decided it). state is one of open/done/unknown."""
+    for cell in cells:
+        up = cell.upper()
+        for t in OPEN_TOKENS:
+            if t in up:
+                return "open", cell.strip()
+        for t in DONE_TOKENS:
+            if t in up:
+                return "done", cell.strip()
+    return "unknown", ""
+
+
+def parse(path: str, text: str) -> list[dict]:
+    items: list[dict] = []
+    for n, line in enumerate(text.split("\n"), 1):
+        s = line.strip()
+        if s.startswith("- [ ]") or s.startswith("- [x]") or s.startswith("- [X]"):
+            items.append({"id": f"{os.path.basename(path)}:{n}", "source": path, "line": n,
+                          "state": "done" if s[3].lower() == "x" else "open",
+                          "title": s[5:].strip()[:200], "status_cell": "checkbox"})
+            continue
+        if not s.startswith("|"):
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        if len(cells) < 2:
+            continue
+        m = ID.match(cells[0])
+        if not m:
+            continue
+        state, cell = classify(cells[1:])
+        items.append({"id": m.group(1), "source": path, "line": n, "state": state,
+                      "title": cells[1][:200], "status_cell": cell})
+    return items
+
+
+def collect() -> dict:
+    rc, out = sh(["git", "-C", REPO, "ls-tree", "-r", "--name-only", REF, "docs/"])
+    if rc != 0 or not out.strip():
+        return {"error": f"git ls-tree {REF} docs/ returned nothing (rc={rc})", "items": []}
+    items: list[dict] = []
+    docs = [p for p in out.split("\n") if p.endswith(".md")]
+    for path in docs:
+        rc, text = sh(["git", "-C", REPO, "show", f"{REF}:{path}"], timeout=30)
+        if rc == 0 and text:
+            items.extend(parse(path, text))
+
+    # first_seen, so "how long has this been open" is answerable next run. A ledger that only
+    # ever holds today's snapshot cannot tell the founder what is STUCK, which is the half of
+    # "track ruthlessly" that matters.
+    seen: dict = {}
+    try:
+        with open(LEDGER) as fh:
+            seen = json.load(fh).get("first_seen", {})
+    except (OSError, ValueError):
+        seen = {}
+    now = time.time()
+    for it in items:
+        key = f"{it['source']}#{it['id']}"
+        it["first_seen"] = seen.setdefault(key, now)
+        it["age_days"] = (now - it["first_seen"]) / 86400.0
+
+    result = {
+        "measured_at": now, "ref": REF, "docs": len(docs), "items": items,
+        "open": sum(1 for i in items if i["state"] == "open"),
+        "done": sum(1 for i in items if i["state"] == "done"),
+        "unknown": sum(1 for i in items if i["state"] == "unknown"),
+    }
+    try:
+        os.makedirs(os.path.dirname(LEDGER), exist_ok=True)
+        with open(LEDGER, "w") as fh:
+            json.dump({"first_seen": seen, "measured_at": now}, fh)
+    except OSError:
+        pass
+    return result
+
+
+def selftest() -> int:
+    fails = []
+    doc = "\n".join([
+        "| R1 | a thing | **DONE** | note |",
+        "| R2 | another | **NOT STARTED** | — |",
+        "| R3 | third | it is complicated | — |",     # no vocabulary hit -> unknown
+        "| A3b | latency | TBD | 100x |",
+        "| E-101 | an experiment | RUNNING | — |",
+        "- [ ] an unchecked box",
+        "- [x] a checked box",
+        "| not-an-id | ignore me | DONE |",
+    ])
+    got = parse("docs/T.md", doc)
+    by = {i["id"]: i["state"] for i in got}
+    want = {"R1": "done", "R2": "open", "R3": "unknown", "A3b": "open", "E-101": "open"}
+    for k, v in want.items():
+        if by.get(k) != v:
+            fails.append(f"{k}: got {by.get(k)!r}, wanted {v!r}")
+    if "not-an-id" in by:
+        fails.append("a row with no id was counted as an item")
+    boxes = [i["state"] for i in got if i["status_cell"] == "checkbox"]
+    if sorted(boxes) != ["done", "open"]:
+        fails.append(f"checkboxes: {boxes}")
+    # The trap this vocabulary exists for: NOT DONE must never read as DONE.
+    if classify(["**NOT DONE**"])[0] != "open":
+        fails.append("'NOT DONE' classified as done")
+    if classify(["NOT MEASURED"])[0] != "open":
+        fails.append("'NOT MEASURED' classified as done by the MEASURED token")
+    if fails:
+        print("selftest FAILED:")
+        for f in fails:
+            print("  -", f)
+        return 1
+    print(f"PASS: {len(want)} statuses, a silent-miss row reports unknown, 'NOT DONE' is open.")
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--selftest", action="store_true")
+    a = ap.parse_args()
+    if a.selftest:
+        return selftest()
+    r = collect()
+    if a.json:
+        print(json.dumps(r))
+        return 0 if not r.get("error") else 1
+    if r.get("error"):
+        print(r["error"], file=sys.stderr)
+        return 1
+    print(f"{len(r['items'])} action items across {r['docs']} docs on {r['ref']}: "
+          f"{r['done']} done, {r['open']} open, {r['unknown']} with no readable status")
+    old = sorted((i for i in r["items"] if i["state"] == "open"),
+                 key=lambda i: -i["age_days"])[:10]
+    for i in old:
+        print(f"  {i['age_days']:5.1f}d  {i['id']:<8} {i['source']}:{i['line']}  {i['title'][:70]}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

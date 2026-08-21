@@ -537,6 +537,8 @@ def _transcripts(max_age_s: float) -> list[tuple[str, float]]:
                 st = os.stat(path)
             except OSError:
                 continue
+            if "subagent" in dirpath:
+                continue          # an agent's brief to another agent is not the founder talking
             if now - st.st_mtime <= max_age_s:
                 out.append((path, st.st_mtime))
     out.sort(key=lambda t: -t[1])
@@ -662,6 +664,46 @@ def collect_sessions() -> list[Row]:
                 "ls -lt ~/.claude/projects/*/*.jsonl | head")]
 
 
+def collect_action_items() -> list[Row]:
+    """Every action item written down anywhere, counted. Nobody has to read the docs to know.
+
+    His words: "i need a report of acion itens fron this report and tracked and actions ...
+    should nt be having to do this, should be auto", "we need to know deliverbles", "and track
+    ruthlessly". The items were always written down -- 26 programme docs full of table rows --
+    and never counted, so the only way to know what was outstanding was to read them.
+    """
+    cmd = ["/usr/local/bin/python3", os.path.join(SCRIPTS, "action_items.py"), "--json"]
+    rc, out, err = sh(cmd, 300)
+    if rc != 0 or not out.strip():
+        return [_unknown("Action items outstanding", err.strip()[:200] or f"exit {rc}",
+                         " ".join(cmd))]
+    try:
+        d = json.loads(out)
+    except json.JSONDecodeError as e:
+        return [_unknown("Action items outstanding", f"printed no JSON: {e}", " ".join(cmd))]
+
+    items = d.get("items") or []
+    open_n, done_n, unk = d.get("open", 0), d.get("done", 0), d.get("unknown", 0)
+    graded = open_n + done_n
+    rows = [Row(BAD if open_n > done_n else GOOD, "Action items outstanding",
+                f"{open_n} open, {done_n} done",
+                f"across {d.get('docs', 0)} docs on {d.get('ref', '?')}; "
+                f"{done_n / graded * 100:.0f}% of what we wrote down is finished"
+                if graded else "nothing graded",
+                " ".join(cmd))]
+    # An item whose status cell matches no vocabulary is NOT counted as done and NOT hidden.
+    rows.append(Row(WARN if unk else GOOD, "Items with no readable status", str(unk),
+                    "a row nobody gave a status, so it is neither shipped nor tracked",
+                    " ".join(cmd)))
+    stale = sorted((i for i in items if i.get("state") == "open"),
+                   key=lambda i: -(i.get("age_days") or 0))[:4]
+    for i in stale:
+        rows.append(Row(WARN, f"— {i.get('id')} open {i.get('age_days', 0):.0f}d",
+                        str(i.get("title", ""))[:110],
+                        f"{i.get('source')}:{i.get('line')}"))
+    return rows
+
+
 COLLECTORS = [
     ("Money", collect_spend),
     ("What you said, and whether it landed", collect_founder_friction),
@@ -671,6 +713,7 @@ COLLECTORS = [
     ("Agent sessions", collect_sessions),
     ("Shipped — is it live?", collect_shipped_to_live),
     ("The guards themselves", collect_hooks_and_guards),
+    ("Deliverables", collect_action_items),
     ("What was asked for", collect_requirements),
     ("Waiting on you", collect_founder_decisions),
 ]
@@ -855,7 +898,10 @@ def main() -> int:
     if args.html:
         with open(args.html, "w") as fh:
             fh.write(render_html(board))
-        print(f"wrote {args.html}")
+        # stderr, never stdout. `--json --html X` together put this line ABOVE the JSON
+        # document, so json.load() on the captured stdout died at "Expecting value:
+        # line 1 column 1". Measured 2026-08-21. A status line is not part of the payload.
+        print(f"wrote {args.html}", file=sys.stderr)
     if args.json:
         print(json.dumps(board, indent=2))
     elif not args.html:
