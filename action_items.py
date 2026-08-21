@@ -41,7 +41,10 @@ REPO = os.environ.get("PROSPECTOR_REPO", os.path.join(HOME, "Documents", "code",
 REF = os.environ.get("ACTION_ITEMS_REF", "origin/main")
 LEDGER = os.path.join(HOME, ".claude", "state", "action_items.json")
 
-ID = re.compile(r"^(?:\*\*)?([REAQD]-?\d+[a-z]?)(?:\*\*)?$")
+# One to three capitals then a number: R12, E-101, A3b, Q4, RB1, E2. Measured 2026-08-21: the
+# first version listed the prefixes it had SEEN (R, E, A, Q, D), so `docs/RUNBOOKS.md` shipped
+# with seven RB rows and the tracker reported zero of them. An id scheme is not a fixed list.
+ID = re.compile(r"^(?:\*\*)?([A-Z]{1,3}-?\d+[a-z]?)(?:\*\*)?$")
 
 # Read as whole words against a cell, so "NOT STARTED" cannot be read as "STARTED" and a row
 # saying "not done" cannot be read as "DONE". Order matters: the negatives are tested first.
@@ -144,13 +147,17 @@ def selftest() -> int:
         "| R3 | third | it is complicated | — |",     # no vocabulary hit -> unknown
         "| A3b | latency | TBD | 100x |",
         "| E-101 | an experiment | RUNNING | — |",
+        "| RB1 | a runbook | **DONE** | proven |",
         "- [ ] an unchecked box",
         "- [x] a checked box",
         "| not-an-id | ignore me | DONE |",
     ])
     got = parse("docs/T.md", doc)
     by = {i["id"]: i["state"] for i in got}
-    want = {"R1": "done", "R2": "open", "R3": "unknown", "A3b": "open", "E-101": "open"}
+    # RB1 is here because the first version of ID listed prefixes instead of matching the
+    # scheme, and a whole new doc went untracked with no failure anywhere.
+    want = {"R1": "done", "R2": "open", "R3": "unknown", "A3b": "open", "E-101": "open",
+            "RB1": "done"}
     for k, v in want.items():
         if by.get(k) != v:
             fails.append(f"{k}: got {by.get(k)!r}, wanted {v!r}")

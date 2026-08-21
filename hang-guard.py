@@ -83,6 +83,38 @@ INERT = {
 _SEGMENT_SPLIT_RE = re.compile(r"\|\||&&|[|;\n()]")
 
 
+def _mask_quoted(cmd: str) -> str:
+    """Blank the CONTENTS of quoted runs, keeping length, so operators inside them stay literal.
+
+    Found on 2026-08-21, by this guard refusing a read-only grep of its own source:
+
+        grep -n "selftest\\|CASES\\|_HANG\\|playwright" ~/.claude/scripts/hang-guard.py | head -40
+
+    `_SEGMENT_SPLIT_RE` splits on `|`, and a BRE alternation is written `\\|`, so the quoted
+    pattern was chopped into fake segments. One of them began with the word `playwright"`, which
+    is not in INERT, so every segment test failed and the whole line was refused. Nothing was
+    going to run a browser: the only executables on that line were grep and head.
+
+    The class is a guard that reads shell SYNTAX out of a string without honouring quoting, so
+    it cannot tell an operator from a character inside an argument. Masking is done before the
+    split only -- the hang-prone match itself still runs on the raw command, because
+    `bash -c "npx playwright test"` really does run one, and there the masked first word is
+    `bash`, which is not inert, so it still blocks.
+    """
+    out, quote = [], None
+    for ch in cmd:
+        if quote:
+            out.append(ch if ch == quote else "x")
+            if ch == quote:
+                quote = None
+        elif ch in "'\"":
+            quote = ch
+            out.append(ch)
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
 def _all_inert(cmd: str) -> bool:
     """True when every simple command on the line is a reader that cannot drive a browser."""
     segments = [seg.strip() for seg in _SEGMENT_SPLIT_RE.split(cmd)]
@@ -129,7 +161,7 @@ def check(cmd: str) -> int:
             "  timeout 60 grep -r ...        # if you really want grep, bound it\n"
         )
 
-    if HANG_PRONE_RE.search(cmd) and not _all_inert(cmd):
+    if HANG_PRONE_RE.search(cmd) and not _all_inert(_mask_quoted(cmd)):
         return block(
             "BLOCKED by hang-guard: hang-prone harness with no timeout.\n"
             "Browser harnesses and dev servers fail by running forever, not by exiting "
@@ -187,6 +219,21 @@ SELFTEST_CASES: list[tuple[str, int]] = [
     ("npm run build", 0),
     ("npm test", 0),
     ("", 0),
+
+    # An operator INSIDE a quoted argument is not an operator. Each of these was refused by
+    # the real guard on 2026-08-21 while reading a file, running nothing (see _mask_quoted).
+    ("grep -n \"selftest\\|CASES\\|playwright\" ~/.claude/scripts/hang-guard.py | head -40", 0),
+    ("grep -n 'playwright|puppeteer' hang-guard.py", 0),
+    ("ls -la node_modules/playwright/index.mjs", 0),
+    ("cat notes.md | grep puppeteer", 0),
+    ("wc -l vendor/playwright/index.mjs && head -3 vendor/playwright/index.mjs", 0),
+    # ...and the shapes the mask must NOT wave through: a shell or a runner is not inert, so a
+    # harness quoted into `-c` still blocks.
+    ("bash -c \"npx playwright test\"", 2),
+    ("sh -c 'npm run dev'", 2),
+    ("node run-playwright.mjs", 2),
+    ("ls foo && npx playwright test", 2),
+    ("./playwright-smoke.sh", 2),
 
     # Rule 3 is not a rule, it is a carve-out: a heredoc BODY is a file being written, not a
     # command. This exact shape was refused on 2026-08-19 while writing a subagent definition

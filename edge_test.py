@@ -56,6 +56,14 @@ MUTATIONS: list[tuple[str, str, str]] = [
 ]
 
 
+def _first_diff(a: str, b: str) -> int:
+    """Index of the first character where two strings differ; len(a) when one is a prefix."""
+    for i, (x, y) in enumerate(zip(a, b)):
+        if x != y:
+            return i
+    return min(len(a), len(b))
+
+
 def _restore(path: str) -> bool:
     """Put the original back. Safe to call any number of times, from any of three routes."""
     backup = path + BACKUP_SUFFIX
@@ -108,13 +116,17 @@ def mutate(path: str, test_cmd: str, cwd: str = ".", timeout: int = 900,
             ast.parse(mutated)
         except SyntaxError:
             continue                       # a mutant that will not parse grades nothing
+        # A survivor is only actionable if you know WHERE it survived. Without the line, the
+        # report says "your tests do not grade `and`" about a file with ninety of them.
+        line_no = original[:_first_diff(original, mutated)].count("\n") + 1
+        snippet = mutated.split("\n")[line_no - 1].strip()[:70]
         open(path, "w").write(mutated)
         applied += 1
         rc = _run(test_cmd, cwd, timeout)
         status = "caught" if rc != 0 else "SURVIVED"
-        print(f"  {status:>8}  {name}")
+        print(f"  {status:>8}  {name}  line {line_no}: {snippet}")
         if rc == 0:
-            survivors.append(name)
+            survivors.append(f"{name} at line {line_no}: {snippet}")
     _restore(path)
 
     print(f"\n{applied} mutations applied, {len(survivors)} survived.")
@@ -199,9 +211,15 @@ def selftest() -> int:
         # A test that does not grade the boundary: >= to > must survive.
         weak = os.path.join(d, "t_weak.py")
         open(weak, "w").write("import m\nassert m.over(100)\n")
-        rc = mutate(mod, f"{sys.executable} t_weak.py", cwd=d, timeout=60)
+        import io
+        import contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = mutate(mod, f"{sys.executable} t_weak.py", cwd=d, timeout=60)
         if rc != 1:
             fails.append(f"a non-grading test was not caught (rc={rc}, wanted 1)")
+        if "line 2" not in buf.getvalue():
+            fails.append("a survivor was reported without the line it survived on")
 
         # The trap this tool exists to close: a mutation left behind by a crash is restored
         # on the NEXT run, before anything else happens.
