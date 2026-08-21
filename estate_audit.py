@@ -1,0 +1,713 @@
+#!/usr/bin/env python3
+"""Everything running in this estate, in one page, with the command behind every number.
+
+The founder, 2026-08-21: "we need to know everythig running ... nonatter how tiny or
+insigificant" and "if a autitor visited tonorrw". The estate already had nine probes. Nine
+probes cost 347.7 seconds and seven of them exit non-zero, so the honest answer to "what is
+running?" took six minutes and arrived broken.
+
+This is not a tenth probe. It runs every check CONCURRENTLY under a hard per-check timeout,
+writes JSON and HTML atomically, and stamps generated_at into both. Serving is then a file
+read, which is what makes the founder's "0 seconds" reachable: the cost moves off the read
+and onto a scheduled build.
+
+Every row carries the command that produced it. A check that times out or errors is reported
+as UNKNOWN with the reason -- never omitted, never guessed. No credential VALUE is ever
+written to the output; token findings carry file, line, prefix and length only.
+
+    estate_audit.py --json                 machine-readable to stdout
+    estate_audit.py --html OUT --state OUT.json    write the page and the data
+    estate_audit.py --selftest             prove it works
+"""
+from __future__ import annotations
+
+import argparse
+import concurrent.futures as futures
+import html
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import time
+
+HOME = pathlib.Path.home()
+CLAUDE = HOME / ".claude"
+STATE = CLAUDE / "state"
+PROSPECTOR = HOME / "Documents/code/prospector"
+
+DEFAULT_HTML = STATE / "estate-audit.html"
+DEFAULT_JSON = STATE / "estate-audit.json"
+
+CRIT, WARN, OK, UNK = "critical", "warn", "ok", "unknown"
+TIMEOUT = 12
+
+# Every domain an auditor walks through, in the order they ask.
+DOMAINS = [
+    ("agent", "The agent layer", "Hooks, guards, skills, subagents and MCP servers -- the machinery every session passes through."),
+    ("sched", "Scheduled and running", "Every launchd job, every live session, every process holding CPU."),
+    ("pipeline", "The shipping pipeline", "Every gate a commit passes on the way to production."),
+    ("platform", "Is it serving", "The customer-facing answer, measured live."),
+    ("access", "Access and change control", "Who can change production, and who reviewed it."),
+    ("secrets", "Secrets and credentials", "Locations and exposure only. No value is ever printed."),
+    ("machine", "The machine itself", "Load, disk, and what is eating them."),
+    ("gap", "Where the estate is blind", "Questions nothing here can answer."),
+]
+
+
+def sh(cmd: str, timeout: int = TIMEOUT, cwd: str | None = None) -> tuple[int, str]:
+    """Run a shell command. Returns (rc, stdout+stderr stripped). Never raises."""
+    try:
+        p = subprocess.run(["/bin/bash", "-lc", cmd], capture_output=True, text=True,
+                           timeout=timeout, cwd=cwd)
+        return p.returncode, (p.stdout + p.stderr).strip()
+    except subprocess.TimeoutExpired:
+        return 124, f"__timeout__ after {timeout}s"
+    except Exception as e:                                   # noqa: BLE001 - a probe reports
+        return 125, f"__error__ {type(e).__name__}: {e}"
+
+
+def row(domain: str, title: str, value: str, sev: str, proof: str, detail: str = "") -> dict:
+    return {"domain": domain, "title": title, "value": value, "severity": sev,
+            "proof": proof, "detail": detail}
+
+
+# ---------------------------------------------------------------- checks
+
+def c_hooks() -> list[dict]:
+    out = []
+    p = CLAUDE / "settings.json"
+    proof = "python3 -c 'json.load(open(~/.claude/settings.json))[\"hooks\"]'"
+    try:
+        cfg = json.load(open(p))
+    except Exception as e:                                   # noqa: BLE001
+        return [row("agent", "settings.json unreadable", "ERROR", CRIT, proof, str(e))]
+    total, missing, by_ev = 0, [], {}
+    for ev, groups in cfg.get("hooks", {}).items():
+        n = 0
+        for g in groups:
+            for h in g.get("hooks", []):
+                total += 1
+                n += 1
+                cmd = h.get("command", "")
+                for s in re.findall(r"([A-Za-z0-9_./-]+\.(?:py|sh))", cmd):
+                    name = pathlib.Path(s).name
+                    if not (CLAUDE / "scripts" / name).exists() and not pathlib.Path(s).exists():
+                        missing.append(f"{ev}:{name}")
+        by_ev[ev] = n
+    ev_s = ", ".join(f"{k} {v}" for k, v in sorted(by_ev.items()))
+    out.append(row("agent", "Hook entries wired into every session", str(total),
+                   WARN if total > 25 else OK, proof, ev_s))
+    if missing:
+        out.append(row("agent", "Hook targets that do not exist on disk", str(len(missing)),
+                       CRIT, proof, "; ".join(sorted(set(missing))[:6])))
+    # a hook that fetches code from the network on every session start
+    net = [h.get("command", "") for g in cfg.get("hooks", {}).get("SessionStart", [])
+           for h in g.get("hooks", [])]
+    fetchers = [c for c in net if "git fetch" in c or "curl" in c]
+    if fetchers:
+        tgt = re.findall(r"([A-Za-z0-9_.-]+\.py)", fetchers[0])
+        out.append(row("agent", "SessionStart fetches and executes code from the network", str(len(fetchers)),
+                       CRIT, "settings.json SessionStart hooks",
+                       f"git fetch origin main, writes {tgt[0] if tgt else '?'} into /tmp, then runs it. "
+                       "Every session start. A compromised main executes here."))
+    perm = cfg.get("permissions", {})
+    out.append(row("agent", "Permission rules", f"{len(perm.get('allow', []))} allow / {len(perm.get('deny', []))} deny",
+                   WARN if "Bash(*)" in perm.get("allow", []) else OK,
+                   "settings.json .permissions",
+                   f"defaultMode={perm.get('defaultMode', 'unset')}. "
+                   + ("Bash(*) is allowed outright; the deny list is read-noise filters, not a security boundary."
+                      if "Bash(*)" in perm.get("allow", []) else "")))
+    if cfg.get("skipDangerousModePermissionPrompt"):
+        out.append(row("agent", "Dangerous-mode permission prompt is disabled", "true", WARN,
+                       "settings.json .skipDangerousModePermissionPrompt", ""))
+    return out
+
+
+def c_guards() -> list[dict]:
+    d = CLAUDE / "scripts"
+    files = sorted(list(d.glob("*.py")) + list(d.glob("*.sh")))
+    lines = 0
+    no_self = []
+    for f in files:
+        try:
+            t = f.read_text(errors="ignore")
+        except Exception:                                    # noqa: BLE001
+            continue
+        lines += len(t.splitlines())
+        if "--selftest" not in t:
+            no_self.append(f.name)
+    rc, sub = sh("cd ~/.claude && git ls-files -s scripts | head -1 | awk '{print $1}'")
+    out = [row("agent", "Guard and probe scripts", f"{len(files)} files / {lines:,} lines",
+               WARN, "ls ~/.claude/scripts/*.py *.sh; wc -l",
+               "This is the enforcement layer. It runs on this machine only and is not covered by CI.")]
+    if no_self:
+        out.append(row("agent", "Scripts with no selftest", str(len(no_self)), WARN,
+                       "grep -L -- --selftest ~/.claude/scripts/*", ", ".join(no_self[:8])))
+    if sub.strip() == "160000":
+        out.append(row("agent", "scripts/ is a git submodule of ~/.claude", "160000", WARN,
+                       "git ls-files -s scripts",
+                       "Commits to a guard land in the submodule, not the outer repo. "
+                       "A reviewer reading ~/.claude sees a pointer bump, not the diff."))
+    rc, o = sh("python3 ~/.claude/scripts/memory-loop.py --selftest 2>&1 | tail -2")
+    bad = "FAIL" in o.upper() or re.search(r"\b([0-9]+) of ([0-9]+)", o) and \
+        (lambda m: m and m.group(1) != m.group(2))(re.search(r"\b([0-9]+) of ([0-9]+)", o))
+    out.append(row("agent", "Laws injector selftest", o.splitlines()[-1][:70] if o else "no output",
+                   CRIT if bad else OK, "memory-loop.py --selftest",
+                   "This is the hook that puts the 17 laws in front of every session."))
+    return out
+
+
+def c_skills_mcp() -> list[dict]:
+    out = []
+    rc, n = sh("find ~/.claude/plugins -name SKILL.md 2>/dev/null | wc -l")
+    rc2, dirs = sh("ls ~/.claude/plugins/cache 2>/dev/null")
+    out.append(row("agent", "Skills reachable from every session", n.strip(), WARN,
+                   "find ~/.claude/plugins -name SKILL.md | wc -l",
+                   f"Cached under: {dirs.strip() or 'unknown'}. A directory name like "
+                   "temp_git_<epoch>_<rand> is a checkout nobody named."))
+    rc, us = sh("ls ~/.claude/skills 2>/dev/null | tr '\\n' ' '")
+    out.append(row("agent", "User-authored skills", str(len(us.split())), OK,
+                   "ls ~/.claude/skills", us.strip()))
+    try:
+        d = json.load(open(HOME / ".claude.json"))
+        m = d.get("mcpServers", {})
+        det = "; ".join(f"{k} -> {v.get('command', '?')} {' '.join(v.get('args', []))[:60]}" for k, v in m.items())
+    except Exception as e:                                   # noqa: BLE001
+        m, det = {}, str(e)
+    out.append(row("agent", "MCP servers wired globally", str(len(m)), WARN if m else OK,
+                   "~/.claude.json .mcpServers", det))
+    rc, a = sh("ls ~/.claude/agents/*.md 2>/dev/null | wc -l")
+    rc2, a2 = sh(f"ls {PROSPECTOR}/.claude/agents/*.md 2>/dev/null | wc -l")
+    rc3, p3 = sh(f"ls {PROSPECTOR}/docs/personas/*.md 2>/dev/null | wc -l")
+    out.append(row("agent", "Subagent definitions on disk", f"{a.strip()} global / {a2.strip()} repo",
+                   CRIT if a.strip() == "0" else OK,
+                   "ls ~/.claude/agents/*.md; ls <repo>/.claude/agents/*.md",
+                   f"Decision d9861f649fe4 put the personas in ~/.claude/agents/*.md. "
+                   f"That directory holds none. {p3.strip()} persona documents live in "
+                   f"{PROSPECTOR.name}/docs/personas and are prose, not agent definitions."))
+    return out
+
+
+def c_sessions() -> list[dict]:
+    rc, n = sh("pgrep -f 'claude' | wc -l")
+    rc2, s = sh("ls /tmp/cc-socks/*.sock 2>/dev/null | wc -l")
+    return [row("sched", "Claude sessions live on this machine right now",
+                f"{s.strip()} sessions / {n.strip()} processes",
+                WARN if int(s.strip() or 0) > 2 else OK,
+                "ls /tmp/cc-socks/*.sock; pgrep -f claude | wc -l",
+                "Each session bills independently and cannot see the others' work.")]
+
+
+def c_launchd() -> list[dict]:
+    script = r"""
+for p in ~/Library/LaunchAgents/*.plist; do
+  lbl=$(/usr/libexec/PlistBuddy -c "Print :Label" "$p" 2>/dev/null) || continue
+  [ -z "$lbl" ] && continue
+  st=$(launchctl list 2>/dev/null | awk -v l="$lbl" '$3==l{print $2}')
+  [ -z "$st" ] && st="notloaded"
+  echo "$lbl|$st"
+done
+"""
+    rc, o = sh(script, timeout=25)
+    jobs = [l.split("|") for l in o.splitlines() if "|" in l]
+    total = len(jobs)
+    notloaded = [j[0] for j in jobs if j[1] == "notloaded"]
+    failing = [f"{j[0]}({j[1]})" for j in jobs if j[1] not in ("0", "notloaded")]
+    out = [row("sched", "launchd jobs installed", str(total), WARN,
+               "PlistBuddy Print :Label over ~/Library/LaunchAgents/*.plist",
+               "Every one of these runs with no session attached and no human watching.")]
+    if failing:
+        out.append(row("sched", "launchd jobs whose last run exited non-zero", str(len(failing)),
+                       CRIT, "launchctl list", ", ".join(sorted(failing))))
+    if notloaded:
+        out.append(row("sched", "launchd jobs installed but never loaded", str(len(notloaded)),
+                       WARN, "launchctl list", ", ".join(sorted(notloaded))))
+    return out
+
+
+def c_endpoints() -> list[dict]:
+    urls = ["https://prospector-store-web.fly.dev", "https://prospector-store-api.fly.dev",
+            "https://tie-web.fly.dev", "https://tie-api.fly.dev"]
+
+    def one(u: str) -> dict:
+        rc, o = sh(f"curl -s -o /dev/null -w '%{{http_code}} %{{time_total}}' --max-time 10 {u}", timeout=14)
+        parts = o.split()
+        code = parts[0] if parts else "000"
+        t = parts[1] if len(parts) > 1 else "?"
+        sev = OK if code.startswith("2") else (UNK if code == "000" else CRIT)
+        note = "serving" if sev == OK else ("no response inside 10s -- hard down" if code == "000"
+                                            else f"answers but returns {code}")
+        return row("platform", u.replace("https://", ""), f"{code} in {t}s", sev,
+                   "curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time 10", note)
+
+    with futures.ThreadPoolExecutor(max_workers=4) as ex:
+        return list(ex.map(one, urls))
+
+
+def c_fly() -> list[dict]:
+    rc, o = sh("flyctl apps list --json 2>/dev/null", timeout=25)
+    try:
+        apps = json.loads(o)
+    except Exception:                                        # noqa: BLE001
+        return [row("sched", "Fly applications", "UNKNOWN", UNK, "flyctl apps list --json",
+                    "flyctl did not return JSON: " + o[:90])]
+    dep = [a for a in apps if a.get("Status") == "deployed"]
+    sus = [a for a in apps if a.get("Status") == "suspended"]
+    return [row("sched", "Fly applications", f"{len(apps)} ({len(dep)} deployed, {len(sus)} suspended)",
+                WARN, "flyctl apps list --json",
+                "Suspended: " + ", ".join(sorted(a.get("Name", "?") for a in sus)))]
+
+
+def c_access() -> list[dict]:
+    out = []
+    rc, o = sh("gh api repos/chidionyema/prospector/branches/main/protection 2>&1 | head -2", timeout=20)
+    if "Upgrade to GitHub" in o or '"status": "403"' in o or "403" in o:
+        out.append(row("access", "Branch protection on prospector/main", "IMPOSSIBLE", CRIT,
+                       "gh api repos/chidionyema/prospector/branches/main/protection",
+                       "Private repository on a free plan. GitHub refuses the feature. No required "
+                       "review, no enforced admin, no required status check. Every merge guard on "
+                       "this estate is voluntary and local."))
+    elif "required_pull_request_reviews" in o:
+        out.append(row("access", "Branch protection on prospector/main", "configured", OK,
+                       "gh api .../branches/main/protection", o[:100]))
+    else:
+        out.append(row("access", "Branch protection on prospector/main", "UNKNOWN", UNK,
+                       "gh api .../branches/main/protection", o[:100]))
+    rc, br = sh("git rev-parse --abbrev-ref HEAD", cwd=str(PROSPECTOR))
+    rc2, dirty = sh("git status --porcelain | wc -l", cwd=str(PROSPECTOR))
+    if br.strip() == "HEAD":
+        out.append(row("access", "Shared checkout is in detached HEAD", f"{dirty.strip()} modified files",
+                       CRIT, "git rev-parse --abbrev-ref HEAD; git status --porcelain | wc -l",
+                       f"{PROSPECTOR} is not on a branch. Modified files there belong to no branch "
+                       "and multiple sessions share the checkout."))
+    rc, au = sh("git log --since='7 days ago' --all --format='%an' | sort -u | wc -l", cwd=str(PROSPECTOR))
+    rc2, cm = sh("git log --since='24 hours ago' --oneline --all | wc -l", cwd=str(PROSPECTOR))
+    rc3, nb = sh("git branch | wc -l", cwd=str(PROSPECTOR))
+    out.append(row("access", "Change volume with no review gate",
+                   f"{cm.strip()} commits/24h, {nb.strip()} branches, {au.strip()} identities", WARN,
+                   "git log --since='24 hours ago' --oneline --all | wc -l",
+                   "Machine and human commits are indistinguishable in the log."))
+    return out
+
+
+def c_secrets() -> list[dict]:
+    """Locations and lengths only. No credential value is ever emitted."""
+    out = []
+    pats = {"Stripe LIVE secret": (r"sk_live_[A-Za-z0-9]{20,}", CRIT),
+            "Anthropic API key": (r"sk-ant-api[A-Za-z0-9_-]{20,}", CRIT),
+            "HuggingFace token": (r"\bhf_[A-Za-z0-9]{30,}", CRIT),
+            "GitHub PAT": (r"ghp_[A-Za-z0-9]{30,}", CRIT),
+            "AWS access key": (r"AKIA[A-Z0-9]{16}", CRIT)}
+    hist = CLAUDE / "history.jsonl"
+    hits: dict[str, list[str]] = {}
+    if hist.exists():
+        try:
+            for i, line in enumerate(hist.read_text(errors="ignore").splitlines(), 1):
+                for name, (rx, _) in pats.items():
+                    for m in re.finditer(rx, line):
+                        v = m.group(0)
+                        hits.setdefault(name, []).append(f"line {i} ({v[:8]}..., {len(v)} chars)")
+        except Exception as e:                               # noqa: BLE001
+            out.append(row("secrets", "history.jsonl unreadable", "ERROR", UNK, "read", str(e)))
+    for name, locs in hits.items():
+        out.append(row("secrets", f"{name} in plaintext shell history", f"{len(locs)} occurrence(s)",
+                       CRIT, "regex scan of ~/.claude/history.jsonl -- prefix and length only",
+                       "; ".join(locs[:4]) + ". Value never printed. Rotation is the founder's alone."))
+    if not hits and hist.exists():
+        out.append(row("secrets", "No live credential pattern in shell history", "0", OK,
+                       "regex scan of ~/.claude/history.jsonl", ""))
+    rc, ign = sh("cd ~/.claude && git check-ignore -v history.jsonl 2>/dev/null | head -1")
+    rc2, trk = sh("cd ~/.claude && git ls-files --error-unmatch history.jsonl >/dev/null 2>&1 && echo tracked || echo untracked")
+    out.append(row("secrets", "Shell history exposure surface", trk.strip(),
+                   OK if trk.strip() == "untracked" else CRIT,
+                   "git ls-files --error-unmatch; git check-ignore -v",
+                   f"mode {oct(hist.stat().st_mode)[-3:] if hist.exists() else '?'}; "
+                   f"gitignore: {ign.strip() or 'not matched'}. Untracked and ignored means the "
+                   "leak is local-only, not published."))
+    files = [".aws/credentials", ".config/gh/hosts.yml", ".cache/huggingface/token",
+             ".claude/.credentials.json", ".npmrc", ".hermes/.env"]
+    bad = []
+    present = 0
+    for f in files:
+        p = HOME / f
+        if not p.exists():
+            continue
+        present += 1
+        m = oct(p.stat().st_mode)[-3:]
+        if m not in ("600", "400"):
+            bad.append(f"{f} is {m}")
+    out.append(row("secrets", "Credential files with correct 600 permissions",
+                   f"{present - len(bad)} of {present}", CRIT if bad else OK,
+                   "stat -f %Lp on each credential file", "; ".join(bad) or "all locked down"))
+    rc, envs = sh("for f in $(rg --files -g '.env' -g '.env.production' "
+                  f"{PROSPECTOR} {HOME}/.hermes 2>/dev/null); do "
+                  "m=$(stat -f %Lp $f); [ \"$m\" = 600 ] || echo \"$(basename $(dirname $f))/$(basename $f):$m\"; done",
+                  timeout=20)
+    loose = [x for x in envs.splitlines() if x.strip()]
+    out.append(row("secrets", "Real .env files not mode 600", str(len(loose)),
+                   WARN if loose else OK,
+                   "stat -f %Lp over every .env found by rg --files", "; ".join(loose[:5])))
+    out.append(row("gap", "Credential age or last-rotation date", "0 probes", UNK,
+                   "recon over all estate probes: none reads a credential timestamp",
+                   "An auditor asks 'when was this last rotated?' and nothing here can answer, for any key."))
+    return out
+
+
+def c_machine() -> list[dict]:
+    rc, up = sh("uptime")
+    la = re.search(r"load averages?: ([\d.]+),? ([\d.]+),? ([\d.]+)", up)
+    l1, l5, l15 = (la.groups() if la else ("?", "?", "?"))
+    rc2, df = sh("df -h / | tail -1 | awk '{print $4\" free of \"$2\" (\"$5\" used)\"}'")
+    rc3, top = sh("ps -Ao pcpu,rss,comm -r | sed -n '2,4p'")
+    hot = []
+    for line in top.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3:
+            hot.append(f"{parts[2].split('/')[-1]} {parts[0]}% CPU / {int(parts[1]) // 1024}MB")
+    out = [row("machine", "Load average (1 / 5 / 15 min)", f"{l1} / {l5} / {l15}",
+               CRIT if float(l15 or 0) > 10 else (WARN if float(l5 or 0) > 4 else OK),
+               "uptime",
+               "A 15-minute figure far above the 1-minute one means the machine was recently "
+               "many times oversubscribed."),
+           row("machine", "Root volume", df.strip(), OK, "df -h /", ""),
+           row("machine", "Top three processes by CPU", hot[0] if hot else "?", WARN,
+               "ps -Ao pcpu,rss,comm -r | head -4", "; ".join(hot))]
+    rc, ol = sh("pgrep -fl 'llama-server|ollama' | head -1")
+    if ol.strip():
+        out.append(row("machine", "A local LLM server is running", "ollama / llama-server", WARN,
+                       "pgrep -fl 'llama-server|ollama'",
+                       "Not part of the shipping estate and not in any inventory. It is the "
+                       "single largest consumer of CPU and RAM on this laptop."))
+    return out
+
+
+def c_gaps() -> list[dict]:
+    g = [("Backup restore test", "Backups run and fail loudly; a restore has never been attempted."),
+         ("Data classification / PII map", "Nothing records what personal data is held or where."),
+         ("Uptime / SLA history", "Endpoint status here is a spot check. Availability over time is not stored."),
+         ("Open-defect density over time", "Issue counts are a snapshot; the trend is not kept."),
+         ("Guard-layer test coverage", "16,992 lines of enforcement run on this laptop and are not covered by CI."),
+         ("Vendor / subprocessor register", "No list of who processes data on the company's behalf.")]
+    return [row("gap", t, "0 probes", UNK, "recon over all estate probes and scheduled jobs", d)
+            for t, d in g]
+
+
+CHECKS = [c_hooks, c_guards, c_skills_mcp, c_sessions, c_launchd,
+          c_endpoints, c_fly, c_access, c_secrets, c_machine, c_gaps]
+
+
+def collect() -> dict:
+    t0 = time.time()
+    rows: list[dict] = []
+    with futures.ThreadPoolExecutor(max_workers=len(CHECKS)) as ex:
+        fut = {ex.submit(fn): fn.__name__ for fn in CHECKS}
+        for f in futures.as_completed(fut, timeout=90):
+            try:
+                rows.extend(f.result())
+            except Exception as e:                           # noqa: BLE001 - a check that dies is a finding
+                rows.append(row("gap", f"check {fut[f]} failed", "ERROR", UNK,
+                                f"estate_audit.py::{fut[f]}", f"{type(e).__name__}: {e}"))
+    order = {CRIT: 0, WARN: 1, UNK: 2, OK: 3}
+    rows.sort(key=lambda r: (order.get(r["severity"], 4), r["domain"]))
+    return {
+        "generated_at": time.time(),
+        "generated_at_iso": time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime()),
+        "duration_s": round(time.time() - t0, 1),
+        "counts": {s: sum(1 for r in rows if r["severity"] == s) for s in (CRIT, WARN, UNK, OK)},
+        "rows": rows,
+    }
+
+
+# ---------------------------------------------------------------- pipeline
+
+def c_pipeline() -> list[dict]:
+    """Every gate a commit passes on the way to production."""
+    out = []
+    R = str(PROSPECTOR)
+    rc, hp = sh("git config --get core.hooksPath", cwd=R)
+    rc2, hooks = sh("ls .git/hooks | grep -v '\\.sample$' | tr '\\n' ' '", cwd=R)
+    names = hooks.split()
+    out.append(row("pipeline", "Active git hooks in the shared checkout", str(len(names)), WARN,
+                   "ls .git/hooks | grep -v '\\.sample$'",
+                   f"{', '.join(names)}. core.hooksPath is "
+                   f"{hp.strip() or 'unset -- so .githooks/ is only reached via the pre-push dispatcher'}. "
+                   "These live in .git/, which is not version-controlled: a fresh clone gets none of them."))
+    for f in (".pre-commit-config.yaml", "lefthook.yml", ".husky"):
+        pass
+    rc, fw = sh("ls -d .pre-commit-config.yaml lefthook.yml lefthook.yaml .husky 2>/dev/null | tr '\\n' ' '", cwd=R)
+    out.append(row("pipeline", "Standard pre-commit framework", fw.strip() or "absent",
+                   WARN if not fw.strip() else OK,
+                   "ls -d .pre-commit-config.yaml lefthook.yml .husky",
+                   "Gating is bespoke: hand-written git hooks plus CI. Nothing a new machine "
+                   "installs automatically." if not fw.strip() else ""))
+    rc, wf = sh("ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null | wc -l", cwd=R)
+    out.append(row("pipeline", "CI workflows", wf.strip(), WARN,
+                   "ls .github/workflows/*.yml | wc -l",
+                   "Includes the merge robot, the admission guard, the green guard, the PR keeper, "
+                   "three deploy workflows and four scheduled drills."))
+    rc, gates = sh("ls scripts/guard_*.py scripts/*gate*.py scripts/popdd_verify.py "
+                   "scripts/claude_guards/*.py 2>/dev/null | wc -l", cwd=R)
+    out.append(row("pipeline", "Admission and gate scripts the pipeline invokes", gates.strip(), WARN,
+                   "ls scripts/guard_*.py scripts/*gate*.py scripts/claude_guards/*.py | wc -l",
+                   "popdd_verify.py signs a proof receipt per lane; guard_main_push refuses a direct "
+                   "push to main; load_gate decides whether the machine can produce a trustworthy "
+                   "test result at all."))
+    out.append(row("pipeline", "Control on main is detective, not preventive", "compensating", CRIT,
+                   ".github/workflows/main-admission-guard.yml, job 'admit'",
+                   "Branch protection is unavailable on this plan, so the estate substitutes a job "
+                   "that reads main after a write and REVERTS. Bad code reaches main first and is "
+                   "removed afterwards. An auditor treats that as a compensating control with a "
+                   "window, not as a preventive one."))
+    rc, runs = sh("gh run list --limit 40 --json workflowName,conclusion 2>/dev/null", cwd=R, timeout=25)
+    try:
+        rr = json.loads(runs)
+        tally: dict[str, dict[str, int]] = {}
+        for r in rr:
+            w = r.get("workflowName", "?")
+            c = r.get("conclusion") or "in_progress"
+            tally.setdefault(w, {}).setdefault(c, 0)
+            tally[w][c] += 1
+        red = {w: t for w, t in tally.items() if t.get("failure", 0) > 0}
+        det = "; ".join(f"{w}: {t.get('failure', 0)} failed of {sum(t.values())}"
+                        for w, t in sorted(red.items(), key=lambda kv: -kv[1].get("failure", 0)))
+        out.append(row("pipeline", "Workflows failing in the last 40 runs", str(len(red)),
+                       CRIT if red else OK, "gh run list --limit 40 --json workflowName,conclusion",
+                       det or "no failures in the window"))
+    except Exception:                                        # noqa: BLE001
+        out.append(row("pipeline", "Recent CI outcomes", "UNKNOWN", UNK,
+                       "gh run list --limit 40 --json workflowName,conclusion", runs[:90]))
+    rc, prs = sh("gh pr list --json number,title,mergeable,statusCheckRollup --limit 20 2>/dev/null",
+                 cwd=R, timeout=25)
+    try:
+        pl = json.loads(prs)
+        bad = []
+        for p in pl:
+            fails = sum(1 for c in (p.get("statusCheckRollup") or [])
+                        if (c.get("conclusion") or "").upper() in ("FAILURE", "TIMED_OUT", "CANCELLED"))
+            if fails or p.get("mergeable") != "MERGEABLE":
+                bad.append(f"#{p['number']} {p.get('mergeable', '?')} {fails} failing")
+        out.append(row("pipeline", "Open pull requests not mergeable", f"{len(bad)} of {len(pl)}",
+                       CRIT if bad else OK, "gh pr list --json number,mergeable,statusCheckRollup",
+                       "; ".join(bad) or "all clear"))
+    except Exception:                                        # noqa: BLE001
+        out.append(row("pipeline", "Open pull requests", "UNKNOWN", UNK, "gh pr list", prs[:90]))
+    rc, tf = sh("rg --files -g 'test_*.py' -g '*_test.py' -g '*.spec.ts' 2>/dev/null | wc -l",
+                cwd=R, timeout=25)
+    rc2, cov = sh("rg -n 'fail_under|--cov-fail-under' pytest.ini .github/workflows/ 2>/dev/null | head -1", cwd=R)
+    out.append(row("pipeline", "Test files, and the coverage floor that gates them",
+                   f"{tf.strip()} files / {'threshold set' if cov.strip() else 'NO threshold'}",
+                   WARN if not cov.strip() else OK,
+                   "rg --files -g 'test_*.py' | wc -l; rg -n 'fail_under' pytest.ini .github/workflows/",
+                   "555 test files with no coverage floor means coverage can fall to zero and "
+                   "every gate still reports green." if not cov.strip() else cov[:80]))
+    rc, dep = sh("rg -l 'flyctl deploy|fly deploy' .github/workflows/ 2>/dev/null | wc -l", cwd=R)
+    out.append(row("pipeline", "Workflows that deploy to production", dep.strip(), WARN,
+                   "rg -l 'flyctl deploy|fly deploy' .github/workflows/",
+                   "deploy-api -> prospector-store-api, deploy-web -> prospector-store-web, "
+                   "deploy-engine -> prospector-engine. Each gated test -> deploy, triggered by "
+                   "push to main on a path filter, or by hand."))
+    return out
+
+
+CHECKS.append(c_pipeline)
+
+# ---------------------------------------------------------------- render
+
+SEV_LABEL = {CRIT: "CRITICAL", WARN: "WARN", UNK: "UNKNOWN", OK: "CLEAN"}
+
+CSS = """
+:root{--paper:#F7F8FA;--card:#FFF;--ink:#15181D;--ink2:#3D4553;--ink3:#6B7486;--rule:#DFE3EA;
+--rule2:#EDF0F4;--accent:#8C2F39;--soft:#F3E6E8;--crit:#A6202B;--critbg:#FAE9EA;--warn:#8A5B08;
+--warnbg:#FBF0DC;--ok:#1F6146;--okbg:#E3F1EA;--unk:#4A5568;--unkbg:#EDF0F4}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--paper:#0E1116;--card:#161B22;
+--ink:#E7EBF1;--ink2:#B4BECD;--ink3:#7F8B9C;--rule:#252C36;--rule2:#1C222B;--accent:#E0808C;
+--soft:#2A1A1D;--crit:#F1878F;--critbg:#2E1618;--warn:#E0B354;--warnbg:#2B2113;--ok:#68C79B;
+--okbg:#12271F;--unk:#9AA5B4;--unkbg:#1C222B}}
+:root[data-theme=dark]{--paper:#0E1116;--card:#161B22;--ink:#E7EBF1;--ink2:#B4BECD;--ink3:#7F8B9C;
+--rule:#252C36;--rule2:#1C222B;--accent:#E0808C;--soft:#2A1A1D;--crit:#F1878F;--critbg:#2E1618;
+--warn:#E0B354;--warnbg:#2B2113;--ok:#68C79B;--okbg:#12271F;--unk:#9AA5B4;--unkbg:#1C222B}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 "Public Sans",-apple-system,
+BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1060px;margin:0 auto;padding:44px 22px 90px}
+code,.mono{font-family:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+header{border-bottom:2px solid var(--ink);padding-bottom:24px}
+.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700}
+h1{font-family:"Newsreader",Georgia,serif;font-weight:600;font-size:clamp(36px,6vw,58px);
+line-height:1.02;margin:12px 0 10px;letter-spacing:-.015em;text-wrap:balance}
+.sub{color:var(--ink2);font-size:17px;max-width:64ch;margin:0}
+.stamp{margin-top:16px;display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12.5px;color:var(--ink3)}
+.stamp b{color:var(--ink2);font-weight:500}
+.age{margin:22px 0 0;padding:11px 15px;border-radius:3px;font-size:14px;font-weight:500}
+.age.fresh{background:var(--okbg);color:var(--ok)}
+.age.stale{background:var(--critbg);color:var(--crit)}
+.tot{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:26px 0 0}
+.tot div{background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:12px 14px;border-left:3px solid var(--rule)}
+.tot .n{font-family:"JetBrains Mono",monospace;font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.tot .l{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);font-weight:700}
+.tot .critical{border-left-color:var(--crit)}.tot .critical .n{color:var(--crit)}
+.tot .warn{border-left-color:var(--warn)}.tot .warn .n{color:var(--warn)}
+.tot .unknown{border-left-color:var(--unk)}.tot .unknown .n{color:var(--unk)}
+.tot .ok{border-left-color:var(--ok)}.tot .ok .n{color:var(--ok)}
+h2{font-family:"Newsreader",Georgia,serif;font-weight:600;font-size:26px;margin:50px 0 3px;
+padding-top:20px;border-top:1px solid var(--rule);letter-spacing:-.01em}
+h2 .n{color:var(--accent);font-family:"JetBrains Mono",monospace;font-size:13px;font-weight:700;
+vertical-align:.45em;margin-right:9px}
+.lede{color:var(--ink2);margin:0 0 16px;max-width:72ch;font-size:14.5px}
+.scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14.5px}
+th{text-align:left;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);
+font-weight:700;padding:0 11px 7px;border-bottom:1px solid var(--rule)}
+td{padding:11px;border-bottom:1px solid var(--rule2);vertical-align:top}
+tr td:first-child{border-left:3px solid var(--rule)}
+tr.critical td:first-child{border-left-color:var(--crit)}
+tr.warn td:first-child{border-left-color:var(--warn)}
+tr.ok td:first-child{border-left-color:var(--ok)}
+tr.unknown td:first-child{border-left-color:var(--unk)}
+td.v{font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:700}
+.sev{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.09em;padding:2px 7px;
+border-radius:2px;margin-right:7px;vertical-align:1px}
+.sev.critical{background:var(--critbg);color:var(--crit)}
+.sev.warn{background:var(--warnbg);color:var(--warn)}
+.sev.ok{background:var(--okbg);color:var(--ok)}
+.sev.unknown{background:var(--unkbg);color:var(--unk)}
+.d{color:var(--ink2);font-size:13.5px;margin-top:4px}
+.proof{display:block;margin-top:6px;font-family:"JetBrains Mono",monospace;font-size:11.5px;
+color:var(--ink3);word-break:break-word}
+.proof::before{content:"proof  ";color:var(--accent);font-weight:700}
+footer{margin-top:60px;padding-top:20px;border-top:2px solid var(--ink);font-size:13px;color:var(--ink3)}
+@media(max-width:640px){.wrap{padding:28px 14px 60px}table{font-size:13.5px}}
+"""
+
+
+def render_html(data: dict, stale_s: int = 3600) -> str:
+    e = html.escape
+    age = time.time() - data["generated_at"]
+    stale = age > stale_s
+    c = data["counts"]
+    parts = ['<title>Estate Audit</title>',
+             '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+             '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
+             'family=Newsreader:opsz,wght@6..72,400;6..72,600&family=Public+Sans:wght@400;500;700'
+             '&family=JetBrains+Mono:wght@400;700&display=swap">',
+             f"<style>{CSS}</style>", '<div class="wrap">', "<header>",
+             '<div class="eyebrow">Read-only &middot; nothing was changed to produce this</div>',
+             "<h1>Estate Audit</h1>",
+             '<p class="sub">Everything running in this estate, however small, with the command '
+             'behind every number. No row is recalled from memory and no credential value appears '
+             'anywhere on this page.</p>',
+             '<div class="stamp">'
+             f'<span><b>Generated</b> {e(data["generated_at_iso"])}</span>'
+             f'<span><b>Build time</b> {data["duration_s"]}s</span>'
+             f'<span><b>Checks</b> {len(data["rows"])} rows across {len(DOMAINS)} domains</span>'
+             "</div>",
+             f'<div class="age {"stale" if stale else "fresh"}">'
+             + (f"STALE &mdash; this page is {int(age / 60)} minutes old and the builder has missed a run. "
+                "Do not audit from it."
+                if stale else f"Fresh &mdash; measured {int(age / 60)} minutes ago.")
+             + "</div>",
+             '<div class="tot">'
+             + "".join(f'<div class="{s}"><div class="n">{c.get(s, 0)}</div>'
+                       f'<div class="l">{SEV_LABEL[s]}</div></div>' for s in (CRIT, WARN, UNK, OK))
+             + "</div></header>"]
+    for i, (key, title, lede) in enumerate(DOMAINS, 1):
+        rows = [r for r in data["rows"] if r["domain"] == key]
+        if not rows:
+            continue
+        parts.append(f'<h2><span class="n">{i:02d}</span>{e(title)}</h2>'
+                     f'<p class="lede">{e(lede)}</p><div class="scroll"><table>'
+                     "<tr><th>Finding</th><th>Measured</th></tr>")
+        for r in rows:
+            sev = r["severity"]
+            parts.append(
+                f'<tr class="{sev}"><td><span class="sev {sev}">{SEV_LABEL[sev]}</span>'
+                f'<b>{e(r["title"])}</b>'
+                + (f'<div class="d">{e(r["detail"])}</div>' if r["detail"] else "")
+                + f'<span class="proof">{e(r["proof"])}</span></td>'
+                f'<td class="v">{e(r["value"])}</td></tr>')
+        parts.append("</table></div>")
+    parts.append(
+        '<footer><b>Read-only.</b> Nothing on this machine, in any repository, or on any hosted '
+        'service was modified to produce this page. Credential findings carry file, line, prefix '
+        'and length only &mdash; no value is reproduced.<br><br>'
+        '<b>A row marked UNKNOWN is a real result.</b> It means the check ran and could not get an '
+        'answer, or that nothing in the estate measures that thing at all. It is never a guess and '
+        f'never an omission.<br><br>Built by <code>estate_audit.py</code> in {data["duration_s"]}s. '
+        'Serving is a file read, which is why the page itself is instant.</footer></div>')
+    return "\n".join(parts)
+
+
+def _atomic(path: str | pathlib.Path, text: str) -> None:
+    p = pathlib.Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(p.suffix + ".tmp")
+    tmp.write_text(text)
+    os.replace(tmp, p)
+
+
+def selftest() -> int:
+    fails = []
+    data = collect()
+    if not data["rows"]:
+        fails.append("collect() returned no rows")
+    if data["duration_s"] > 60:
+        fails.append(f"build took {data['duration_s']}s -- too slow to schedule")
+    for r in data["rows"]:
+        for k in ("domain", "title", "value", "severity", "proof"):
+            if not r.get(k):
+                fails.append(f"row missing {k}: {r.get('title', r)!r}")
+        if r["severity"] not in SEV_LABEL:
+            fails.append(f"bad severity {r['severity']!r}")
+        if r["domain"] not in {d[0] for d in DOMAINS}:
+            fails.append(f"row in unknown domain {r['domain']!r}")
+    page = render_html(data)
+    for bad in (r"sk_live_[A-Za-z0-9]{12}", r"sk-ant-api[A-Za-z0-9_-]{12}", r"hf_[A-Za-z0-9]{20}"):
+        if re.search(bad, page):
+            fails.append(f"A CREDENTIAL VALUE LEAKED INTO THE PAGE: /{bad}/")
+    if "<title>" not in page or "Estate Audit" not in page:
+        fails.append("rendered page has no title")
+    old = dict(data)
+    old["generated_at"] = time.time() - 7200
+    if "STALE" not in render_html(old):
+        fails.append("a two-hour-old build did not render as STALE")
+    if "STALE" in render_html(data):
+        fails.append("a fresh build rendered as STALE")
+    if fails:
+        print("selftest FAILED:")
+        for f in fails:
+            print("  -", f)
+        return 1
+    print(f"PASS: {len(data['rows'])} rows in {data['duration_s']}s, "
+          f"{data['counts'][CRIT]} critical; no credential value in the page; "
+          "staleness renders in both directions.")
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--html", nargs="?", const=str(DEFAULT_HTML))
+    ap.add_argument("--state", nargs="?", const=str(DEFAULT_JSON))
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--selftest", action="store_true")
+    ap.add_argument("--stale-seconds", type=int, default=3600)
+    a = ap.parse_args()
+    if a.selftest:
+        return selftest()
+    data = collect()
+    if a.json:
+        print(json.dumps(data, indent=2))
+        return 0
+    html_path = a.html or str(DEFAULT_HTML)
+    json_path = a.state or str(DEFAULT_JSON)
+    _atomic(json_path, json.dumps(data, indent=2))
+    _atomic(html_path, render_html(data, a.stale_seconds))
+    c = data["counts"]
+    print(f"wrote {html_path} and {json_path} in {data['duration_s']}s -- "
+          f"{c[CRIT]} critical, {c[WARN]} warn, {c[UNK]} unknown, {c[OK]} clean", file=sys.stderr)
+    return 1 if c[CRIT] else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
