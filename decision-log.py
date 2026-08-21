@@ -336,3 +336,262 @@ def listing(which: str) -> int:
                   f"{r['question'][:80]}")
     print(f"  ({len(out)} rows)")
     return 0
+
+
+# --------------------------------------------------------------------------- alternatives
+
+def add_alternative(rid: str, name: str, url: str, licence: str, verdict: str, why: str) -> int:
+    """What already exists, and why it was or was not used.
+
+    Founder, 2026-08-21: "open source solutions also part of reseach ais". This is also LAW 3 with
+    a file behind it -- the estate has already written three implementations of things it already
+    owned in a single day. A research row that leads to a BUILD decision and names zero
+    alternatives has not finished; `decide` refuses that combination below.
+    """
+    r = _latest(rid)
+    if not r or r.get("kind") != "research":
+        print(f"no research row {rid}", file=sys.stderr)
+        return 1
+    if verdict not in ("use", "reject"):
+        print("verdict must be use|reject", file=sys.stderr)
+        return 1
+    r.setdefault("alternatives", []).append(
+        {"name": name, "url": url, "licence": licence, "verdict": verdict, "why": why,
+         "at": _now()})
+    _put(r)
+    print(f"{rid}: {len(r['alternatives'])} alternatives considered")
+    return 0
+
+
+def _alt_count(rests_on: list) -> int:
+    return sum(len((_latest(r) or {}).get("alternatives") or []) for r in rests_on)
+
+
+# --------------------------------------------------------------------------- cli
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(description=__doc__,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--research", metavar="QUESTION")
+    p.add_argument("--search", metavar="RID")
+    p.add_argument("--source", metavar="RID")
+    p.add_argument("--alternative", metavar="RID")
+    p.add_argument("--finding", metavar="RID")
+    p.add_argument("--decide", action="store_true")
+    p.add_argument("--check", metavar="QUESTION")
+    p.add_argument("--standing", action="store_true")
+    p.add_argument("--show", metavar="ID")
+    p.add_argument("--list", nargs="?", const="all", default="")
+    p.add_argument("--supersede", metavar="ID")
+    p.add_argument("--by", metavar="ID", default="")
+    p.add_argument("--selftest", action="store_true")
+    p.add_argument("--days", type=int, default=14)
+    # search
+    p.add_argument("-q", "--q", dest="q", default="")
+    p.add_argument("--engine", default="web")
+    p.add_argument("-n", "--n", dest="n", type=int, default=0)
+    # source
+    p.add_argument("--url", default="")
+    p.add_argument("--title", default="")
+    p.add_argument("--publisher", default="")
+    # No argparse `choices=` on --tier or --confidence. argparse rejects a bad value by
+    # calling sys.exit(2), which kills the caller instead of returning a status this tool
+    # can report -- and it prints argparse's message instead of the one that says WHY the
+    # tier list is what it is. Validation lives in add_source/set_finding, which return 1.
+    p.add_argument("--tier", default="")
+    p.add_argument("--claim", default="")
+    # alternative
+    p.add_argument("--name", default="")
+    p.add_argument("--licence", default="")
+    p.add_argument("--verdict", default="")
+    # finding
+    p.add_argument("--text", default="")
+    p.add_argument("--confidence", default="")
+    p.add_argument("--angle", action="append", default=[])
+    p.add_argument("--gap", action="append", default=[])
+    # decide
+    p.add_argument("--question", default="")
+    p.add_argument("--chose", default="")
+    p.add_argument("--why", default="")
+    p.add_argument("--option", action="append", default=[])
+    p.add_argument("--rests-on", dest="rests_on", action="append", default=[])
+    p.add_argument("--undo", default="")
+    p.add_argument("--revisit", default="")
+    p.add_argument("--kind", default="", help="'build' makes the alternatives check binding")
+    return p
+
+
+def main(argv: "list[str] | None" = None) -> int:
+    a = build_parser().parse_args(argv)
+    if a.selftest:
+        return selftest()
+    if a.research:
+        return new_research(a.research)
+    if a.search:
+        return add_search(a.search, a.q, a.engine, a.n)
+    if a.source:
+        return add_source(a.source, a.url, a.title, a.publisher, a.tier, a.claim)
+    if a.alternative:
+        return add_alternative(a.alternative, a.name, a.url, a.licence, a.verdict, a.why)
+    if a.finding:
+        return set_finding(a.finding, a.text, a.confidence, a.angle, a.gap)
+    if a.decide:
+        if a.kind == "build" and not _alt_count(a.rests_on):
+            print("REFUSED: a BUILD decision whose research names zero alternatives has not "
+                  "finished. Record what already exists (--alternative), including the open "
+                  "source options, and why each was used or rejected. Three things were built "
+                  "here in one day that the estate already owned.", file=sys.stderr)
+            return 1
+        return decide(a.question, a.chose, a.why, a.option, a.rests_on, a.undo, a.revisit)
+    if a.check:
+        return check(a.check)
+    if a.standing:
+        return standing(a.days)
+    if a.show:
+        return show(a.show)
+    if a.list:
+        return listing(a.list)
+    if a.supersede:
+        return supersede(a.supersede, a.by)
+    build_parser().print_help()
+    return 0
+
+
+# --------------------------------------------------------------------------- selftest
+
+def selftest() -> int:
+    import io
+    import tempfile
+    from contextlib import redirect_stderr, redirect_stdout
+
+    global LOG
+    passed = failed = 0
+
+    def ck(label: str, cond: bool) -> None:
+        nonlocal passed, failed
+        if cond:
+            passed += 1
+            print(f"  PASS  {label}")
+        else:
+            failed += 1
+            print(f"  FAIL  {label}")
+
+    def run(args: list) -> "tuple[int,str,str]":
+        out, err = io.StringIO(), io.StringIO()
+        with redirect_stdout(out), redirect_stderr(err):
+            rc = main(args)
+        return rc, out.getvalue().strip(), err.getvalue().strip()
+
+    with tempfile.TemporaryDirectory() as td:
+        LOG = Path(td) / "DECISIONS.jsonl"
+
+        # --- research row lifecycle ---------------------------------------------
+        rc, rid, _ = run(["--research", "how should agents track decisions across sessions"])
+        ck("a research row is created and prints its id", rc == 0 and rid.startswith("r"))
+        ck("the log file now exists", LOG.exists())
+
+        rc, _, _ = run(["--search", rid, "--q", "multi agent decision log", "--n", "9"])
+        ck("a search is recorded", rc == 0 and len(_latest(rid)["searches"]) == 1)
+
+        rc, _, err = run(["--source", rid, "--url", "http://x", "--tier", "nonsense"])
+        ck("an unknown publisher tier is refused", rc == 1 and "tier must be" in err)
+
+        run(["--source", rid, "--url", "http://a", "--title", "A", "--publisher", "ACM",
+             "--tier", "peer-reviewed", "--claim", "shared logs cut duplicate decisions"])
+
+        # --- LAW 15 lives in the machine ----------------------------------------
+        rc, _, err = run(["--finding", rid, "--text", "shared beats per-session",
+                          "--confidence", "proven"])
+        ck("'proven' on ONE publisher is REFUSED", rc == 1 and "2+ distinct publishers" in err)
+        rc, out, _ = run(["--finding", rid, "--text", "shared beats per-session",
+                          "--confidence", "single-angle", "--gap", "no data on 6+ agents"])
+        ck("the same row closes as 'single-angle'", rc == 0 and "single-angle" in out)
+        ck("the named gap is kept", _latest(rid)["gaps"] == ["no data on 6+ agents"])
+
+        run(["--source", rid, "--url", "http://b", "--title", "B", "--publisher", "IEEE",
+             "--tier", "peer-reviewed", "--claim", "second publisher"])
+        rc, out, _ = run(["--finding", rid, "--text", "shared beats per-session",
+                          "--confidence", "proven", "--angle", "papers", "--angle", "our ledger"])
+        ck("two publishers unlock 'proven'", rc == 0 and "proven" in out)
+        ck("a re-append updates rather than duplicating the answer",
+           _latest(rid)["confidence"] == "proven")
+        ck("the log is append-only under the hood",
+           sum(1 for r in rows() if r.get("id") == rid) > 1)
+
+        # --- LAW 11 lives in the machine ----------------------------------------
+        rc, _, err = run(["--decide", "--question", "delete the old store",
+                          "--chose", "delete it", "--why", "it is stale"])
+        ck("an irreversible decision with no evidence is REFUSED",
+           rc == 1 and "irreversible" in err)
+        rc, did, err = run(["--decide", "--question", "delete the old store",
+                            "--chose", "delete it", "--why", "stale", "--rests-on", rid])
+        ck("the same call is allowed once it rests on research", rc == 0 and did.startswith("d"))
+        rc, did2, err = run(["--decide", "--question", "rename a local variable",
+                             "--chose", "rename", "--why", "clarity", "--undo", "git revert HEAD"])
+        ck("a REVERSIBLE decision needs no evidence", rc == 0 and did2.startswith("d"))
+        ck("...but it warns that a later session gets no evidence", "WARNING" in err)
+        ck("reversible is derived from --undo, not asserted",
+           _latest(did2)["reversible"] is True and _latest(did)["reversible"] is False)
+
+        rc, _, err = run(["--decide", "--question", "x", "--chose", "y", "--why", "z",
+                          "--rests-on", "rDOESNOTEXIST"])
+        ck("rests-on pointing at nothing is REFUSED", rc == 1 and "do not exist" in err)
+
+        # --- the founder's open-source rule, enforced ---------------------------
+        rc, _, err = run(["--decide", "--kind", "build", "--question", "build a tracker",
+                          "--chose", "build it", "--why", "none fit", "--rests-on", rid,
+                          "--undo", "rm it"])
+        ck("a BUILD decision with zero alternatives considered is REFUSED",
+           rc == 1 and "open source" in err)
+        run(["--alternative", rid, "--name", "taskwarrior", "--url", "http://tw",
+             "--licence", "MIT", "--verdict", "reject", "--why", "no cross-agent view"])
+        rc, _, _ = run(["--decide", "--kind", "build", "--question", "build a tracker",
+                        "--chose", "build it", "--why", "none fit", "--rests-on", rid,
+                        "--undo", "rm it"])
+        ck("the same BUILD decision is allowed once an alternative is on record", rc == 0)
+
+        # --- do not re-decide what another session settled -----------------------
+        rc, out, _ = run(["--check", "should we delete the old store directory"])
+        ck("--check finds the standing decision on the same question",
+           rc == 0 and did[:6] in out)
+        rc, out, _ = run(["--check", "what colour should the storefront hero be"])
+        ck("--check does NOT match an unrelated question",
+           rc == 0 and "no standing decision matches" in out)
+        ck("containment scores a paraphrase high and a stranger at zero",
+           containment("track decisions across sessions and agents",
+                       "how should agents track decisions across sessions") >= MATCH
+           and containment("track decisions across sessions", "the hero image is blue") == 0.0)
+
+        # --- superseding ---------------------------------------------------------
+        run(["--supersede", did, "--by", did2])
+        ck("a superseded decision leaves the standing set",
+           _latest(did)["status"] == "superseded")
+        rc, out, _ = run(["--check", "should we delete the old store directory"])
+        ck("...and --check stops offering it", "no standing decision matches" in out)
+
+        # --- the digest every session is handed ----------------------------------
+        rc, out, _ = run(["--standing", "--days", "14"])
+        ck("the standing digest lists live decisions", rc == 0 and "[decisions]" in out)
+        ck("the digest flags a decision that rests on nothing", "NO EVIDENCE" in out)
+        ck("the digest flags irreversibility where it applies", "reversible" in out)
+
+        # --- a torn line must not blind the log ----------------------------------
+        with LOG.open("a", encoding="utf-8") as fh:
+            fh.write('{"id": "rTORN", "kind": "resea\n')
+        rc, out, _ = run(["--list", "decision"])
+        ck("a torn append is skipped rather than crashing the reader", rc == 0)
+
+        # --- an empty log answers rather than crashing ---------------------------
+        LOG = Path(td) / "empty.jsonl"
+        rc, out, _ = run(["--standing"])
+        ck("an empty log prints a sentence, not a traceback",
+           rc == 0 and "none recorded" in out)
+        rc, out, _ = run(["--check", "anything at all"])
+        ck("--check on an empty log says the question is open", rc == 0 and "open" in out)
+
+    print(f"\n  {passed}/{passed + failed} checks passed")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
