@@ -199,11 +199,22 @@ if __name__ == "__main__":
         mine[-1][0].unlink(missing_ok=True)      # the oldest of MINE
         print("released 1 lease of yours"); sys.exit(0)
     if "--status" in sys.argv:
+        # The session id is printed IN FULL. It used to be truncated to 8 characters, which
+        # read like an id and was not one: --release matches the `session` field exactly, so
+        # pasting the truncated form gets "no live leases of yours" and the caller concludes
+        # their lease is already gone. A displayed identifier that cannot be used as one is a
+        # trap, not a saving.
         live = _live()
+        me = os.environ.get("CLAUDE_SESSION_ID", "")
         print(f"{len(live)}/{CAP} leases live")
         for f, age in live:
             try: j = json.loads(f.read_text())
             except Exception: j = {}
-            print(f"  {int(age)//60}m  {str(j.get('session','?'))[:8]}  {j.get('desc','')}")
+            sess = str(j.get("session", "?"))
+            print(f"  {int(age)//60}m  {sess}{'  <- yours' if me and sess == me else ''}  "
+                  f"{j.get('desc','')}")
+        if not me:
+            print("  (CLAUDE_SESSION_ID is unset in this shell, so --release cannot tell which "
+                  "are yours; pass it inline)")
         sys.exit(0)
     main()
