@@ -47,8 +47,13 @@ STOP = {"the", "a", "an", "is", "are", "was", "were", "and", "or", "but", "it", 
 TROUBLE = re.compile(
     r"(?i)\b(?:is|are|was|were|remains?|stays?)\s+(?:still\s+)?"
     r"(?:broken|failing|stale|missing|down|red|blocked|wrong|dead|empty|orphaned|unmergeable)\b"
-    r"|\b(?:fails?|failed|crashe[sd]|throws?|errors? out|times? out|hangs?|wedges?|refuses?|"
-    r"blocks?|cannot be|does not (?:exist|work|run|fire|load)|never (?:fires?|runs?|loads?))\b"
+    # MEASURED, not chosen. Run against a real 1599-turn transcript, `refuses/refuse` produced
+    # 22 of 75 matches and `block/blocks` 7 more -- nearly 40% -- because on this estate those
+    # are the ordinary verbs for a guard WORKING ("the fence refuses the repeat"), not for
+    # something broken. They are deliberately absent. A false fire on a Stop hook costs the
+    # founder a whole turn; a missed case costs nothing but this guard's silence.
+    r"|\b(?:fails?|failed|crashe[sd]|throws?|errors? out|times? out|hangs?|wedges?|"
+    r"cannot be|does not (?:exist|work|run|fire|load)|never (?:fires?|runs?|loads?))\b"
     r"|\bno (?:such file|git|commit|proof|test|guard|owner)\b")
 
 # The guard's own words, and quoted evidence, must never count as the agent narrating.
@@ -196,6 +201,11 @@ def selftest() -> int:
        problems("Here is the output:\n```\nthe build fails on every commit and is still red\n```") == [])
     ck("an inline-code path is not counted", problems("`scripts/x.py is broken and fails always`") == [])
     ck("a sentence too short to be a real claim is ignored", problems("it fails.") == [])
+    ck("A GUARD DOING ITS JOB IS NOT A PROBLEM: 'refuses' and 'blocks' are this estate's normal "
+       "verbs for working code, and cost 29 of 75 matches on a real transcript",
+       problems("The peer-loop fence refuses the repeat and blocks the duplicate send.") == [])
+    ck("but a real breakage in the same sentence shape still counts",
+       problems("The peer-loop fence never fires and the duplicate send goes through.") != [])
 
     turns = read_turns(pathlib.Path("/nonexistent-transcript.jsonl")) if False else None
     import tempfile
