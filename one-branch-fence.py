@@ -227,7 +227,7 @@ def grade(cmd: str, session: str, cwd: str) -> int:
                         f"  <your command>  # second-worktree-intended"
                     )
             else:
-                st[kind] = " ".join(argv[-2:])
+                st[kind] = argv[-1]
                 write_state(session, st)
 
             # B -- stale base.
