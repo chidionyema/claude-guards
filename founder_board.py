@@ -433,9 +433,33 @@ def _selftest_scripts() -> tuple[list[str], list[str]]:
         if any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
                and n.name.lstrip("_") == "selftest" for n in ast.walk(tree)):
             defined.append(path)
-        elif "--selftest" in text:
+        elif "--selftest" in text and _advertises_selftest(tree):
             mentioned.append(path)
     return defined, mentioned
+
+
+def _advertises_selftest(tree: "ast.AST") -> bool:
+    """True when the file OFFERS `--selftest` to a caller, rather than merely containing it.
+
+    The three ways a script can offer one without defining a function named for it: say so in
+    its module docstring, register it with argparse, or test `sys.argv` directly. Anything else
+    holding the literal is data -- `reflect.py:588` carries it as the remediation command for a
+    DIFFERENT guard, and the board accused it of false advertising for three builds.
+    """
+    doc = ast.get_docstring(tree) or ""
+    if "--selftest" in doc:
+        return True
+    for n in ast.walk(tree):
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "add_argument"):
+            for a in n.args:
+                if isinstance(a, ast.Constant) and a.value == "--selftest":
+                    return True
+        if isinstance(n, ast.Compare) and any(isinstance(o, ast.In) for o in n.ops):
+            if (isinstance(n.left, ast.Constant) and n.left.value == "--selftest"
+                    and "argv" in ast.dump(n)):
+                return True
+    return False
 
 
 def collect_hooks_and_guards() -> list[Row]:
@@ -499,9 +523,18 @@ def collect_hooks_and_guards() -> list[Row]:
                     f"{len(failed)} of {len(scripts)}", "; ".join(failed[:6]),
                     f"for f in {SCRIPTS}/*.py; do python3 $f --selftest; done"))
     advertised = unimplemented + [os.path.basename(m) for m in mentioned_only]
+    data_only = sum(1 for f in os.listdir(SCRIPTS)
+                    if f.endswith(".py")
+                    and os.path.join(SCRIPTS, f) not in scripts
+                    and os.path.join(SCRIPTS, f) not in mentioned_only
+                    and "--selftest" in open(os.path.join(SCRIPTS, f), encoding="utf-8",
+                                             errors="replace").read())
     rows.append(Row(GOOD if not advertised else WARN,
                     "Guards claiming a selftest they do not have",
-                    str(len(advertised)), "; ".join(advertised[:6]),
+                    str(len(advertised)),
+                    "; ".join(advertised[:6]) or
+                    (f"{data_only} more name --selftest in data, not as an offer" if data_only
+                     else ""),
                     f"rg -l -- --selftest {SCRIPTS}/*.py"))
     return rows
 
