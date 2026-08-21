@@ -86,6 +86,25 @@ KILL_SWITCH = os.path.join(STATE_DIR, "OFF")
 EVENT_LOG = os.path.join(STATE_DIR, "events.jsonl")
 EVENT_LOG_MAX = 2 * 1024 * 1024  # bytes; trimmed to the tail, never unbounded
 
+#: MEASURED 2026-08-21 and DELIBERATELY LEFT AT 3. Do not re-derive this; read the caveat.
+#:
+#: Corpus: 21,146 transcripts >50KB, 1,863 sessions with at least one read-only run, 8,364 runs,
+#: classified by importing THIS module's own classify() so the calibration cannot drift from the
+#: thing it calibrates. Run length p50=1 p90=4 p95=5 p99=10 max=172.
+#: Firing rate per session, against the bands declared in ~/.claude/lanes.json
+#: (>=3 noise, 0.6-3 usable, <0.15 inert):
+#:     L=2  1.54 usable      L=3  0.76 USABLE      L=4  0.46 thin      L=6  0.21 thin
+#:     L=8  0.10 inert       L=12 0.03 inert       L=16 0.01 inert
+#: 3 is the only value in the usable band that is not twice as noisy as it needs to be. Raising it
+#: to 4 does not make the guard calmer, it makes it thin, and 8 and above is inert.
+#:
+#: THE CAVEAT, because both instruments are censored and a future agent will find one of them.
+#: This guard's OWN event log (~/.claude/state/toolguard/events.jsonl) holds 248 drip fires and
+#: EVERY ONE is at n=3 -- it blocks at 3, so no run can ever be observed longer. Its apparent rate
+#: there is 3.14/session, which reads as NOISE and invites a change. Both numbers are real and the
+#: gap is a population difference plus censoring, so the true rate is a RANGE, not a point. No
+#: reading anywhere supports a specific different number, which is why this stays at 3.
+#: Detail: memory `a-censored-instrument-cannot-price-itself.md`.
 DRIP_LIMIT = 3          # block the 3rd consecutive read-only call
 POLL_LIMIT = 2          # block the 2nd identical inspect call (see rule 3 above)
 STALE_AFTER = 6 * 3600  # seconds; forget state from an abandoned session

@@ -242,26 +242,57 @@ def handle(payload: dict) -> int:
     return 0
 
 
+#: The cap on `best_practices`. lanes.json is editable from the Ops Console, so an unbounded
+#: field there is a context bomb that fires in EVERY session at once and cannot be undone by the
+#: sessions it hits. Six lines is roughly what an agent reads before it starts skimming; past that
+#: the inject becomes the noise it exists to prevent.
+MAX_PRACTICES = 6
+MAX_PRACTICE_CHARS = 160
+
+
+def practices(lane: dict) -> list:
+    """The lane's `best_practices`, bounded, and LOUD about anything it dropped.
+
+    A silent truncation is worse than no truncation: six lines that read as the complete list are
+    six lines an agent will treat as the complete list.
+    """
+    raw = lane.get("best_practices")
+    if not isinstance(raw, list):
+        return []
+    lines = [str(x)[:MAX_PRACTICE_CHARS] for x in raw if isinstance(x, str) and x.strip()]
+    kept = lines[:MAX_PRACTICES]
+    if len(lines) > MAX_PRACTICES:
+        kept.append(f"({len(lines) - MAX_PRACTICES} more in ~/.claude/lanes.json, not shown -- "
+                    f"this lane is over the {MAX_PRACTICES}-line cap)")
+    return kept
+
+
 def inject(payload: dict) -> int:
     """SessionStart / PostCompact: put the goal back into a window that just lost it."""
     lane_name, lane = load_lane()
     session = payload.get("session_id") or "nosession"
     st = read_state(session)
     goal = st.get("goal")
+    parts = []
     if goal:
-        body = (f"[goal-guard/{lane_name}] YOUR OBJECTIVE, re-injected because "
-                f"compaction removes it first:\n  {goal}\n"
-                f"  last state change: {st.get('last_progress') or 'none yet'}")
+        parts.append(f"[goal-guard/{lane_name}] YOUR OBJECTIVE, re-injected because "
+                     f"compaction removes it first:\n  {goal}\n"
+                     f"  last state change: {st.get('last_progress') or 'none yet'}")
     elif lane.get("goal_required"):
-        body = (f"[goal-guard/{lane_name}] This lane requires a goal on disk and there "
-                f"is none. Write it before the next tool call:\n"
-                f"  python3 ~/.claude/scripts/goal-guard.py --set-goal '<the objective, "
-                f"with a number in it>'")
-    else:
+        parts.append(f"[goal-guard/{lane_name}] This lane requires a goal on disk and there "
+                     f"is none. Write it before the next tool call:\n"
+                     f"  python3 ~/.claude/scripts/goal-guard.py --set-goal '<the objective, "
+                     f"with a number in it>'")
+    prac = practices(lane)
+    if prac:
+        parts.append(f"[goal-guard/{lane_name}] WHAT NOT TO DO IN THIS LANE. Each line is a "
+                     f"repeated failure on THIS estate, not general advice:\n"
+                     + "\n".join(f"  - {line}" for line in prac))
+    if not parts:
         return 0
     json.dump({"hookSpecificOutput": {
         "hookEventName": payload.get("hook_event_name", "SessionStart"),
-        "additionalContext": body}}, sys.stdout)
+        "additionalContext": "\n\n".join(parts)}}, sys.stdout)
     return 0
 
 
@@ -389,6 +420,52 @@ def selftest() -> int:
     with contextlib.redirect_stdout(buf):
         inject({"session_id": "s6", "hook_event_name": "SessionStart"})
     ck("a goal_required lane with no goal says so", "--set-goal" in buf.getvalue())
+
+    print("best_practices -- injected, bounded, and never silently truncated")
+    ck("no field -> nothing", practices({}) == [])
+    ck("wrong type -> nothing, never a crash", practices({"best_practices": "a string"}) == [])
+    ck("empty list -> nothing", practices({"best_practices": []}) == [])
+    ck("blank entries are dropped", practices({"best_practices": ["", "   "]}) == [])
+    ck("a non-string entry cannot crash the hook",
+       practices({"best_practices": ["ok", None, 7]}) == ["ok"])
+    ck("a long line is clipped, not dropped",
+       len(practices({"best_practices": ["x" * 999]})[0]) == MAX_PRACTICE_CHARS)
+    over = practices({"best_practices": [f"line{i}" for i in range(MAX_PRACTICES + 3)]})
+    ck("over the cap keeps exactly the cap plus one notice", len(over) == MAX_PRACTICES + 1)
+    ck("the truncation SAYS how many it dropped -- silent truncation reads as completeness",
+       "3 more" in over[-1])
+    ck("at the cap exactly there is no notice",
+       practices({"best_practices": [f"l{i}" for i in range(MAX_PRACTICES)]})[-1]
+       == f"l{MAX_PRACTICES - 1}")
+
+    LANES_FILE.write_text(json.dumps({"lanes": {"default": {
+        "best_practices": ["never force push", "read the failing log"]}}}))
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        inject({"session_id": "s7", "hook_event_name": "SessionStart"})
+    out = buf.getvalue()
+    ck("practices inject with NO goal and no goal_required -- the default lane's case",
+       "never force push" in out and "read the failing log" in out)
+    ck("the practices block says these are estate failures, not general advice",
+       "not general advice" in out)
+
+    st = read_state("s8")
+    st["goal"] = "merge 10 PRs"
+    write_state("s8", st)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        inject({"session_id": "s8", "hook_event_name": "SessionStart"})
+    out = buf.getvalue()
+    ck("a goal and practices both appear -- neither displaces the other",
+       "merge 10 PRs" in out and "never force push" in out)
+    ck("the goal is still FIRST, because it is what compaction eats",
+       out.index("merge 10 PRs") < out.index("never force push"))
+
+    LANES_FILE.write_text(json.dumps({"lanes": {"default": {}}}))
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        inject({"session_id": "s9", "hook_event_name": "SessionStart"})
+    ck("a lane with no practices and no goal is still silent", buf.getvalue() == "")
 
     print("\n  %d/%d checks passed" % (total[0] - bad[0], total[0]))
     return 1 if bad[0] else 0
