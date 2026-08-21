@@ -86,8 +86,12 @@ def marker_of(text: str) -> str | None:
     return None
 
 
-#: a markdown table of measured numbers is evidence. Two rows, because one `|` is a sentence.
-TABLE = re.compile(r"^[^\n]*\|[^\n]*\|[^\n]*$\n[^\n]*\|[^\n]*\|", re.M)
+#: a table of measured numbers is evidence. Two CONSECUTIVE lines that both carry a `|`.
+#: The earlier version counted pipes per line, which pinned markdown's outer pipes as though
+#: they meant something -- a mutation that demanded three pipes instead of two survived the
+#: suite, because the only thing it changed was a corner nobody cares about. Two lines with a
+#: column separator is the actual signal, and it is the thing the check now grades.
+TABLE = re.compile(r"^[^\n|]*\|[^\n]*$\n[^\n|]*\|", re.M)
 #: a share is a measurement. "58.4%" is a receipt in a way that "about 3 goes" is not.
 PERCENT = re.compile(r"\d[\d.,]*\s?%")
 #: an inline span that is a runnable command or a path -- something the founder can re-run.
@@ -367,7 +371,11 @@ def selftest() -> int:
     ck("a backticked command is a receipt", has_receipt("DONE: see `git worktree list`"))
     ck("a backticked path is a receipt", has_receipt("DONE: it is in `~/.claude/lanes.json`"))
     ck("a one-word backtick is not a receipt", not has_receipt("DONE: the `flag` is set"))
-    ck("one pipe is not a table", not has_receipt("DONE: a | b"))
+    ck("one pipe on one line is not a table", not has_receipt("DONE: a | b"))
+    ck("two lines with a column separator is a table",
+       has_receipt("DONE: it landed\n\nwhat | n\nmerged | 4"))
+    ck("a borderless two-column table is a receipt",
+       has_receipt("DONE:\n\nlane | limit\nbuild | 12"))
 
     ck("the marker report names the three",
        all(m in report("marker", "default") for m in MARKERS))
