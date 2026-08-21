@@ -47,11 +47,50 @@ LEDGER = os.path.join(HOME, ".claude", "state", "action_items.json")
 ID = re.compile(r"^(?:\*\*)?([A-Z]{1,3}-?\d+[a-z]?)(?:\*\*)?$")
 
 # Read as whole words against a cell, so "NOT STARTED" cannot be read as "STARTED" and a row
-# saying "not done" cannot be read as "DONE". Order matters: the negatives are tested first.
-OPEN_TOKENS = ("NOT STARTED", "NOT MEASURED", "NOT DONE", "NOT RUN", "TBD", "PARTLY",
-               "IN PROGRESS", "RUNNING", "BLOCKED", "OPEN", "TODO", "PENDING", "PROPOSED",
-               "DEGENERATE", "NO RESOLUTION", "NEEDS")
-DONE_TOKENS = ("DONE", "SHIPPED", "MERGED", "CLOSED", "COMPLETE", "MEASURED", "LANDED")
+# saying "not done" cannot be read as "DONE". Order matters: the negatives are tested first,
+# which is why "NOT MET" and "NOT LIVE" can sit safely beside "MET" and "LIVE".
+OPEN_TOKENS = ("NOT STARTED", "NOT MEASURED", "NOT DONE", "NOT RUN", "NOT MET", "NOT LIVE",
+               "NOT BUILT", "NOT WIRED", "TBD", "PARTLY", "PARTIAL", "UNPROVEN",
+               "IN PROGRESS", "RUNNING", "QUEUED", "BLOCKED", "OPEN", "TODO", "PENDING",
+               "PROPOSED", "PLANNED", "DEFERRED", "AT RISK", "DEGENERATE", "NO RESOLUTION",
+               "NEEDS")
+DONE_TOKENS = ("DONE", "SHIPPED", "MERGED", "CLOSED", "COMPLETE", "MEASURED", "LANDED",
+               "LIVE", "MET", "BUILT", "PROVEN")
+
+#: A status written as a mark instead of a word. Measured on origin/main 2026-08-21: 17 rows
+#: carry the cross and nothing read it, so every one of them counted as having no status at
+#: all. Word boundaries cannot express a mark -- both sides of an emoji are already non-word
+#: characters, so \b never matches -- which is why these are a separate list matched literally.
+OPEN_MARKS = ("\u274c", "\u2717", "\U0001f534")
+DONE_MARKS = ("\u2705", "\u2714", "\U0001f7e2")
+
+#: A header cell meaning "this table records whether the row is finished". A table with no such
+#: column CANNOT record it, and that is a defect in the DOCUMENT -- a different fix from a
+#: status word this vocabulary does not know. Reporting both as "unknown" hid which was which:
+#: measured on origin/main 2026-08-21, 574 of 689 unreadable rows sat in a table with no status
+#: column and 114 sat in one that had it, and the two numbers want opposite work.
+_STATUS_HEADERS = ("STATUS", "STATE", "DONE", "VERDICT", "RESULT", "PROGRESS", "SHIPPED",
+                   "LANDED", "MET?")
+
+_SEPARATOR = re.compile(r"^\|[\s:|-]*-[\s:|-]*\|$")
+
+
+def _hit(up: str, words: tuple, marks: tuple) -> bool:
+    """True when a cell carries one of these tokens as a WHOLE WORD, or one of the marks.
+
+    Substring matching is the thing this exists to prevent, and it stopped being theoretical
+    the moment MET and LIVE were added: MET is inside PARAMETER and SOMETHING, LIVE is inside
+    DELIVERABLE. The comment above the lists claimed whole words from the first version while
+    the code used `in`, which was true only by luck of the tokens then chosen.
+
+    The optional S/D/ED suffix keeps COMPLETE matching COMPLETED and OPEN matching OPENED,
+    which plain `in` gave for free. It is deliberately not `\\w*`: that would put METRICS and
+    METERED back in reach of MET.
+    """
+    for t in words:
+        if re.search(r"\b" + re.escape(t) + r"(?:S|D|ED)?\b", up):
+            return True
+    return any(t in up for t in marks)
 
 
 def sh(cmd: list[str], timeout: int = 60) -> tuple[int, str]:
@@ -66,18 +105,27 @@ def classify(cells: list[str]) -> tuple[str, str]:
     """(state, the cell that decided it). state is one of open/done/unknown."""
     for cell in cells:
         up = cell.upper()
-        for t in OPEN_TOKENS:
-            if t in up:
-                return "open", cell.strip()
-        for t in DONE_TOKENS:
-            if t in up:
-                return "done", cell.strip()
+        if _hit(up, OPEN_TOKENS, OPEN_MARKS):
+            return "open", cell.strip()
+        if _hit(up, DONE_TOKENS, DONE_MARKS):
+            return "done", cell.strip()
     return "unknown", ""
 
 
 def parse(path: str, text: str) -> list[dict]:
+    """Every action item in one document.
+
+    States are open / done / unknown / untracked. The last two are NOT the same thing and the
+    split is the point: `unknown` is a row whose table has a status column holding a word this
+    vocabulary does not know -- fixable here, in the vocabulary. `untracked` is a row in a
+    table with NO status column, so the document has nowhere to record whether it is finished
+    -- fixable only in the document. Both used to report as `unknown`, which put 574 items
+    needing an edit to a doc in the same number as 114 needing an edit to this file.
+    """
     items: list[dict] = []
-    for n, line in enumerate(text.split("\n"), 1):
+    lines = text.split("\n")
+    tracked = False   # does the table we are currently inside have a status column?
+    for n, line in enumerate(lines, 1):
         s = line.strip()
         if s.startswith("- [ ]") or s.startswith("- [x]") or s.startswith("- [X]"):
             items.append({"id": f"{os.path.basename(path)}:{n}", "source": path, "line": n,
@@ -85,14 +133,25 @@ def parse(path: str, text: str) -> list[dict]:
                           "title": s[5:].strip()[:200], "status_cell": "checkbox"})
             continue
         if not s.startswith("|"):
+            tracked = False   # prose or a blank line ends the table
             continue
         cells = [c.strip() for c in s.strip("|").split("|")]
+        # A header is the row the |---| separator sits under. Read it, then move on: a header
+        # is never an item. Tables that carry no header at all keep tracked=False, which is the
+        # honest answer -- no header means no status column.
+        if n < len(lines) and _SEPARATOR.match(lines[n].strip()):
+            tracked = any(any(h in c.upper() for h in _STATUS_HEADERS) for c in cells)
+            continue
+        if _SEPARATOR.match(s):
+            continue
         if len(cells) < 2:
             continue
         m = ID.match(cells[0])
         if not m:
             continue
         state, cell = classify(cells[1:])
+        if state == "unknown" and not tracked:
+            state = "untracked"
         items.append({"id": m.group(1), "source": path, "line": n, "state": state,
                       "title": cells[1][:200], "status_cell": cell})
     return items
@@ -130,6 +189,8 @@ def collect(repo: str = "", ref: str = "") -> dict:
         "open": sum(1 for i in items if i["state"] == "open"),
         "done": sum(1 for i in items if i["state"] == "done"),
         "unknown": sum(1 for i in items if i["state"] == "unknown"),
+        # Counted apart from `unknown` because the fix is apart: a doc needs a status column.
+        "untracked": sum(1 for i in items if i["state"] == "untracked"),
     }
     try:
         os.makedirs(os.path.dirname(LEDGER), exist_ok=True)
