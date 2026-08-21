@@ -352,8 +352,13 @@ def add_alternative(rid: str, name: str, url: str, licence: str, verdict: str, w
     if not r or r.get("kind") != "research":
         print(f"no research row {rid}", file=sys.stderr)
         return 1
-    if verdict not in ("use", "reject"):
-        print("verdict must be use|reject", file=sys.stderr)
+    if verdict not in ("use", "adapt", "reject"):
+        # Three values, not two. A two-value vocabulary forces a false answer on the most
+        # common honest outcome of an open-source scan: the idea is right and the dependency
+        # is wrong. Recording that as `reject` loses the idea; recording it as `use` claims a
+        # dependency nobody added. `adapt` means: we are taking a named idea from this and
+        # NOT taking the code, and --why must say which idea.
+        print("verdict must be use|adapt|reject", file=sys.stderr)
         return 1
     r.setdefault("alternatives", []).append(
         {"name": name, "url": url, "licence": licence, "verdict": verdict, "why": why,
@@ -549,6 +554,18 @@ def selftest() -> int:
                         "--chose", "build it", "--why", "none fit", "--rests-on", rid,
                         "--undo", "rm it"])
         ck("the same BUILD decision is allowed once an alternative is on record", rc == 0)
+
+        # `adapt` is the third verdict, and it exists because the most common honest outcome
+        # of an open-source scan is "the idea is right, the dependency is wrong". Recording
+        # that as `reject` loses the idea and as `use` claims a dependency nobody added.
+        rc, _, _ = run(["--alternative", rid, "--name", "crewai", "--url", "http://c",
+                        "--licence", "MIT", "--verdict", "adapt",
+                        "--why", "take the task decomposition, not the backstory field"])
+        ck("an alternative may be verdict `adapt` -- the idea without the dependency", rc == 0)
+        rc, _, err = run(["--alternative", rid, "--name", "x", "--url", "http://x",
+                          "--licence", "MIT", "--verdict", "maybe", "--why", "w"])
+        ck("a verdict outside use|adapt|reject is REFUSED",
+           rc == 1 and "use|adapt|reject" in err)
 
         # --- do not re-decide what another session settled -----------------------
         rc, out, _ = run(["--check", "should we delete the old store directory"])
