@@ -37,6 +37,7 @@ import json
 import os
 import subprocess
 import sys
+import ast
 import datetime as dt
 import time
 
@@ -400,24 +401,41 @@ def collect_shipped_to_live() -> list[Row]:
     return rows
 
 
-def _selftest_scripts() -> list[str]:
-    """Every guard in ~/.claude/scripts that advertises a --selftest."""
-    out = []
+def _selftest_scripts() -> tuple[list[str], list[str]]:
+    """(scripts that DEFINE a selftest, scripts that only mention one).
+
+    The first version grepped for the literal `--selftest` anywhere in the file, and that is
+    grading a proxy -- the estate's named failure class, in the board that reports it. Measured
+    2026-08-21: `reflect.py` was reported as "a guard claiming a selftest it does not have"
+    because the string sits inside a DATA table at reflect.py:588, where it is the remediation
+    command for a different guard. The file never advertised anything.
+
+    A definition is the honest test, so this reads the AST. The second list exists because an
+    allow-list with a silent miss case is how 10 criticals were dropped in 18 hours: a script
+    that runs a selftest without defining a function named for one is REPORTED, never dropped.
+    """
+    defined: list[str] = []
+    mentioned: list[str] = []
     try:
         names = sorted(os.listdir(SCRIPTS))
     except OSError:
-        return out
+        return defined, mentioned
     for name in names:
         if not name.endswith(".py"):
             continue
         path = os.path.join(SCRIPTS, name)
         try:
             with open(path, encoding="utf-8", errors="replace") as fh:
-                if "--selftest" in fh.read():
-                    out.append(path)
-        except OSError:
+                text = fh.read()
+            tree = ast.parse(text)
+        except (OSError, SyntaxError, ValueError):
             continue
-    return out
+        if any(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+               and n.name.lstrip("_") == "selftest" for n in ast.walk(tree)):
+            defined.append(path)
+        elif "--selftest" in text:
+            mentioned.append(path)
+    return defined, mentioned
 
 
 def collect_hooks_and_guards() -> list[Row]:
@@ -454,7 +472,7 @@ def collect_hooks_and_guards() -> list[Row]:
                         f"{len(missing)} of {total}", "; ".join(missing[:6]),
                         "python3 -c \"import json;print(json.load(open('~/.claude/settings.json'))['hooks'])\""))
 
-    scripts = _selftest_scripts()
+    scripts, mentioned_only = _selftest_scripts()
     if not scripts:
         rows.append(_unknown("Guard selftests", f"no scripts found under {SCRIPTS}",
                              f"ls {SCRIPTS}/*.py"))
@@ -480,9 +498,10 @@ def collect_hooks_and_guards() -> list[Row]:
     rows.append(Row(GOOD if not failed else BAD, "Guard selftests failing",
                     f"{len(failed)} of {len(scripts)}", "; ".join(failed[:6]),
                     f"for f in {SCRIPTS}/*.py; do python3 $f --selftest; done"))
-    rows.append(Row(GOOD if not unimplemented else WARN,
+    advertised = unimplemented + [os.path.basename(m) for m in mentioned_only]
+    rows.append(Row(GOOD if not advertised else WARN,
                     "Guards claiming a selftest they do not have",
-                    str(len(unimplemented)), "; ".join(unimplemented[:6]),
+                    str(len(advertised)), "; ".join(advertised[:6]),
                     f"rg -l -- --selftest {SCRIPTS}/*.py"))
     return rows
 
