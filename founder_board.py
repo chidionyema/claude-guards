@@ -32,6 +32,7 @@ THREE RULES THE COLLECTORS OBEY, each one a failure this estate has already paid
 from __future__ import annotations
 
 import argparse
+import collections
 import html
 import json
 import os
@@ -764,6 +765,7 @@ def collect_action_items() -> list[Row]:
 
     items = d.get("items") or []
     open_n, done_n, unk = d.get("open", 0), d.get("done", 0), d.get("unknown", 0)
+    untracked = d.get("untracked", 0)
     graded = open_n + done_n
     rows = [Row(BAD if open_n > done_n else GOOD, "Action items outstanding",
                 f"{open_n} open, {done_n} done",
@@ -773,7 +775,20 @@ def collect_action_items() -> list[Row]:
                 " ".join(cmd))]
     # An item whose status cell matches no vocabulary is NOT counted as done and NOT hidden.
     rows.append(Row(WARN if unk else GOOD, "Items with no readable status", str(unk),
-                    "a row nobody gave a status, so it is neither shipped nor tracked",
+                    "the table HAS a status column and the word in it is one nothing here "
+                    "knows -- fixable in action_items.py",
+                    " ".join(cmd)))
+    # Counted apart from the row above because the FIX is apart, and reporting one number hid
+    # that. His words 2026-08-21: "e need to strt tagging ad ncategorissing, project anagent
+    # hygene". Until 2026-08-21 both of these were one figure of 689, which read as one
+    # backlog; 574 of them needed an edit to a DOCUMENT and 115 needed an edit to a SCRIPT.
+    worst = collections.Counter(i.get("source", "?") for i in items
+                                if i.get("state") == "untracked").most_common(3)
+    rows.append(Row(WARN if untracked else GOOD, "Deliverables no document can mark done",
+                    str(untracked),
+                    ("worst: " + ", ".join(f"{s.replace('docs/', '')} ({n})" for s, n in worst)
+                     + " -- these tables have no status column at all, so nothing can ever "
+                       "report them finished") if worst else "every table has a status column",
                     " ".join(cmd)))
     stale = sorted((i for i in items if i.get("state") == "open"),
                    key=lambda i: -(i.get("age_days") or 0))[:4]
