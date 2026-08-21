@@ -42,6 +42,9 @@ import time
 HOME = os.path.expanduser("~")
 STATE = os.path.join(HOME, ".claude", "state", "founder_board.json")
 PROSPECTOR = os.path.join(HOME, "Documents", "code", "prospector")
+GH_REPO = "chidionyema/prospector"
+LIVE_URL = "https://mumchimp.com"
+SCRIPTS = os.path.join(HOME, ".claude", "scripts")
 
 GOOD, BAD, WARN, UNKNOWN = "good", "bad", "warn", "unknown"
 
@@ -294,11 +297,200 @@ def collect_founder_decisions() -> list[Row]:
                 "; ".join(l.split("|")[2].strip()[:70] for l in qs[:4]), " ".join(cmd))]
 
 
+
+def _gh_runs(workflow: str, limit: int = 8) -> list[dict] | None:
+    """The last runs of one workflow, or None when the question could not be asked."""
+    rc, out, _ = sh(["gh", "run", "list", "--repo", GH_REPO, "--workflow", workflow,
+                     "--limit", str(limit), "--json",
+                     "databaseId,status,conclusion,createdAt"], 45)
+    if rc != 0:
+        return None
+    try:
+        return json.loads(out)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+def _age(iso: str) -> str:
+    """`2026-08-21T09:58:22Z` -> `21m ago`. Every row carries the age of its measurement."""
+    try:
+        t = time.mktime(time.strptime(iso, "%Y-%m-%dT%H:%M:%SZ")) - time.timezone
+    except (ValueError, TypeError):
+        return "age unknown"
+    m = int((time.time() - t) / 60)
+    return f"{m}m ago" if m < 90 else f"{m // 60}h ago"
+
+
+def _run_row(label: str, runs: list[dict] | None, workflow: str) -> Row:
+    cmd = f"gh run list --repo {GH_REPO} --workflow {workflow} --limit 1"
+    if runs is None:
+        return _unknown(label, "gh run list failed or returned no json", cmd)
+    if not runs:
+        return _unknown(label, "this workflow has never run", cmd)
+    r = runs[0]
+    if r.get("status") != "completed":
+        return Row(WARN, label, f"{r.get('status')} now",
+                   f"run {r.get('databaseId')}, started {_age(r.get('createdAt', ''))}", cmd)
+    ok = r.get("conclusion") == "success"
+    return Row(GOOD if ok else BAD, label, str(r.get("conclusion")),
+               f"run {r.get('databaseId')}, {_age(r.get('createdAt', ''))}", cmd)
+
+
+def collect_shipped_to_live() -> list[Row]:
+    """MERGED IS NOT OPERATIONAL, and nothing in this estate watched the difference.
+
+    The founder, 2026-08-21: "when you ship, is it operational?" and "we cant have things working
+    in the ark black bes". The chain a merge has to survive is merge -> deploy -> the bytes on the
+    live site -> the post-deploy smoke that grades them. Every link of it ran in the dark: a
+    session could truthfully say "merged" while the deploy failed, or the deploy could go green
+    while the site served the wrong thing. These rows are that chain, one row per link.
+    """
+    rows = [_run_row("Store deploy, last run", _gh_runs("deploy-store-web.yml"),
+                     "deploy-store-web.yml"),
+            _run_row("Engine deploy, last run", _gh_runs("deploy-engine.yml"),
+                     "deploy-engine.yml")]
+
+    smokes = _gh_runs("e2e-live-smoke.yml")
+    rows.append(_run_row("Live smoke, last run", smokes, "e2e-live-smoke.yml"))
+
+    # THE DARK NUMBER. Work that reached main and has never been graded against the live site.
+    green = next((r for r in (smokes or [])
+                  if r.get("status") == "completed" and r.get("conclusion") == "success"), None)
+    if green is None:
+        rows.append(Row(BAD, "Merges never graded against live", "ALL of them",
+                        "no live smoke has EVER concluded green, so nothing merged is verified",
+                        f"gh run list --repo {GH_REPO} --workflow e2e-live-smoke.yml"))
+    else:
+        since = green["createdAt"]
+        cmd = ["gh", "pr", "list", "--repo", GH_REPO, "--state", "merged", "--limit", "40",
+               "--json", "number,mergedAt,title"]
+        rc, out, _ = sh(cmd, 45)
+        try:
+            merged = [p for p in json.loads(out) if (p.get("mergedAt") or "") > since] if rc == 0 else None
+        except (json.JSONDecodeError, TypeError):
+            merged = None
+        if merged is None:
+            rows.append(_unknown("Merges never graded against live", "gh pr list failed",
+                                 " ".join(cmd)))
+        else:
+            rows.append(Row(GOOD if not merged else WARN, "Merges never graded against live",
+                            str(len(merged)),
+                            "; ".join(f"#{p['number']} {p['title'][:40]}" for p in merged[:4])
+                            or f"last green smoke {_age(since)}", " ".join(cmd)))
+
+    # The site itself. A deploy that says success and a page that does not answer are both
+    # possible at the same time, so this asks the site rather than the pipeline.
+    import urllib.error
+    import urllib.request
+    started = time.time()
+    try:
+        with urllib.request.urlopen(LIVE_URL, timeout=25) as resp:
+            body = resp.read()
+            ms = int((time.time() - started) * 1000)
+            good = resp.status == 200 and len(body) > 2000
+            rows.append(Row(GOOD if good else BAD, "mumchimp.com answering",
+                            f"HTTP {resp.status}", f"{len(body)} bytes in {ms}ms",
+                            f"curl -si {LIVE_URL} | head -1"))
+    except (urllib.error.URLError, OSError, ValueError) as ex:
+        rows.append(Row(BAD, "mumchimp.com answering", "NO ANSWER",
+                        f"{type(ex).__name__}: {ex}", f"curl -si {LIVE_URL} | head -1"))
+    return rows
+
+
+def _selftest_scripts() -> list[str]:
+    """Every guard in ~/.claude/scripts that advertises a --selftest."""
+    out = []
+    try:
+        names = sorted(os.listdir(SCRIPTS))
+    except OSError:
+        return out
+    for name in names:
+        if not name.endswith(".py"):
+            continue
+        path = os.path.join(SCRIPTS, name)
+        try:
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                if "--selftest" in fh.read():
+                    out.append(path)
+        except OSError:
+            continue
+    return out
+
+
+def collect_hooks_and_guards() -> list[Row]:
+    """The guards are the estate's immune system, and NOTHING was watching them.
+
+    Founder, 2026-08-21: "eveeven the hoks annd guards and everyhting else". Two ways a guard
+    dies silently. Its script can be deleted or renamed while settings.json still names it -- the
+    hook then fails open on every turn and no one is told. Or its own selftest can start failing:
+    measured on the first run of this collector, `pr-freeze.py --selftest` reported 3 failed, so
+    the freeze was not blocking `gh pr create` at all while every session believed it was.
+    """
+    rows: list[Row] = []
+    settings = os.path.join(HOME, ".claude", "settings.json")
+    try:
+        with open(settings, encoding="utf-8") as fh:
+            hooks = json.load(fh).get("hooks", {})
+    except (OSError, json.JSONDecodeError) as ex:
+        rows.append(_unknown("Hooks registered", f"{type(ex).__name__}: {ex}", f"cat {settings}"))
+        hooks = None
+    if hooks is not None:
+        total, missing = 0, []
+        for event, groups in hooks.items():
+            for group in groups if isinstance(groups, list) else []:
+                for hook in group.get("hooks", []) if isinstance(group, dict) else []:
+                    cmd = str(hook.get("command", ""))
+                    total += 1
+                    # Any ~/.claude/scripts path the command names must exist, or the hook is a
+                    # no-op that fails open and says nothing.
+                    for tok in cmd.replace('"', " ").replace("'", " ").split():
+                        tok = os.path.expanduser(tok.strip())
+                        if tok.startswith(SCRIPTS) and not os.path.exists(tok):
+                            missing.append(f"{event}: {os.path.basename(tok)}")
+        rows.append(Row(GOOD if not missing else BAD, "Hooks whose script is missing",
+                        f"{len(missing)} of {total}", "; ".join(missing[:6]),
+                        "python3 -c \"import json;print(json.load(open('~/.claude/settings.json'))['hooks'])\""))
+
+    scripts = _selftest_scripts()
+    if not scripts:
+        rows.append(_unknown("Guard selftests", f"no scripts found under {SCRIPTS}",
+                             f"ls {SCRIPTS}/*.py"))
+        return rows
+
+    from concurrent.futures import ThreadPoolExecutor
+    def one(path):
+        return path, sh([sys.executable, path, "--selftest"], 30)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(one, scripts))
+
+    failed, unimplemented = [], []
+    for path, (rc, _out, err) in results:
+        name = os.path.basename(path)
+        if rc == 0:
+            continue
+        # An argparse rejection is not a failing guard, it is a guard that ADVERTISES a selftest
+        # it does not have -- which is worse, because every reader assumes it is proven.
+        if rc == 2 and "unrecognized arguments" in err:
+            unimplemented.append(name)
+        else:
+            failed.append(f"{name} (exit {rc})")
+    rows.append(Row(GOOD if not failed else BAD, "Guard selftests failing",
+                    f"{len(failed)} of {len(scripts)}", "; ".join(failed[:6]),
+                    f"for f in {SCRIPTS}/*.py; do python3 $f --selftest; done"))
+    rows.append(Row(GOOD if not unimplemented else WARN,
+                    "Guards claiming a selftest they do not have",
+                    str(len(unimplemented)), "; ".join(unimplemented[:6]),
+                    f"rg -l -- --selftest {SCRIPTS}/*.py"))
+    return rows
+
+
 COLLECTORS = [
     ("Money", collect_spend),
     ("Work in flight", collect_prs),
     ("What is broken", collect_estate_checks),
     ("The machine that runs itself", collect_launchd),
+    ("Shipped — is it live?", collect_shipped_to_live),
+    ("The guards themselves", collect_hooks_and_guards),
     ("What was asked for", collect_requirements),
     ("Waiting on you", collect_founder_decisions),
 ]
