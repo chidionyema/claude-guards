@@ -1205,6 +1205,44 @@ def selftest() -> int:
             cases.append((name, True))
     globals()["_busy_runners"] = _real_busy
 
+    # ---- index.lock staleness, driven by REAL files -------------------------------------
+    # No stub. The whole point of the rule is what it decides about a file on disk, so a
+    # mocked answer would prove nothing. Ages are set with os.utime, not by waiting.
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        fresh = os.path.join(td, "fresh-index.lock")
+        stale = os.path.join(td, "stale-index.lock")
+        for f in (fresh, stale):
+            open(f, "w").close()
+        old = time.time() - (_LOCK_STALE_S + 60)
+        os.utime(stale, (old, old))
+        missing = os.path.join(td, "gone-index.lock")
+
+        for name, path, want_block in [
+            # A lock written seconds ago is a live commit. This is the case the rule exists
+            # for and it must never be relaxed.
+            ("lock_fresh_blocks", fresh, True),
+            # Older than the threshold AND unheld: the writer was killed. Blocking here is
+            # the deadlock that wedged this estate twice on 2026-08-21.
+            ("lock_stale_allows", stale, False),
+            # Absent still blocks: it can appear between the check and the rm.
+            ("lock_absent_blocks", missing, True),
+        ]:
+            got = bool(rule_index_lock(f"rm -f {path}"))
+            if got != want_block:
+                bad += 1
+                print(f"  FAIL  {name}: wanted block={want_block}, got {got}")
+            else:
+                cases.append((name, True))
+
+        # The escape marker still wins, on the one state that otherwise blocks hardest.
+        got = bool(rule_index_lock(f"rm -f {fresh}  # lock-removal-intended"))
+        if got:
+            bad += 1
+            print("  FAIL  lock_marker_overrides: marker did not allow a fresh lock")
+        else:
+            cases.append(("lock_marker_overrides", True))
+
     print(f"selftest: {len(cases) - bad}/{len(cases)} passed")
     return 1 if bad else 0
 
