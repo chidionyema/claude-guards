@@ -44,6 +44,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 STATE = Path.home() / ".claude" / "state" / "branch-pr-guard.json"
@@ -100,6 +101,29 @@ def foreign_session(tree: str, session_id: str | None) -> bool:
         return False
     owner = parts[parts.index("scratchpad") - 1]
     return owner != session_id
+
+
+def load_json(path: Path) -> dict:
+    """A dict, or an empty one for ANY reason it could not be read.
+
+    A lost ledger costs one duplicate block. A raise here would take the turn down, which is
+    the one thing a guard must never do.
+    """
+    try:
+        d = json.loads(path.read_text())
+        return d if isinstance(d, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def save_json(path: Path, data: dict, keep: int = 200) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if len(data) > keep:
+            data = dict(list(data.items())[-keep:])
+        path.write_text(json.dumps(data, indent=2))
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def load_state() -> dict:
@@ -393,13 +417,222 @@ def selftest() -> int:
         trimmed = dict(list(trimmed.items())[-200:])
     check("state ledger caps at 200", len(trimmed), 200)
 
-    total = 25
+
+    # 11. THE HOLE THIS CLOSED. `pr_covers` answers True the moment a pull request is OPEN, so
+    #     once #544 existed the guard was satisfied for six hours while the thing sat
+    #     CONFLICTING. Both statements below must be true at once: the pull request exists AND
+    #     it needs a person. If a change ever makes the second one False, this fails.
+    conflicting = {"number": 544, "headRefName": "portal/fast-and-shareable",
+                   "headRefOid": "a70a76b0bb8c", "isDraft": False, "mergeable": "CONFLICTING",
+                   "statusCheckRollup": [{"name": "python", "conclusion": "FAILURE"},
+                                         {"name": "ci-ok", "conclusion": "FAILURE"},
+                                         {"name": "engine", "conclusion": "SUCCESS"}]}
+    check("an OPEN pull request still satisfies pr_covers",
+          pr_covers('[{"state":"OPEN"}]', "a70a76b0"), True)
+    check("...and is nonetheless STUCK", (stuck(conflicting) or (None,))[0], "CONFLICT")
+
+    # 12. Verdicts. CONFLICT outranks RED because nothing merges until the conflict is gone.
+    red = dict(conflicting, mergeable="MERGEABLE")
+    check("a failing check alone is RED", (stuck(red) or (None,))[0], "RED")
+    check("the aggregator is not named when a real job failed", (stuck(red) or (0, []))[1],
+          ["python"])
+    only_agg = dict(red, statusCheckRollup=[{"name": "ci-ok", "conclusion": "FAILURE"}])
+    check("...but IS named when it is the only thing that failed",
+          (stuck(only_agg) or (0, []))[1], ["ci-ok"])
+
+    # 13. The four states that are NOT stuck. Each one would be a false positive, and a false
+    #     positive is what gets a guard uninstalled.
+    check("a draft is never stuck", stuck(dict(conflicting, isDraft=True)), None)
+    check("mergeable UNKNOWN is not a conflict",
+          stuck({"mergeable": "UNKNOWN", "statusCheckRollup": []}), None)
+    check("a check still running is not a failure",
+          stuck({"mergeable": "MERGEABLE",
+                 "statusCheckRollup": [{"name": "python", "conclusion": None}]}), None)
+    check("SKIPPED and NEUTRAL are not failures",
+          stuck({"mergeable": "MERGEABLE",
+                 "statusCheckRollup": [{"name": "dotnet", "conclusion": "SKIPPED"},
+                                       {"name": "x", "conclusion": "NEUTRAL"}]}), None)
+    check("CANCELLED is left to pr-keeper.yml",
+          stuck({"mergeable": "MERGEABLE",
+                 "statusCheckRollup": [{"name": "python", "conclusion": "CANCELLED"}]}), None)
+    check("a green pull request is not stuck",
+          stuck({"mergeable": "MERGEABLE",
+                 "statusCheckRollup": [{"name": "python", "conclusion": "SUCCESS"}]}), None)
+    check("a pull request with no checks at all is not stuck",
+          stuck({"mergeable": "MERGEABLE", "statusCheckRollup": []}), None)
+
+    # 14. Whose pull request. A peer's red branch must never stop THIS session: their own hook
+    #     owns it, and being stopped over work you cannot land is how a guard becomes noise.
+    now = 1_000_000.0
+    check("a branch this session does not hold is ignored",
+          stuck_findings([conflicting], {}, {}, now), [])
+    hits = stuck_findings([conflicting], {"portal/fast-and-shareable": "/tmp/wt"}, {}, now)
+    check("this session's own branch is reported", [h["pr"] for h in hits], [544])
+    check("...keyed by pull request, commit AND verdict",
+          hits[0]["key"], "544@a70a76b0:CONFLICT")
+
+    # 15. The throttle. It must stop the SAME state from blocking every turn, and it must come
+    #     BACK while the state is still true -- one alert and then silence is exactly the
+    #     failure mode that let #544 sit for six hours.
+    seen = {"544@a70a76b0:CONFLICT": now}
+    check("the same state does not block twice inside the grace window",
+          stuck_findings([conflicting], {"portal/fast-and-shareable": "/tmp/wt"}, seen, now + 60),
+          [])
+    check("...and blocks again once the grace window has passed",
+          len(stuck_findings([conflicting], {"portal/fast-and-shareable": "/tmp/wt"}, seen,
+                             now + STUCK_GRACE_S + 1)), 1)
+    check("a NEW commit on the same branch is a new state",
+          len(stuck_findings([dict(conflicting, headRefOid="ffffffffffff")],
+                             {"portal/fast-and-shareable": "/tmp/wt"}, seen, now + 60)), 1)
+    check("a corrupt ledger timestamp does not suppress the block",
+          len(stuck_findings([conflicting], {"portal/fast-and-shareable": "/tmp/wt"},
+                             {"544@a70a76b0:CONFLICT": "not a number"}, now)), 1)
+
+    # 16. Fails OPEN, like every other probe in this file.
+    check("an unreadable ledger reads as empty", load_json(Path("/no/such/file.json")), {})
+
+    total = 44
     if failures:
         print(f"branch-pr-guard selftest: {len(failures)}/{total} FAILED")
         print("\n".join(failures))
         return 1
     print(f"branch-pr-guard selftest: {total}/{total} passed")
     return 0
+
+
+#: A pull request that is OPEN but going nowhere blocks again after this long. pr-reactor.py
+#: uses the same 45 minutes as its alert grace, so the estate has ONE number for "stuck".
+STUCK_GRACE_S = 45 * 60
+
+#: Its own ledger, deliberately NOT the file above. That one is a tested branch->sha map and
+#: this is a different shape; sharing it would risk the guard that already works.
+STUCK_STATE = Path.home() / ".claude" / "state" / "branch-pr-guard.stuck.json"
+
+#: Aggregator checks. They go red BECAUSE something else went red, so naming one in the block
+#: text sends you to a job whose log says nothing about the cause. `ci-ok` is the only one today.
+AGGREGATORS = {"ci-ok"}
+
+#: What counts as a check that FAILED. CANCELLED is deliberately absent: a job that exceeds
+#: `timeout-minutes` is marked cancelled and rendered exactly like a failure, and re-running
+#: those already has an owner in `.github/workflows/pr-keeper.yml` ("re-run a REFUSAL, never a
+#: FAILURE"). Blocking a stop on work a robot is already redoing is a guard that cannot be
+#: satisfied by the person it stops.
+FAILED_CONCLUSIONS = {"FAILURE", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED"}
+
+
+def open_prs(cwd: str) -> list[dict] | None:
+    """Every open pull request in this repo, or None when the question could not be asked.
+
+    ONE call for the whole repo, not one per worktree. Measured 2026-08-21: 1.24s for the
+    repo. This estate has a dozen worktrees, so per-branch probing would put ten seconds in
+    the path of every turn, and a guard that slow gets uninstalled.
+    """
+    try:
+        out = subprocess.run(
+            ["gh", "pr", "list", "--state", "open", "--limit", "100", "--json",
+             "number,headRefName,headRefOid,isDraft,mergeable,statusCheckRollup"],
+            cwd=cwd, capture_output=True, text=True, timeout=TIMEOUT)
+    except Exception:  # noqa: BLE001 — a probe that cannot run means PASS, never block
+        return None
+    if out.returncode != 0:
+        return None
+    try:
+        rows = json.loads(out.stdout or "[]")
+    except Exception:  # noqa: BLE001
+        return None
+    return rows if isinstance(rows, list) else None
+
+
+def stuck(row: dict) -> tuple[str, list[str]] | None:
+    """(verdict, failing check names) when this pull request needs a person, else None.
+
+    Pure, so the selftest grades it without GitHub. Four states are NOT stuck, and each one
+    would be a false positive that gets this guard ignored:
+
+      * a DRAFT             -- parked on purpose. Its author is not waiting for review.
+      * mergeable UNKNOWN   -- GitHub has not finished computing the merge yet. Measured on
+                               #544, 2026-08-21: UNKNOWN on one call, CONFLICTING on the next
+                               a minute later. UNKNOWN means "ask again", not "it is fine".
+      * checks still running -- conclusion null. Waiting for CI is not a blind spot.
+      * SKIPPED or NEUTRAL  -- not failures. Half this repo's matrix skips on any given diff.
+
+    CONFLICT outranks RED because nothing can merge until the conflict is gone, and resolving
+    it re-runs the checks anyway.
+    """
+    if row.get("isDraft"):
+        return None
+    failing = sorted({
+        str(c.get("name") or c.get("context") or "?")
+        for c in (row.get("statusCheckRollup") or [])
+        if str(c.get("conclusion") or "").upper() in FAILED_CONCLUSIONS
+        or str(c.get("state") or "").upper() in {"FAILURE", "ERROR"}
+    })
+    named = [f for f in failing if f not in AGGREGATORS] or failing
+    if str(row.get("mergeable") or "").upper() == "CONFLICTING":
+        return ("CONFLICT", named)
+    if named:
+        return ("RED", named)
+    return None
+
+
+def stuck_findings(rows: list[dict], mine: dict[str, str], seen: dict, now: float) -> list[dict]:
+    """The open pull requests of THIS session's branches that need a person.
+
+    Pure. `mine` maps branch name -> worktree, so a peer's red pull request never stops this
+    session: their own hook owns it, and being nagged about work you cannot land is the fastest
+    way to make a guard noise.
+    """
+    out = []
+    for row in rows:
+        branch = str(row.get("headRefName") or "")
+        tree = mine.get(branch)
+        if tree is None:
+            continue
+        verdict = stuck(row)
+        if verdict is None:
+            continue
+        sha = str(row.get("headRefOid") or "")[:8]
+        key = "%s@%s:%s" % (row.get("number"), sha, verdict[0])
+        last = seen.get(key)
+        if isinstance(last, (int, float)) and (now - last) < STUCK_GRACE_S:
+            continue  # already stopped this session over this exact state, recently
+        out.append({"pr": row.get("number"), "branch": branch, "tree": tree,
+                    "sha": sha, "verdict": verdict[0], "failing": verdict[1], "key": key})
+    return out
+
+
+def report_stuck(findings: list[dict]) -> None:
+    lines = ["YOUR PULL REQUEST IS STUCK: open, not moving, and nobody else owns it."]
+    for f in findings[:5]:
+        why = ("merge conflict with main; nothing merges until it is resolved"
+               if f["verdict"] == "CONFLICT" else "failing: " + ", ".join(f["failing"]))
+        lines.append("  #%s %-8s %s @ %s" % (f["pr"], f["verdict"], f["branch"], f["sha"]))
+        lines.append("      %s" % why)
+    if len(findings) > 5:
+        lines.append("  ...and %d more" % (len(findings) - 5))
+    lines += [
+        "",
+        "Founder rule, 2026-08-21: \"you are not folloong up on ur prs\", \"this is a blind",
+        "spot\", \"should not have to renin du\". Ship means shipped -- commit, push, open the",
+        "pull request, then follow it to MERGED. An open red pull request is not delivered work.",
+        "",
+        "Get the CAUSE, not the colour (`gh pr checks` says WHICH job, never WHY):",
+        "  python3 ~/.claude/scripts/pr-why.py %s" % findings[0]["pr"],
+        "Then, in its own worktree:",
+    ]
+    for f in findings[:5]:
+        if f["verdict"] == "CONFLICT":
+            lines.append("  cd %s && git fetch origin main && git merge origin/main --no-edit"
+                         % f["tree"])
+        else:
+            lines.append("  cd %s   # fix, commit through the gate, push" % f["tree"])
+    lines += [
+        "  gh pr merge <n> --merge      # automerge.yml was deleted in #522; merges are by hand",
+        "",
+        "This blocks once per (pull request, commit, verdict), and again if the same state is",
+        "still true in 45 minutes. If it is parked on purpose, say so in one line and stop again.",
+    ]
+    print("\n".join(lines), file=sys.stderr)
 
 
 def main() -> int:
@@ -417,9 +650,13 @@ def main() -> int:
 
     state = load_state()
     findings = []
+    mine: dict[str, str] = {}
     for tree in worktrees(cwd):
         if foreign_session(tree, session_id):
             continue  # another session's scratchpad; its own hook owns it
+        head = git(["rev-parse", "--abbrev-ref", "HEAD"], tree)
+        if head and head not in PROTECTED:
+            mine.setdefault(head, tree)
         hit = unreviewed(tree)
         if hit is None:
             continue
@@ -436,6 +673,23 @@ def main() -> int:
             drop_stale_refs(names, tree)
             continue
         findings.append((tree, branch, sha))
+
+    # A pull request that EXISTS satisfied this guard forever, whatever state it was in --
+    # `pr_covers` returns True the moment one is OPEN. That is the hole the founder named on
+    # 2026-08-21 ("you are not folloong up on ur prs", "this is a blind spot"), measured on
+    # #544: open at 04:20, CONFLICTING and red for six hours, three board alerts, and nothing
+    # ever stopped the session that owned it. Detection was never the gap; enforcement was.
+    rows = open_prs(cwd)
+    if rows:
+        seen = load_json(STUCK_STATE)
+        now = time.time()
+        hits = stuck_findings(rows, mine, seen, now)
+        if hits:
+            for h in hits:
+                seen[h["key"]] = now
+            save_json(STUCK_STATE, seen)
+            report_stuck(hits)
+            return 2
 
     if not findings:
         return 0

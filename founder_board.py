@@ -351,8 +351,6 @@ def render_html(board: dict) -> str:
     parts = ["<title>Founder Board</title>", _CSS,
              f'<header><p class="eyebrow">Estate status</p><h1>{e(headline)}</h1>'
              f'<p class="stamp">Measured {e(stamp)}. Every row below is a command, not a claim.'
-             f'<header><p class="eyebrow">Estate status</p><h1>{e(headline)}</h1>'
-             f'<p class="stamp">Measured {e(stamp)}. Every row below is a command, not a claim.'
              f'{unmeasured}</p></header>',
              "<main>"]
     for s in board["sections"]:
