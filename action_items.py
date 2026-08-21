@@ -204,12 +204,28 @@ def collect(repo: str = "", ref: str = "") -> dict:
 def selftest() -> int:
     fails = []
     doc = "\n".join([
+        "| # | Requirement | Status | Note |",
+        "|---|---|---|---|",
         "| R1 | a thing | **DONE** | note |",
         "| R2 | another | **NOT STARTED** | — |",
         "| R3 | third | it is complicated | — |",     # no vocabulary hit -> unknown
         "| A3b | latency | TBD | 100x |",
         "| E-101 | an experiment | RUNNING | — |",
         "| RB1 | a runbook | **DONE** | proven |",
+        "| R4 | met, as a whole word | **met** | — |",
+        "| R5 | the negative beats the positive | **not met** | — |",
+        "| R6 | a status written as a mark | ❌ | — |",
+        "| R7 | a word that only CONTAINS a token | the parameter is a deliverable | — |",
+        "| R8 | the suffix plain `in` gave for free | COMPLETED | — |",
+        "",
+        # A second table, with NO status column. Its rows are `untracked`, never
+        # `unknown`: the document has nowhere to record whether they are finished, so
+        # widening the vocabulary in this file can never reach them.
+        "| # | His words | What it means |",
+        "|---|---|---|",
+        "| C1 | \"a quote\" | a meaning |",
+        "| C2 | \"another\" | another meaning |",
+        "",
         "- [ ] an unchecked box",
         "- [x] a checked box",
         "| not-an-id | ignore me | DONE |",
@@ -219,7 +235,12 @@ def selftest() -> int:
     # RB1 is here because the first version of ID listed prefixes instead of matching the
     # scheme, and a whole new doc went untracked with no failure anywhere.
     want = {"R1": "done", "R2": "open", "R3": "unknown", "A3b": "open", "E-101": "open",
-            "RB1": "done"}
+            "RB1": "done",
+            # MET is inside PARAMETER and LIVE is inside DELIVERABLE, so R4 and R7 together
+            # are what stops this vocabulary going back to substring matching.
+            "R4": "done", "R5": "open", "R6": "open", "R7": "unknown", "R8": "done",
+            # The whole point of the split: a table with no status column.
+            "C1": "untracked", "C2": "untracked"}
     for k, v in want.items():
         if by.get(k) != v:
             fails.append(f"{k}: got {by.get(k)!r}, wanted {v!r}")
@@ -266,7 +287,9 @@ def selftest() -> int:
         for f in fails:
             print("  -", f)
         return 1
-    print(f"PASS: {len(want)} statuses, unknown on a miss, 'NOT DONE' is open, checkboxes in order, sh() both ways, collect() end to end.")
+    print(f"PASS: {len(want)} statuses, unknown on a miss, untracked when the table has no "
+          f"status column, 'NOT DONE' is open, no substring hits, checkboxes in order, "
+          f"sh() both ways, collect() end to end.")
     return 0
 
 
