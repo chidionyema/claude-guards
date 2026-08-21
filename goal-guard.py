@@ -61,7 +61,8 @@ DEFAULT_LANE = {
     "readonly_run_limit": 25,
     #: The THIRD execution of one target. LAW 9: "Two turns without progress means stop and
     #: change approach. Not a third attempt at the same thing with a better flag." Three is
-    #: the law's own number, not a tuning choice; the ledger will say whether it holds.
+    #: the law's own number, not a tuning choice; every firing goes to the ledger so it can
+    #: be replaced by a measured one.
     "same_target_limit": 3,
     #: `research_budget_calls` WAS here and was deleted 2026-08-21 without ever being enforced.
     #: It is `readonly_run_limit` under a second name. That field does NOT count consecutive
@@ -132,7 +133,7 @@ def classify(tool: str, payload: dict) -> str:
 
 
 #: Runners whose TARGET is the next argument, so `pytest tests/a.py` and `pytest tests/b.py`
-#: are two different targets rather than three attempts at "pytest".
+#: are two targets rather than three attempts at "pytest".
 _RUNNERS = ("python3", "python", "pytest", "node", "npx", "bash", "sh", "ruff", "cargo",
             "make", "go", "npm", "pnpm", "yarn", "uv", "poetry")
 _SCRIPT = re.compile(r"[\w./-]+\.(?:py|sh|ts|js|mjs)\b")
@@ -145,7 +146,7 @@ def exec_target(cmd: str) -> str:
     a benchmark written, run, rewritten, run, rewritten, run -- three attempts at one number
     the machine could not give. Every one of those turns contains a WRITE, so `run` resets on
     each and the read-only counter above scores ZERO on the exact failure it was built for.
-    That counter grades a proxy. The count of times one target was EXECUTED grades the thing.
+    That counter grades a proxy. How many times one target was EXECUTED grades the thing.
 
     Normalised to a BASENAME because this estate runs the same script from many worktrees, and
     three attempts split across three paths must still read as three attempts at one target.
@@ -153,8 +154,7 @@ def exec_target(cmd: str) -> str:
     cmd = (cmd or "").strip()
     if not cmd:
         return ""
-    # Take the last segment of a pipeline: `cat x | python3 y.py` runs y.py.
-    seg = cmd.split("|")[-1].strip()
+    seg = cmd.split("|")[-1].strip()      # `cat x | python3 y.py` runs y.py
     words = [w for w in seg.split() if not w.startswith("-")]
     if not words:
         return ""
@@ -163,6 +163,9 @@ def exec_target(cmd: str) -> str:
     if m:
         return pathlib.PurePath(m.group(0)).name
     if head in _RUNNERS and len(words) > 1:
+        # `npm run build` and `npm run test` are two targets, not two attempts at "npm run".
+        if words[1] in ("run", "exec") and len(words) > 2:
+            return f"{head} {words[1]} {pathlib.PurePath(words[2]).name}"
         return f"{head} {pathlib.PurePath(words[1]).name}"
     if head in _RUNNERS:
         return head
@@ -175,9 +178,9 @@ def replan(target: str, n: int, st: dict, lane_name: str) -> str:
     Founder, 2026-08-21: "also need donethig to help with rabbit holes, being nore surgical,
     nilitary precision, thinkig about thinkgin".
 
-    It STEERS rather than refuses. A third attempt is sometimes right, and a guard that blocks
+    It STEERS rather than refuses. A third attempt is sometimes right, and a guard that blocked
     it would stop real work; what is never right is a third attempt made without noticing it is
-    the third. So this names the count, and asks for the one decision LAW 9 requires.
+    the third. So this names the count and asks for the one decision LAW 9 requires.
     """
     goal = st.get("goal") or "(none on disk -- goal-guard.py --set-goal '...')"
     return (
@@ -185,16 +188,16 @@ def replan(target: str, n: int, st: dict, lane_name: str) -> str:
         f"  GOAL  {goal}\n"
         f"  LAW 9: two turns without progress means stop and CHANGE APPROACH -- not a third\n"
         f"  attempt at the same thing with a better flag.\n"
-        f"  Answer these three before the next call, in one line each. This is the whole of\n"
-        f"  the check; it is not a refusal, and if the answers are good, carry on.\n"
-        f"    1. WHAT DID ATTEMPTS 1..{n - 1} BUY? A fact, or nothing? If nothing, the route is\n"
-        f"       wrong, not the flags.\n"
+        f"  Answer these three before the next call, one line each. It is not a refusal: if\n"
+        f"  the answers are good, carry on.\n"
+        f"    1. WHAT DID ATTEMPTS 1..{n - 1} BUY? A fact, or nothing? If nothing, the route\n"
+        f"       is wrong, not the flags.\n"
         f"    2. DOES THIS MOVE THE GOAL LINE ABOVE? Name which word of it moves.\n"
-        f"    3. IS THIS NUMBER OBTAINABLE HERE AT ALL? Some ground is not worth measuring,\n"
-        f"       and saying so IS the answer -- report it unobtainable, with the reason.\n"
+        f"    3. IS THIS OBTAINABLE HERE AT ALL? Some ground is not worth measuring, and\n"
+        f"       saying so IS the answer -- report it unobtainable, with the reason.\n"
         f"  Then pick ONE: a NAMED different route, a ticket with a number, or unobtainable.\n"
-        f"  Surgical means the smallest diff that fixes it; precision means knowing which of\n"
-        f"  those three you are doing before you spend the call, not after."
+        f"  Surgical is the smallest diff that fixes it. Precision is knowing which of those\n"
+        f"  three you are doing before you spend the call, not after."
     )
 
 
@@ -299,7 +302,7 @@ def handle(payload: dict) -> int:
         st["run"] = st.get("run", 0) + 1
 
     # Same-target attempts. Counted for every Bash execution regardless of `kind`, because a
-    # script run is usually classified UNKNOWN and UNKNOWN moves nothing above.
+    # script run classifies as UNKNOWN and UNKNOWN moves nothing above.
     target_msg = ""
     if tool == "Bash":
         tgt = exec_target((payload.get("tool_input") or {}).get("command", ""))
@@ -308,8 +311,8 @@ def handle(payload: dict) -> int:
             targets[tgt] = targets.get(tgt, 0) + 1
             n = targets[tgt]
             tlimit = int(lane.get("same_target_limit") or 0)
-            # Fire at the limit, then every limit after it, so a long legitimate loop is
-            # reminded rather than nagged on every call.
+            # Fire at the limit, then every limit after it: a long legitimate loop gets
+            # reminded, not nagged on every call.
             if tlimit and n >= tlimit and (n - tlimit) % tlimit == 0:
                 target_msg = replan(tgt, n, st, lane_name)
                 ledger({"t": int(time.time()), "kind": "same_target", "session": session[:12],
@@ -557,6 +560,46 @@ def selftest() -> int:
     with contextlib.redirect_stdout(buf):
         inject({"session_id": "s9", "hook_event_name": "SessionStart"})
     ck("a lane with no practices and no goal is still silent", buf.getvalue() == "")
+
+    print("same-target attempts -- the rabbit-hole signal that is not a proxy")
+    ck("a read-only command has no execution target", exec_target("git status") == "")
+    ck("two different test files are two targets, not two attempts at one",
+       exec_target("pytest tests/a.py") != exec_target("pytest tests/b.py"))
+    ck("npm run build and npm run test are two targets",
+       exec_target("npm run build") != exec_target("npm run test"))
+    ck("the same script from two worktrees is ONE target",
+       exec_target("python3 /a/wt-1/scripts/x.py") == exec_target("python3 /b/wt-2/scripts/x.py"))
+
+    B = "python3 /tmp/bench.py --n 5"
+    o1 = call("Bash", B, sess="rh1")
+    o2 = call("Bash", B + " --retry", sess="rh1")
+    ck("attempt 1 is silent", "ATTEMPT" not in o1)
+    ck("ATTEMPT 2 IS STILL SILENT -- the boundary is three, and two is legal", "ATTEMPT" not in o2)
+    o3 = call("Bash", B + " --other-flag", sess="rh1")
+    ck("ATTEMPT 3 FIRES -- LAW 9's own number", "ATTEMPT 3" in o3)
+    ck("the re-plan asks what the earlier attempts bought", "ATTEMPTS 1..2 BUY" in o3)
+    ck("the re-plan offers the three exits", "different route" in o3 and "ticket" in o3
+       and "unobtainable" in o3)
+    o4 = call("Bash", B, sess="rh1")
+    o5 = call("Bash", B, sess="rh1")
+    ck("it does not nag on every call past the limit", "ATTEMPT" not in o4 and "ATTEMPT" not in o5)
+    ck("it fires again at 6, so a long loop is reminded", "ATTEMPT 6" in call("Bash", B, sess="rh1"))
+
+    # The whole reason it exists: readonly_run_limit CANNOT see this shape.
+    call("Bash", "python3 /tmp/b2.py", sess="rh2")
+    call("Edit", fp="/tmp/b2.py", sess="rh2")
+    call("Bash", "python3 /tmp/b2.py", sess="rh2")
+    call("Edit", fp="/tmp/b2.py", sess="rh2")
+    o = call("Bash", "python3 /tmp/b2.py", sess="rh2")
+    ck("AN EDIT BETWEEN ATTEMPTS DOES NOT EXCUSE THEM -- run/rewrite/run is LAW 9's own "
+       "worked example", "ATTEMPT 3" in o)
+    ck("and the read-only counter really did score zero on that same run",
+       read_state("rh2").get("run", 0) == 0)
+
+    LANES_FILE.write_text(json.dumps({"lanes": {"default": {"same_target_limit": 0}}}))
+    ck("a lane can turn it off",
+       not any("ATTEMPT" in call("Bash", "python3 /tmp/c.py", sess="rh3") for _ in range(4)))
+    LANES_FILE.write_text(json.dumps({"lanes": {}}))
 
     print("\n  %d/%d checks passed" % (total[0] - bad[0], total[0]))
     return 1 if bad[0] else 0
