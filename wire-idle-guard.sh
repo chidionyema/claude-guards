@@ -1,1 +1,0 @@
-/Users/chidionyema/Documents/code/prospector/scripts/claude_guards/wire-idle-guard.sh
