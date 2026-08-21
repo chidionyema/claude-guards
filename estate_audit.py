@@ -201,14 +201,17 @@ def c_sessions() -> list[dict]:
 
 
 def c_launchd() -> list[dict]:
+    # launchctl list is the expensive call -- make it ONCE, then join in awk.
     script = r"""
+launchctl list 2>/dev/null > /tmp/.ea_lc.$$
 for p in ~/Library/LaunchAgents/*.plist; do
   lbl=$(/usr/libexec/PlistBuddy -c "Print :Label" "$p" 2>/dev/null) || continue
   [ -z "$lbl" ] && continue
-  st=$(launchctl list 2>/dev/null | awk -v l="$lbl" '$3==l{print $2}')
+  st=$(awk -v l="$lbl" '$3==l{print $2; exit}' /tmp/.ea_lc.$$)
   [ -z "$st" ] && st="notloaded"
   echo "$lbl|$st"
 done
+rm -f /tmp/.ea_lc.$$
 """
     rc, o = sh(script, timeout=25)
     jobs = [l.split("|") for l in o.splitlines() if "|" in l]
@@ -341,14 +344,6 @@ def c_secrets() -> list[dict]:
     out.append(row("secrets", "Credential files with correct 600 permissions",
                    f"{present - len(bad)} of {present}", CRIT if bad else OK,
                    "stat -f %Lp on each credential file", "; ".join(bad) or "all locked down"))
-    rc, envs = sh("for f in $(rg --files -g '.env' -g '.env.production' "
-                  f"{PROSPECTOR} {HOME}/.hermes 2>/dev/null); do "
-                  "m=$(stat -f %Lp $f); [ \"$m\" = 600 ] || echo \"$(basename $(dirname $f))/$(basename $f):$m\"; done",
-                  timeout=20)
-    loose = [x for x in envs.splitlines() if x.strip()]
-    out.append(row("secrets", "Real .env files not mode 600", str(len(loose)),
-                   WARN if loose else OK,
-                   "stat -f %Lp over every .env found by rg --files", "; ".join(loose[:5])))
     out.append(row("gap", "Credential age or last-rotation date", "0 probes", UNK,
                    "recon over all estate probes: none reads a credential timestamp",
                    "An auditor asks 'when was this last rotated?' and nothing here can answer, for any key."))
@@ -401,7 +396,7 @@ CHECKS = [c_hooks, c_guards, c_skills_mcp, c_sessions, c_launchd,
 def collect() -> dict:
     t0 = time.time()
     rows: list[dict] = []
-    with futures.ThreadPoolExecutor(max_workers=len(CHECKS)) as ex:
+    with futures.ThreadPoolExecutor(max_workers=max(8, len(CHECKS))) as ex:
         fut = {ex.submit(fn): fn.__name__ for fn in CHECKS}
         for f in futures.as_completed(fut, timeout=90):
             try:
@@ -460,6 +455,13 @@ def c_pipeline() -> list[dict]:
                    "that reads main after a write and REVERTS. Bad code reaches main first and is "
                    "removed afterwards. An auditor treats that as a compensating control with a "
                    "window, not as a preventive one."))
+    return out
+
+
+def c_pipeline_ci() -> list[dict]:
+    """The network half of the pipeline: CI outcomes, open PRs, test floor, deploys."""
+    out: list[dict] = []
+    R = str(PROSPECTOR)
     rc, runs = sh("gh run list --limit 40 --json workflowName,conclusion 2>/dev/null", cwd=R, timeout=25)
     try:
         rr = json.loads(runs)
@@ -512,6 +514,21 @@ def c_pipeline() -> list[dict]:
 
 
 CHECKS.append(c_pipeline)
+CHECKS.append(c_pipeline_ci)
+
+
+def c_envfiles() -> list[dict]:
+    rc, envs = sh("for f in $(rg --files -g '.env' -g '.env.production' "
+                  f"{PROSPECTOR} {HOME}/.hermes 2>/dev/null); do "
+                  "m=$(stat -f %Lp $f); [ \"$m\" = 600 ] || echo \"$(basename $(dirname $f))/$(basename $f):$m\"; done",
+                  timeout=20)
+    loose = [x for x in envs.splitlines() if x.strip()]
+    return [row("secrets", "Real .env files not mode 600", str(len(loose)),
+                WARN if loose else OK,
+                "stat -f %Lp over every .env found by rg --files", "; ".join(loose[:5]))]
+
+
+CHECKS.append(c_envfiles)
 
 # ---------------------------------------------------------------- render
 

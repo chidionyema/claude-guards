@@ -36,6 +36,7 @@ import collections
 import html
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -918,9 +919,82 @@ def collect_backup() -> list[Row]:
     return rows
 
 
+
+def collect_founder_requests() -> list[Row]:
+    """LAW 18: every request the founder made, and whether a command closed it.
+
+    His words, 2026-08-21: "add law every founder request/pront should be a trackd iten in board".
+
+    Capture was never the gap. directive-capture.py catches the prompt on UserPromptSubmit and
+    prompt-ledger.py catches the rest on Stop, including the ones he types mid-turn. What nothing
+    read onto this page was the STATE: collect_founder_friction above only surfaces a message that
+    matches a FRICTION keyword, so a plain instruction with no complaint word in it was captured
+    and then invisible.
+
+    A row here is closed only when prompt-ledger ran its acceptance criteria and every one exited
+    0. No agent can mark one done by saying so, which is why this collector reads status and never
+    counts a prompt as handled because a session claimed it was.
+    """
+    state = os.path.join(HOME, ".claude", "state", "prompt-ledger")
+    tool = os.path.join(SCRIPTS, "prompt-ledger.py")
+    try:
+        ledgers = [os.path.join(state, f) for f in os.listdir(state) if f.endswith(".jsonl")]
+    except OSError as e:
+        return [_unknown("Your requests, closed with proof", f"no ledger dir: {e}", f"ls {state}")]
+    if not ledgers:
+        return [_unknown("Your requests, closed with proof", "no ledger written yet",
+                         f"ls {state}")]
+    ledgers.sort(key=lambda f: -os.path.getmtime(f))
+    # Bounded on purpose, and the drop is REPORTED below rather than swallowed. A silent top-N is
+    # how a partial count reads as "everything".
+    dropped = max(0, len(ledgers) - 8)
+    ledgers = ledgers[:8]
+
+    total = done = 0
+    open_rows: list[tuple[str, str, str]] = []          # (ts, id, text)
+    failed: list[str] = []
+    for led in ledgers:
+        cmd = ["/usr/local/bin/python3", tool, "--ledger", led, "--list", "all"]
+        rc, out, err = sh(cmd, 180)
+        if rc != 0 or not out.strip():
+            failed.append(f"{os.path.basename(led)}: {err.strip()[:60] or rc}")
+            continue
+        for line in out.splitlines():
+            m = re.match(r"\[(.)\] (\S+) (\S+) (.*)$", line)
+            if not m:
+                continue
+            mark, rid, ts, text = m.groups()
+            total += 1
+            if mark == "x":
+                done += 1
+            elif mark == " ":
+                open_rows.append((ts, rid, text))
+
+    if failed and not total:
+        return [_unknown("Your requests, closed with proof", "; ".join(failed)[:200],
+                         f"{tool} --ledger <f> --list all")]
+
+    opened = len(open_rows)
+    pct = f"{done / total * 100:.0f}%" if total else "0%"
+    rows = [Row(BAD if (total and not done) else (WARN if opened else GOOD),
+                "Your requests, closed with proof",
+                f"{done} of {total} closed ({pct})",
+                f"{opened} still open across {len(ledgers)} project ledgers"
+                + (f"; {dropped} older ledgers not read" if dropped else "")
+                + ("; " + "; ".join(failed) if failed else ""),
+                f"{tool} --project-dir ~/.claude/projects/<slug> --list open")]
+
+    open_rows.sort(reverse=True)
+    for ts, rid, text in open_rows[:6]:
+        rows.append(Row(WARN, f"— open since {ts}", text[:110],
+                        f"{rid} · close it: {os.path.basename(tool)} --verify {rid}"))
+    return rows
+
+
 COLLECTORS = [
     ("Money", collect_spend),
     ("Can we get the data back?", collect_backup),
+    ("Your requests, closed with proof", collect_founder_requests),
     ("What you said, and whether it landed", collect_founder_friction),
     ("Work in flight", collect_prs),
     ("What is broken", collect_estate_checks),
