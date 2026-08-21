@@ -862,8 +862,65 @@ def collect_time_and_mistakes() -> list[Row]:
     return rows
 
 
+def collect_backup() -> list[Row]:
+    """Can we get the data back? Not "did a backup run" -- the question one step past it.
+
+    Added 2026-08-21 on the founder's instruction: "I checked the console and the founder
+    board. Neither shows it. we need this". The offsite backup had been copying the spend
+    ledger to R2 since 2026-07-31 and its only output was store/offsite_backup.log, which
+    nothing read. It could have stopped for a week and the first sign would have been a
+    failed restore.
+
+    Two rows, because "a copy exists" and "the copy comes back" are different claims and the
+    second is the one that matters. The restore row names the exact command, so the answer to
+    "what do I type at 4am" is on the board rather than in somebody's head.
+    """
+    py = os.path.join(PROSPECTOR, ".venv", "bin", "python")
+    script = os.path.join(PROSPECTOR, "scripts", "backup_store.py")
+    cmd = [py, script, "--money-state"]
+    rc, out, err = sh(cmd, 180)
+    if rc != 0 or not out.strip():
+        return [_unknown("Offsite copy of the money files",
+                         err.strip()[:200] or f"exit {rc}", " ".join(cmd))]
+    try:
+        state = json.loads(out)
+    except json.JSONDecodeError as e:
+        return [_unknown("Offsite copy of the money files",
+                         f"--money-state printed no JSON: {e}", " ".join(cmd))]
+
+    rows = []
+    # 30 hours, not 24. The writer runs on an 86400s timer (deploy/engine/supervisord.conf),
+    # so a 24h ceiling against a 24h period flickers red on ordinary drift and teaches
+    # everyone to ignore the row. 30h still catches a MISSED RUN, which reaches 48h.
+    for label, name in (("ledger", "Spend ledger, offsite"), ("db", "Catalogue database, offsite")):
+        rec = state.get(label)
+        if not rec:
+            rows.append(Row(BAD, name, "NO COPY IN THE BUCKET",
+                            f"nothing under {label}/ in {state.get('bucket')}",
+                            " ".join(cmd)))
+            continue
+        age, mb = rec["age_h"], rec["bytes"] / 1_000_000
+        st = GOOD if age <= 30 else BAD
+        rows.append(Row(st, name, f"{mb:,.0f} MB, {age:.1f}h old",
+                        rec["key"] + ("" if st == GOOD else "  -- a run was missed"),
+                        " ".join(cmd)))
+
+    restore = f"{py} {script} --restore-money <dir>"
+    if state.get("complete"):
+        rows.append(Row(GOOD, "Can we get it back?", "yes -- one command",
+                        "verifies the download against R2's Content-Length and the gzip CRC "
+                        "written at compression time, so a short transfer cannot pass",
+                        restore))
+    else:
+        rows.append(Row(BAD, "Can we get it back?", "NOT WHOLE",
+                        "one of the two money files has no copy, so a restore cannot bring "
+                        "the engine up complete", restore))
+    return rows
+
+
 COLLECTORS = [
     ("Money", collect_spend),
+    ("Can we get the data back?", collect_backup),
     ("What you said, and whether it landed", collect_founder_friction),
     ("Work in flight", collect_prs),
     ("What is broken", collect_estate_checks),
