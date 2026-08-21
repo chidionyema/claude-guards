@@ -50,7 +50,10 @@ BOUNDED_RE = re.compile(r"\b(timeout|gtimeout)\s+[\d.]+[smhd]?\b")
 
 # `grep -r`, `-R`, or a combined cluster like `-rn` / `-rIl`. Matches the flag cluster, so
 # `--include=` and friends do not accidentally satisfy it.
-RECURSIVE_GREP_RE = re.compile(r"\bgrep\b[^|;&]*?\s-[A-Za-z]*[rR][A-Za-z]*\b")
+# The gap must not cross a NEWLINE. It did until 2026-08-21, and the class `[^|;&]`
+# does not exclude one, so a `grep -c` on one line and an unrelated `rm -rf` on the
+# next matched as one recursive grep -- a refusal that named a command nobody wrote.
+RECURSIVE_GREP_RE = re.compile(r"\bgrep\b[^|;&\r\n]*?\s-[A-Za-z]*[rR][A-Za-z]*\b")
 PRUNED_RE = re.compile(r"--exclude-dir|--exclude=|\bfind\b.*-prune")
 
 # Harnesses whose documented failure mode is a process that never exits.
@@ -108,6 +111,10 @@ def check(cmd: str) -> int:
 #: A hook that nothing tests looks identical, from inside a session, to a hook that works: it
 #: fails OPEN, the harness logs it, and the turn proceeds. That is why this exists.
 SELFTEST_CASES: list[tuple[str, int]] = [
+    # a later line's own -r flag is not this grep's flag (2026-08-21)
+    ("grep -c '^FAIL' /tmp/e1\nrm -rf /tmp/scratch", 0),
+    ("grep -n foo file.py\ncp -r a b", 0),
+    ("grep -rn foo .\nrm -rf /tmp/scratch", 2),
     # Rule 1: unbounded recursive grep.
     ("grep -r TODO .", 2),
     ("grep -R TODO .", 2),

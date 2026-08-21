@@ -214,6 +214,9 @@ def _deadline(seconds: int = 5) -> None:
 
 
 OBSERVE = Path.home() / ".claude" / "state" / "close-guard-observe.jsonl"
+_IN_SELFTEST = False   # the selftest calls handle(), which calls observe(); without this
+                       # flag its fixtures land in the production log. 8 of the first 12
+                       # lines were selftest artifacts, which made the log unreadable.
 
 
 def settle(path: Path, max_wait: float = 1.2, quiet: float = 0.15) -> None:
@@ -249,6 +252,8 @@ def settle(path: Path, max_wait: float = 1.2, quiet: float = 0.15) -> None:
 
 def observe(path: Path, session: str) -> None:
     """Record what the hook would have graded before and after waiting. Never raises."""
+    if _IN_SELFTEST:
+        return
     try:
         import time
         t0 = time.time()
@@ -310,7 +315,29 @@ def handle(payload: dict) -> int:
     return 2
 
 
+def _check_observe_is_silent_in_selftest(tmpdir, ck):
+    """observe() must write NOTHING while the selftest runs -- see _IN_SELFTEST."""
+    global OBSERVE
+    saved, probe = OBSERVE, Path(tmpdir) / "observe-probe.jsonl"
+    OBSERVE = probe
+    try:
+        t = Path(tmpdir) / "t.jsonl"
+        t.write_text(json.dumps({"type": "assistant", "message": {
+            "content": [{"type": "text", "text": "no marker here"}]}}) + "\n")
+        observe(t, "selftest")
+        ck("observe writes nothing during selftest", not probe.exists())
+        global _IN_SELFTEST
+        _IN_SELFTEST = False
+        observe(t, "selftest")
+        ck("observe DOES write when not in selftest", probe.exists())
+        _IN_SELFTEST = True
+    finally:
+        OBSERVE = saved
+
+
 def selftest() -> int:
+    global _IN_SELFTEST
+    _IN_SELFTEST = True
     c = []
 
     def ck(name, cond, extra=None):
@@ -436,6 +463,9 @@ def selftest() -> int:
        has_receipt("DONE: it landed\n\nwhat | n\nmerged | 4"))
     ck("a borderless two-column table is a receipt",
        has_receipt("DONE:\n\nlane | limit\nbuild | 12"))
+
+    with tempfile.TemporaryDirectory() as d3:
+        _check_observe_is_silent_in_selftest(d3, ck)
 
     ck("the marker report names the three",
        all(m in report("marker", "default") for m in MARKERS))
