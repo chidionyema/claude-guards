@@ -132,6 +132,21 @@ def collect_estate_checks() -> list[Row]:
     return rows
 
 
+def classify_checks(checks: list) -> tuple[list[str], int]:
+    """Split a PR's checks into (names that really failed, how many are still running).
+
+    A check still running reports conclusion "" on a CheckRun and null on a StatusContext,
+    NEITHER of which is a failure. Measured 2026-08-21 on PR #557: `changes` was QUEUED and
+    `keep` was IN_PROGRESS, both with conclusion "", and the first draft of this board printed
+    "red: changes, keep". A board that cries wolf about the founder's own pipeline is worse than
+    no board -- it is the same defect this session had just fixed in the estate auditor.
+    """
+    done = [c for c in checks if (c.get("conclusion") or "")]
+    red = sorted({c.get("name") or c.get("context") or "?" for c in done
+                  if c["conclusion"] not in ("SUCCESS", "NEUTRAL", "SKIPPED")})
+    return red, len(checks) - len(done)
+
+
 def collect_prs() -> list[Row]:
     """What is in flight. A PR nobody can merge is the pipeline stopped (LAW 12)."""
     cmd = ["gh", "pr", "list", "--repo", "chidionyema/prospector", "--limit", "30",
@@ -148,15 +163,7 @@ def collect_prs() -> list[Row]:
     now = time.time()
     for pr in prs:
         checks = pr.get("statusCheckRollup") or []
-        # A check still running reports conclusion "" (a CheckRun) or null (a StatusContext),
-        # NOT a failure. Grading the empty string as red is how a board tells the founder his PR
-        # is broken while CI is still thinking about it -- a false alarm on the one number he
-        # opens the page for.
-        def _done(c):
-            return (c.get("conclusion") or "") not in ("",)
-        red = sorted({c.get("name") or c.get("context") or "?" for c in checks
-                      if _done(c) and c["conclusion"] not in ("SUCCESS", "NEUTRAL", "SKIPPED")})
-        pending = [c for c in checks if not _done(c)]
+        red, pending = classify_checks(checks)
         try:
             age_h = (now - time.mktime(time.strptime(pr["createdAt"], "%Y-%m-%dT%H:%M:%SZ"))
                      + time.timezone) / 3600
@@ -166,7 +173,7 @@ def collect_prs() -> list[Row]:
         state = BAD if (red or conflicting) else (WARN if pending else GOOD)
         what = ("needs a rebase" if conflicting else
                 f"red: {', '.join(red)}" if red else
-                f"{len(pending)} check(s) still running" if pending else "green, mergeable")
+                f"{pending} check(s) still running" if pending else "green, mergeable")
         rows.append(Row(state, f"PR #{pr['number']} — {pr['title'][:58]}", what,
                         f"open {age_h:.0f}h", f"gh pr view {pr['number']}"))
     return rows
@@ -377,6 +384,19 @@ def selftest() -> int:
     check("a raising collector reports UNKNOWN", rows[0]["state"] == UNKNOWN)
     check("a raising collector is not counted as good", b["unknown"] == 1 and b["bad"] == 0)
     check("the reason survives", "probe is dead" in rows[0]["detail"])
+
+    # A QUEUED or IN_PROGRESS check is not a red check. This is graded directly because the
+    # first draft got it wrong on a live PR.
+    red, pending = classify_checks([
+        {"name": "changes", "status": "QUEUED", "conclusion": ""},
+        {"name": "keep", "status": "IN_PROGRESS", "conclusion": ""},
+        {"name": "guard", "status": "COMPLETED", "conclusion": "SUCCESS"},
+        {"context": "legacy", "conclusion": None},
+        {"name": "python", "status": "COMPLETED", "conclusion": "FAILURE"},
+        {"name": "skipped-lane", "status": "COMPLETED", "conclusion": "SKIPPED"},
+    ])
+    check("a running check is not reported red", red == ["python"])
+    check("a running check is counted as pending", pending == 3)
 
     # RULE 3: every row carries when it was measured.
     check("rows are timestamped", all(r["measured_at"] > 0
