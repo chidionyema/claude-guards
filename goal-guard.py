@@ -335,6 +335,20 @@ def selftest() -> int:
     ck("the walk-back names the last move", "LAST MOVE" in again)
     ck("every firing is written to the ledger",
        LEDGER.exists() and LEDGER.read_text().count("goal_drift") >= 2)
+    ck("the walk-back says a long read-only run can be CORRECT (peer edge case 1)",
+       "LAW 2" in again and "not an accusation" in again)
+    ck("the walk-back forbids a state change made only to reset the counter",
+       "substitution LAW 1 exists to kill" in again)
+
+    print("pruning -- ~190 sessions a day, one file each")
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    old_f, new_f = STATE_DIR / "stale.json", STATE_DIR / "fresh.json"
+    old_f.write_text("{}")
+    new_f.write_text("{}")
+    os.utime(old_f, (time.time() - 30 * 86400,) * 2)
+    prune(days=7)
+    ck("prune removes a state file older than the window", not old_f.exists())
+    ck("prune keeps a fresh one", new_f.exists())
 
     print("lanes")
     LANES_FILE.write_text(json.dumps({"lanes": {"tight": {"readonly_run_limit": 2}}}))
