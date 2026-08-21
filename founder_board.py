@@ -247,7 +247,10 @@ def collect_founder_decisions() -> list[Row]:
     rc, out, _ = sh(cmd, 60)
     if rc != 0:
         return [_unknown("Waiting on the founder", f"exit {rc}", " ".join(cmd))]
-    qs = [l for l in out.splitlines() if l.startswith("| Q") and "---" not in l]
+    # `| Q | Question | ...` is the TABLE HEADER, not a question. Counting it made the board say
+    # 5 rulings outstanding when there were 4, and printed the word "Question" as the first one.
+    qs = [l for l in out.splitlines()
+          if l.startswith("| Q") and "---" not in l and l.split("|")[1].strip() != "Q"]
     return [Row(WARN if qs else GOOD, "Waiting on a founder ruling", str(len(qs)),
                 "; ".join(l.split("|")[2].strip()[:70] for l in qs[:4]), " ".join(cmd))]
 
