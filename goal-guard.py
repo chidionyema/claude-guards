@@ -41,6 +41,8 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
+import re
 import sys
 import time
 from pathlib import Path
@@ -57,6 +59,10 @@ LEDGER = HOME / ".claude" / "state" / "ledger.jsonl"
 DEFAULT_LANE = {
     "goal_required": False,
     "readonly_run_limit": 25,
+    #: The THIRD execution of one target. LAW 9: "Two turns without progress means stop and
+    #: change approach. Not a third attempt at the same thing with a better flag." Three is
+    #: the law's own number, not a tuning choice; the ledger will say whether it holds.
+    "same_target_limit": 3,
     #: `research_budget_calls` WAS here and was deleted 2026-08-21 without ever being enforced.
     #: It is `readonly_run_limit` under a second name. That field does NOT count consecutive
     #: calls -- classify() returns UNKNOWN for anything that is neither, and UNKNOWN moves
@@ -123,6 +129,73 @@ def classify(tool: str, payload: dict) -> str:
            for v in BASH_READS):
         return "READ"
     return "UNKNOWN"
+
+
+#: Runners whose TARGET is the next argument, so `pytest tests/a.py` and `pytest tests/b.py`
+#: are two different targets rather than three attempts at "pytest".
+_RUNNERS = ("python3", "python", "pytest", "node", "npx", "bash", "sh", "ruff", "cargo",
+            "make", "go", "npm", "pnpm", "yarn", "uv", "poetry")
+_SCRIPT = re.compile(r"[\w./-]+\.(?:py|sh|ts|js|mjs)\b")
+
+
+def exec_target(cmd: str) -> str:
+    """The thing a shell command RUNS, normalised, or "" if it runs nothing.
+
+    Why executions and not edits. The rabbit hole this catches is LAW 9's own worked example:
+    a benchmark written, run, rewritten, run, rewritten, run -- three attempts at one number
+    the machine could not give. Every one of those turns contains a WRITE, so `run` resets on
+    each and the read-only counter above scores ZERO on the exact failure it was built for.
+    That counter grades a proxy. The count of times one target was EXECUTED grades the thing.
+
+    Normalised to a BASENAME because this estate runs the same script from many worktrees, and
+    three attempts split across three paths must still read as three attempts at one target.
+    """
+    cmd = (cmd or "").strip()
+    if not cmd:
+        return ""
+    # Take the last segment of a pipeline: `cat x | python3 y.py` runs y.py.
+    seg = cmd.split("|")[-1].strip()
+    words = [w for w in seg.split() if not w.startswith("-")]
+    if not words:
+        return ""
+    head = pathlib.PurePath(words[0]).name
+    m = _SCRIPT.search(seg)
+    if m:
+        return pathlib.PurePath(m.group(0)).name
+    if head in _RUNNERS and len(words) > 1:
+        return f"{head} {pathlib.PurePath(words[1]).name}"
+    if head in _RUNNERS:
+        return head
+    return ""
+
+
+def replan(target: str, n: int, st: dict, lane_name: str) -> str:
+    """Thinking about thinking: a forced re-plan at the third attempt on one target.
+
+    Founder, 2026-08-21: "also need donethig to help with rabbit holes, being nore surgical,
+    nilitary precision, thinkig about thinkgin".
+
+    It STEERS rather than refuses. A third attempt is sometimes right, and a guard that blocks
+    it would stop real work; what is never right is a third attempt made without noticing it is
+    the third. So this names the count, and asks for the one decision LAW 9 requires.
+    """
+    goal = st.get("goal") or "(none on disk -- goal-guard.py --set-goal '...')"
+    return (
+        f"[goal-guard/{lane_name}] THIS IS ATTEMPT {n} AT THE SAME TARGET: {target}\n"
+        f"  GOAL  {goal}\n"
+        f"  LAW 9: two turns without progress means stop and CHANGE APPROACH -- not a third\n"
+        f"  attempt at the same thing with a better flag.\n"
+        f"  Answer these three before the next call, in one line each. This is the whole of\n"
+        f"  the check; it is not a refusal, and if the answers are good, carry on.\n"
+        f"    1. WHAT DID ATTEMPTS 1..{n - 1} BUY? A fact, or nothing? If nothing, the route is\n"
+        f"       wrong, not the flags.\n"
+        f"    2. DOES THIS MOVE THE GOAL LINE ABOVE? Name which word of it moves.\n"
+        f"    3. IS THIS NUMBER OBTAINABLE HERE AT ALL? Some ground is not worth measuring,\n"
+        f"       and saying so IS the answer -- report it unobtainable, with the reason.\n"
+        f"  Then pick ONE: a NAMED different route, a ticket with a number, or unobtainable.\n"
+        f"  Surgical means the smallest diff that fixes it; precision means knowing which of\n"
+        f"  those three you are doing before you spend the call, not after."
+    )
 
 
 def state_path(session: str) -> Path:
@@ -225,6 +298,23 @@ def handle(payload: dict) -> int:
     elif kind == "READ":
         st["run"] = st.get("run", 0) + 1
 
+    # Same-target attempts. Counted for every Bash execution regardless of `kind`, because a
+    # script run is usually classified UNKNOWN and UNKNOWN moves nothing above.
+    target_msg = ""
+    if tool == "Bash":
+        tgt = exec_target((payload.get("tool_input") or {}).get("command", ""))
+        if tgt:
+            targets = st.setdefault("targets", {})
+            targets[tgt] = targets.get(tgt, 0) + 1
+            n = targets[tgt]
+            tlimit = int(lane.get("same_target_limit") or 0)
+            # Fire at the limit, then every limit after it, so a long legitimate loop is
+            # reminded rather than nagged on every call.
+            if tlimit and n >= tlimit and (n - tlimit) % tlimit == 0:
+                target_msg = replan(tgt, n, st, lane_name)
+                ledger({"t": int(time.time()), "kind": "same_target", "session": session[:12],
+                        "lane": lane_name, "target": tgt, "n": n, "limit": tlimit})
+
     limit = int(lane.get("readonly_run_limit") or 0)
     msg = ""
     # Fire at the limit, then every half-limit past it. Firing on every call beyond the
@@ -237,8 +327,9 @@ def handle(payload: dict) -> int:
                 "has_goal": bool(st.get("goal"))})
 
     write_state(session, st)
-    if msg:
-        json.dump({"systemMessage": msg}, sys.stdout)
+    both = "\n".join(m for m in (target_msg, msg) if m)
+    if both:
+        json.dump({"systemMessage": both}, sys.stdout)
     return 0
 
 
