@@ -80,13 +80,29 @@ def _expand(text: str, cmd: str) -> str:
     return text
 
 
+# The Claude config directory became a git repository on 2026-08-21 (the governance repo).
+# Before that it was not one, and `_worktree_root` returning nothing for it was what made a
+# command run from there fall back to REPO. The moment it became a repo, every git lookup this
+# guard makes -- the shared-checkout note, the branch checks at :429/:451/:511/:556 -- started
+# grading ~/.claude instead of the product tree, silently and only for commands run from there.
+# It is configuration for the agent, not a tree anyone opens a pull request against, so it is
+# excluded by identity. Only the directory ITSELF: ~/.claude/worktrees holds real product
+# worktrees and those must still resolve to themselves.
+_CONFIG_DIR = os.path.realpath(os.path.expanduser("~/.claude"))
+
+
+def _is_product_repo(root: str) -> bool:
+    return bool(root) and os.path.realpath(root) != _CONFIG_DIR
+
+
 def _repo_for(cmd: str, session_cwd: str | None) -> str:
     """The worktree this command runs in. Falls back to REPO, so behaviour never gets worse."""
     for m in _LEADING_CD.finditer(cmd):
         root = _worktree_root(_expand(m.group("path").strip("'\""), cmd))
-        if root:
+        if _is_product_repo(root):
             return root
-    return _worktree_root(session_cwd or "") or REPO
+    root = _worktree_root(session_cwd or "")
+    return root if _is_product_repo(root) else REPO
 
 
 def _sh(argv: list[str], timeout: int = 20) -> tuple[int, str]:
@@ -958,6 +974,35 @@ def selftest() -> int:
                   f"        wanted {want}, got {got_repo}")
         else:
             cases.append((cmd, want))
+
+    # ~/.claude BECAME a git repository on 2026-08-21. A command run from there must still
+    # resolve to the product tree. This case is only meaningful while that directory really is
+    # a repo, so the precondition is checked out loud rather than silently making the check
+    # unfailable -- an unfailable check is the estate's most repeated defect class.
+    cfg = os.path.expanduser("~/.claude")
+    if _worktree_root(cfg) != os.path.realpath(cfg):
+        print("  NOTE  ~/.claude is not a git repo here, so the config-dir cases prove nothing")
+    else:
+        for cmd, cwd_, want in [
+            ("gh pr create", cfg, REPO),
+            (f"cd {cfg} && gh pr create", "/nonexistent", REPO),
+            (f"cd {cfg}/ && gh pr create", "/nonexistent", REPO),
+        ]:
+            got = _repo_for(cmd, cwd_)
+            if got != want:
+                bad += 1
+                print(f"  FAIL  config dir: _repo_for({cmd!r}, {cwd_!r}) -> {got}, wanted {want}")
+            else:
+                cases.append((cmd, want))
+    # The exclusion is by IDENTITY, not by prefix. A worktree underneath the config dir is a
+    # real tree and must resolve to itself; excluding the whole subtree would break it.
+    for path_, want_ok in [(cfg, False), (cfg + "/worktrees/wt-a", True),
+                           (cfg + "-other", True), (REPO, True), ("", False)]:
+        if _is_product_repo(path_) != want_ok:
+            bad += 1
+            print(f"  FAIL  _is_product_repo({path_!r}) -> {not want_ok}, wanted {want_ok}")
+        else:
+            cases.append((f"_is_product_repo({path_})", want_ok))
 
     # The shared-checkout note, tested on its decision rather than on the repo's mood.
     for repo, branch, want_note in [
