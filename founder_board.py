@@ -301,9 +301,11 @@ def collect_founder_decisions() -> list[Row]:
 
 def _gh_runs(workflow: str, limit: int = 8) -> list[dict] | None:
     """The last runs of one workflow, or None when the question could not be asked."""
-    rc, out, _ = sh(["gh", "run", "list", "--repo", GH_REPO, "--workflow", workflow,
-                     "--limit", str(limit), "--json",
-                     "databaseId,status,conclusion,createdAt"], 45)
+    cmd = ["gh", "run", "list", "--repo", GH_REPO, "--limit", str(limit),
+           "--json", "databaseId,status,conclusion,createdAt"]
+    if workflow:
+        cmd[4:4] = ["--workflow", workflow]
+    rc, out, _ = sh(cmd, 45)
     if rc != 0:
         return None
     try:
@@ -704,6 +706,65 @@ def collect_action_items() -> list[Row]:
     return rows
 
 
+def collect_time_and_mistakes() -> list[Row]:
+    """How long the work takes, and how often it is wrong. Both, on his page, unasked.
+
+    His words, 2026-08-21: "too nay bugs", "and having to renid to test thorough", "lso he tinne
+    takenninstakes nade etc", "we need it auo".
+
+    The estate had no number for either. Every session reported the thing it shipped and none of
+    them reported how many attempts it took or how long it sat, so "too many bugs" was a feeling
+    he had to defend rather than a figure anyone could check.
+
+    A red CI run is the estate's cheapest, most honest mistake counter: it is a change that was
+    pushed believing it worked and did not.
+    """
+    rows: list[Row] = []
+    runs = _gh_runs("", limit=100)
+    if runs is None:
+        rows.append(_unknown("Pushes that were wrong (last 100 runs)", "gh run list failed",
+                             "gh run list --limit 100"))
+    else:
+        done = [r for r in runs if r.get("conclusion")]
+        bad = [r for r in done if r["conclusion"] in ("failure", "timed_out", "cancelled")]
+        pct = (len(bad) / len(done) * 100) if done else 0.0
+        rows.append(Row(BAD if pct > 25 else (WARN if pct > 10 else GOOD),
+                        "Pushes that were wrong", f"{len(bad)} of {len(done)} CI runs red",
+                        f"{pct:.0f}% of everything pushed did not work first time",
+                        "gh run list --limit 100 --json conclusion"))
+
+    rc, out, err = sh(["gh", "pr", "list", "--repo", GH_REPO, "--state", "merged", "--limit", "20",
+                       "--json", "number,title,createdAt,mergedAt"], 90)
+    if rc != 0 or not out.strip():
+        rows.append(_unknown("How long work sits before it lands", err.strip()[:160] or f"exit {rc}",
+                             "gh pr list --state merged --limit 20"))
+        return rows
+    try:
+        prs = json.loads(out)
+    except json.JSONDecodeError as e:
+        rows.append(_unknown("How long work sits before it lands", f"no JSON: {e}", ""))
+        return rows
+
+    flat = []
+    for pr in prs:
+        a, b = _epoch(pr.get("createdAt")), _epoch(pr.get("mergedAt"))
+        if a and b and b >= a:
+            flat.append((b - a) / 3600.0)
+    flat.sort()
+    if flat:
+        mid = flat[len(flat) // 2]
+        worst = flat[-1]
+        rows.append(Row(BAD if mid > 6 else (WARN if mid > 2 else GOOD),
+                        "How long work sits before it lands",
+                        f"{mid:.1f}h median, {worst:.1f}h worst",
+                        f"over the last {len(flat)} merged pull requests",
+                        "gh pr list --state merged --limit 20 --json createdAt,mergedAt"))
+    else:
+        rows.append(_unknown("How long work sits before it lands", "no merged PR had both dates",
+                             "gh pr list --state merged --limit 20"))
+    return rows
+
+
 COLLECTORS = [
     ("Money", collect_spend),
     ("What you said, and whether it landed", collect_founder_friction),
@@ -713,6 +774,7 @@ COLLECTORS = [
     ("Agent sessions", collect_sessions),
     ("Shipped — is it live?", collect_shipped_to_live),
     ("The guards themselves", collect_hooks_and_guards),
+    ("Time taken, and mistakes made", collect_time_and_mistakes),
     ("Deliverables", collect_action_items),
     ("What was asked for", collect_requirements),
     ("Waiting on you", collect_founder_decisions),
