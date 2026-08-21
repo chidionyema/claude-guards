@@ -148,9 +148,15 @@ def collect_prs() -> list[Row]:
     now = time.time()
     for pr in prs:
         checks = pr.get("statusCheckRollup") or []
-        red = sorted({c.get("name", "?") for c in checks
-                      if c.get("conclusion") not in ("SUCCESS", "NEUTRAL", "SKIPPED", None)})
-        pending = [c for c in checks if c.get("conclusion") is None]
+        # A check still running reports conclusion "" (a CheckRun) or null (a StatusContext),
+        # NOT a failure. Grading the empty string as red is how a board tells the founder his PR
+        # is broken while CI is still thinking about it -- a false alarm on the one number he
+        # opens the page for.
+        def _done(c):
+            return (c.get("conclusion") or "") not in ("",)
+        red = sorted({c.get("name") or c.get("context") or "?" for c in checks
+                      if _done(c) and c["conclusion"] not in ("SUCCESS", "NEUTRAL", "SKIPPED")})
+        pending = [c for c in checks if not _done(c)]
         try:
             age_h = (now - time.mktime(time.strptime(pr["createdAt"], "%Y-%m-%dT%H:%M:%SZ"))
                      + time.timezone) / 3600
