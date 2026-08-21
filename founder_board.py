@@ -754,7 +754,11 @@ def collect_action_items() -> list[Row]:
     and never counted, so the only way to know what was outstanding was to read them.
     """
     cmd = ["/usr/local/bin/python3", os.path.join(SCRIPTS, "action_items.py"), "--json"]
-    rc, out, err = sh(cmd, 300)
+    # 900, not 300. This collector only parses markdown and measures ~10s idle, but the board's
+    # own 12:36 run on 2026-08-21 recorded "timed out after 300s" while the laptop sat at load
+    # 400. A timeout tuned to an idle machine turns a working collector into UNKNOWN exactly
+    # when the founder most wants the number -- and UNKNOWN reads as "nobody counted".
+    rc, out, err = sh(cmd, 900)
     if rc != 0 or not out.strip():
         return [_unknown("Action items outstanding", err.strip()[:200] or f"exit {rc}",
                          " ".join(cmd))]
@@ -910,6 +914,29 @@ def render_text(board: dict) -> str:
     return "\n".join(out)
 
 
+def _atomic_write(path: str, text: str) -> None:
+    """Write text so a reader never sees a half-written file.
+
+    Two reasons, both measured on 2026-08-21. The hourly launchd board run and a
+    session's manual run overlapped for 50 minutes on this laptop, and both had
+    `open(path, "w")`, which TRUNCATES first -- so the founder opening the page
+    mid-write gets a file that is empty or cut in half. And the disk was 100%
+    full, where a direct write dies part-way and destroys the last good board.
+    Writing beside the target and renaming leaves the previous board in place on
+    either failure; os.replace is atomic within one filesystem.
+    """
+    tmp = path + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
 def render_html(board: dict) -> str:
     e = html.escape
     stamp = time.strftime("%Y-%m-%d %H:%M %Z", time.localtime(board["generated_at"]))
@@ -1008,6 +1035,26 @@ def selftest() -> int:
     check("a running check is not reported red", red == ["python"])
     check("a running check is counted as pending", pending == 3)
 
+    # A half-written board is worse than a stale one. Two board processes overlapped
+    # for 50 minutes on 2026-08-21 and the disk was full; `open(path, "w")` truncates
+    # before it writes, so either one leaves the founder looking at a cut-off page.
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        target = os.path.join(td, "board.html")
+        _atomic_write(target, "OLD")
+        _atomic_write(target, "NEW")
+        check("an atomic write replaces the content", open(target).read() == "NEW")
+        failed = False
+        try:
+            _atomic_write(target, {"not": "a string"})  # type: ignore[arg-type]
+        except (TypeError, AttributeError):
+            failed = True
+        check("a failing write raises", failed)
+        check("a failing write leaves the previous board intact",
+              open(target).read() == "NEW")
+        check("a failing write leaves no .tmp behind",
+              not os.path.exists(target + ".tmp"))
+
     # RULE 3: every row carries when it was measured.
     check("rows are timestamped", all(r["measured_at"] > 0
                                       for s in b["sections"] for r in s["rows"]))
@@ -1066,14 +1113,12 @@ def main() -> int:
     board = build()
     try:
         os.makedirs(os.path.dirname(STATE), exist_ok=True)
-        with open(STATE, "w") as fh:
-            json.dump(board, fh, indent=2)
+        _atomic_write(STATE, json.dumps(board, indent=2))
     except OSError as e:
         print(f"[board] could not save state: {e}", file=sys.stderr)
 
     if args.html:
-        with open(args.html, "w") as fh:
-            fh.write(render_html(board))
+        _atomic_write(args.html, render_html(board))
         # stderr, never stdout. `--json --html X` together put this line ABOVE the JSON
         # document, so json.load() on the captured stdout died at "Expecting value:
         # line 1 column 1". Measured 2026-08-21. A status line is not part of the payload.
