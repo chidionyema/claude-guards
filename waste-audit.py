@@ -248,6 +248,8 @@ def scan(paths, since_dt=None):
         "error_usd": 0.0,
         "tool_sum_s": collections.Counter(),
         "tool_calls": collections.Counter(),
+        "hour_sum_s": collections.Counter(),   # (tool, local hour) -> seconds
+        "hour_calls": collections.Counter(),   # (tool, local hour) -> calls
         "tool_slowest": {},
         "clock": collections.Counter(),   # main-thread union seconds by phase
         "sidechain_s": 0.0,
@@ -362,6 +364,9 @@ def scan(paths, since_dt=None):
                             if 0 <= secs <= IDLE_CEILING_S:
                                 A["tool_sum_s"][name] += secs
                                 A["tool_calls"][name] += 1
+                                hr = start.astimezone().hour
+                                A["hour_sum_s"][(name, hr)] += secs
+                                A["hour_calls"][(name, hr)] += 1
                                 if secs > A["tool_slowest"].get(name, (0, ""))[0]:
                                     A["tool_slowest"][name] = (secs, os.path.basename(path))
                                 (side_intervals if is_side else main_intervals["tool"]).append((start, t))
@@ -646,6 +651,22 @@ def main():
         n = A["tool_calls"][name]
         worst = A["tool_slowest"].get(name, (0, ""))[0]
         print(f"    {hms(secs):>8} {n:>6} {secs/n:>6.1f}s {worst:>6.0f}s  {name}")
+    if A["tool_calls"]:
+        busiest = A["tool_calls"].most_common(1)[0][0]
+        rows = [(h, A["hour_calls"][(busiest, h)], A["hour_sum_s"][(busiest, h)])
+                for h in range(24) if A["hour_calls"][(busiest, h)]]
+        if len(rows) > 1:
+            means = sorted(sec / n for _, n, sec in rows)
+            base = means[len(means) // 2]
+            print()
+            print(f"  {busiest} call time BY HOUR (local) -- a slow hour is the machine, not the work.")
+            print(f"    {'hour':>5} {'calls':>6} {'mean':>7}   vs median hour")
+            for h, n, sec in rows:
+                mean = sec / n
+                mark = "" if base <= 0 else f"  {mean / base:.1f}x"
+                print(f"    {h:02d}:00 {n:>6} {mean:>6.1f}s {mark}")
+            print(f"    median hour = {base:.1f}s/call across {len(rows)} hours")
+
     if A["unfinished_tools"]:
         print(f"    ({A['unfinished_tools']} tool calls have no result in the transcript --"
               f" killed, backgrounded or session ended)")
