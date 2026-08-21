@@ -491,7 +491,55 @@ def selftest() -> int:
     # 16. Fails OPEN, like every other probe in this file.
     check("an unreadable ledger reads as empty", load_json(Path("/no/such/file.json")), {})
 
-    total = 44
+    # --- the guard's own blind spot: a worktree whose gitdir no longer exists -------------
+    # This is the defect that made every check above dead code in the session that shipped
+    # them. A peer caught it; the measurement that confirmed it was running the hook with this
+    # session's real cwd and getting exit 0.
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        root = Path(__file__).resolve()
+        # a real repository to point at: this scripts dir is not one, so use the estate's.
+        real = "/Users/chidionyema/Documents/code/prospector"
+        dead = Path(td, "wt-dead")
+        dead.mkdir()
+        Path(dead, ".git").write_text(
+            "gitdir: %s/.git/worktrees/wt-dead\n" % real)
+        check("a dead worktree still names its repository",
+              repo_root_from_broken_worktree(str(dead)),
+              real if git(["rev-parse", "--git-dir"], real) is not None else None)
+
+        junk = Path(td, "junk"); junk.mkdir()
+        Path(junk, ".git").write_text("this is not a gitdir pointer\n")
+        check("a .git file that is not a pointer resolves to nothing",
+              repo_root_from_broken_worktree(str(junk)), None)
+
+        bare = Path(td, "bare"); bare.mkdir()
+        check("a directory with no .git at all resolves to nothing",
+              repo_root_from_broken_worktree(str(bare)), None)
+
+        nowhere = Path(td, "nowhere"); nowhere.mkdir()
+        Path(nowhere, ".git").write_text(
+            "gitdir: %s/not-a-repo/.git/worktrees/x\n" % td)
+        check("a pointer into a non-repository resolves to nothing",
+              repo_root_from_broken_worktree(str(nowhere)), None)
+
+    # --- the main-is-red bound ------------------------------------------------------------
+    # Never stop a session over a failure it inherited from main. Self-clearing: the moment
+    # main goes green the set is empty and every finding comes straight back.
+    inherited = [{"pr": 1, "verdict": "RED", "failing": ["python"]}]
+    check("a failure that is also red on main is not this session's to fix",
+          drop_inherited(inherited, {"python"}), [])
+    check("...but the same finding stands when main is green",
+          drop_inherited(inherited, set()), inherited)
+    mixed = [{"pr": 2, "verdict": "RED", "failing": ["python", "console"]}]
+    check("a finding keeps only the checks main is NOT failing",
+          [f["failing"] for f in drop_inherited(mixed, {"python"})], [["console"]])
+    conflicted = [{"pr": 3, "verdict": "CONFLICT", "failing": ["python"]}]
+    check("a CONFLICT is never inherited -- only its owner can resolve it",
+          drop_inherited(conflicted, {"python"}), conflicted)
+    check("an empty finding list survives the bound", drop_inherited([], {"python"}), [])
+
+    total = 53
     if failures:
         print(f"branch-pr-guard selftest: {len(failures)}/{total} FAILED")
         print("\n".join(failures))
