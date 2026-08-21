@@ -42,7 +42,6 @@ import re
 import shutil
 import subprocess
 import sys
-import time
 
 REPO = "/Users/chidionyema/Documents/code/prospector"
 
@@ -204,77 +203,16 @@ def rule_no_verify(cmd: str) -> str | None:
 _LOCK_RE = re.compile(r"\brm\b[^|;&]*index\.lock")
 
 
-#: The path inside that command, so staleness is measured rather than assumed.
-_LOCK_PATH_RE = re.compile(r"(\S*index\.lock)")
-
-#: A git operation on this estate finishes in under 5s (`git status --porcelain` measured at
-#: 4.775s against a 252,038-file tree on 2026-08-21). Three minutes with no write means the
-#: writer is not coming back.
-_LOCK_STALE_S = 180
-
-
-def _lock_state(path: str) -> str:
-    """absent | fresh | held | stale | unknown.
-
-    Split out from the rule so the selftest can drive it with real files, and so the rule is
-    provable without depending on whatever git happens to be doing when the selftest runs.
-    """
-    try:
-        age = time.time() - os.path.getmtime(path)
-    except OSError:
-        return "absent"
-    if age < _LOCK_STALE_S:
-        return "fresh"
-    try:
-        p = subprocess.run(["lsof", "-t", "--", path],
-                           capture_output=True, text=True, timeout=5)
-    except Exception:
-        return "unknown"
-    return "held" if p.stdout.strip() else "stale"
-
-
 def rule_index_lock(cmd: str) -> str | None:
-    """Block a live lock. Allow a provably dead one.
-
-    The old rule blocked every removal and told the session to "queue and wait". Nothing
-    ever clears an orphaned index.lock, so that instruction was a deadlock: any git command
-    killed by a timeout -- the Bash tool caps at 120s -- leaves the file behind, and every
-    session on the machine then fails to commit with "Another git process seems to be
-    running". Measured twice on 2026-08-21, locks at 18:36 and 19:20, both 0 bytes, neither
-    held by any process.
-
-    `stale` is the only state that unblocks, and it needs both angles to agree: older than
-    _LOCK_STALE_S, AND no open file handle. Every other state still blocks, including
-    `absent` -- a file that is not there this millisecond can be there the next, and the
-    removal would then eat a live lock.
-    """
+    """That lock is another session's live commit, not litter."""
     if "lock-removal-intended" in cmd:
         return None
-    if not _LOCK_RE.search(cmd):
-        return None
-    m = _LOCK_PATH_RE.search(cmd)
-    state = "unknown"
-    if m:
-        path = m.group(1)
-        if not os.path.isabs(path):
-            path = os.path.join(str(_ACTIVE_REPO or os.getcwd()), path)
-        state = _lock_state(path)
-    if state == "stale":
-        return None
-    detail = {
-        "fresh": "It was written less than %ds ago, so a commit is in progress."
-                 % _LOCK_STALE_S,
-        "held": "A live process still holds an open handle on it.",
-        "absent": "Nothing is at that path right now, so removing it could race a lock "
-                  "created a moment later.",
-        "unknown": "Could not determine whether anything holds it.",
-    }[state]
-    return ("BLOCKED by rule-guard: removing .git/index.lock.\n"
-            "Sessions share one index here. " + detail + "\n"
-            "A lock older than %ds with NO open handle is allowed through automatically; "
-            "you do not need the marker for that case. Check it yourself with:\n"
-            "  ls -l <path> && lsof <path>" % _LOCK_STALE_S
-            + _escape("lock-removal-intended"))
+    if _LOCK_RE.search(cmd):
+        return ("BLOCKED by rule-guard: removing .git/index.lock.\n"
+                "Sessions share one index here. That lock is another session's commit in "
+                "progress; deleting it corrupts their commit. Queue and wait."
+                + _escape("lock-removal-intended"))
+    return None
 
 
 _DIFF_RE = re.compile(r"\bgit\s+diff\b([^|;&]*)")
@@ -1204,44 +1142,6 @@ def selftest() -> int:
         else:
             cases.append((name, True))
     globals()["_busy_runners"] = _real_busy
-
-    # ---- index.lock staleness, driven by REAL files -------------------------------------
-    # No stub. The whole point of the rule is what it decides about a file on disk, so a
-    # mocked answer would prove nothing. Ages are set with os.utime, not by waiting.
-    import tempfile
-    with tempfile.TemporaryDirectory() as td:
-        fresh = os.path.join(td, "fresh-index.lock")
-        stale = os.path.join(td, "stale-index.lock")
-        for f in (fresh, stale):
-            open(f, "w").close()
-        old = time.time() - (_LOCK_STALE_S + 60)
-        os.utime(stale, (old, old))
-        missing = os.path.join(td, "gone-index.lock")
-
-        for name, path, want_block in [
-            # A lock written seconds ago is a live commit. This is the case the rule exists
-            # for and it must never be relaxed.
-            ("lock_fresh_blocks", fresh, True),
-            # Older than the threshold AND unheld: the writer was killed. Blocking here is
-            # the deadlock that wedged this estate twice on 2026-08-21.
-            ("lock_stale_allows", stale, False),
-            # Absent still blocks: it can appear between the check and the rm.
-            ("lock_absent_blocks", missing, True),
-        ]:
-            got = bool(rule_index_lock(f"rm -f {path}"))
-            if got != want_block:
-                bad += 1
-                print(f"  FAIL  {name}: wanted block={want_block}, got {got}")
-            else:
-                cases.append((name, True))
-
-        # The escape marker still wins, on the one state that otherwise blocks hardest.
-        got = bool(rule_index_lock(f"rm -f {fresh}  # lock-removal-intended"))
-        if got:
-            bad += 1
-            print("  FAIL  lock_marker_overrides: marker did not allow a fresh lock")
-        else:
-            cases.append(("lock_marker_overrides", True))
 
     print(f"selftest: {len(cases) - bad}/{len(cases)} passed")
     return 1 if bad else 0
