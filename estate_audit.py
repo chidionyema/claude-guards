@@ -68,7 +68,29 @@ def sh(cmd: str, timeout: int = TIMEOUT, cwd: str | None = None) -> tuple[int, s
         return 125, f"__error__ {type(e).__name__}: {e}"
 
 
+UNMEASURED = ("__timeout__", "__error__")
+
+
 def row(domain: str, title: str, value: str, sev: str, proof: str, detail: str = "") -> dict:
+    """A check that did not get an answer is UNKNOWN. Never OK, and never a number.
+
+    sh() returns a sentinel string instead of raising, which is right -- one dead command
+    must not lose the other forty rows. But the sentinel then flows into whatever the check
+    was building, and the page renders "answers but returns __timeout__" as prose, or worse
+    grades a row CLEAN on a string it never actually received. Both happened on 2026-08-21
+    while the machine sat at load 451.
+
+    Catching it here rather than in fourteen checks is the point: a check added tomorrow
+    inherits the refusal without its author knowing the rule exists.
+    """
+    blob = f"{value} {detail}"
+    if any(s in blob for s in UNMEASURED):
+        why = "the command timed out" if "__timeout__" in blob else "the command errored"
+        clean = re.sub(r"__(?:timeout|error)__[^,.;)]*", "unmeasured", detail).strip()
+        return {"domain": "gap", "title": title, "value": "UNMEASURED",
+                "severity": UNK, "proof": proof,
+                "detail": f"Not graded: {why}, so this row carries no verdict either way. "
+                          f"It is not a pass. {clean}".strip()}
     return {"domain": domain, "title": title, "value": value, "severity": sev,
             "proof": proof, "detail": detail}
 
@@ -195,7 +217,7 @@ def c_sessions() -> list[dict]:
     rc2, s = sh("ls /tmp/cc-socks/*.sock 2>/dev/null | wc -l")
     return [row("sched", "Claude sessions live on this machine right now",
                 f"{s.strip()} sessions / {n.strip()} processes",
-                WARN if int(s.strip() or 0) > 2 else OK,
+                WARN if (s.strip().isdigit() and int(s) > 2) else OK,
                 "ls /tmp/cc-socks/*.sock; pgrep -f claude | wc -l",
                 "Each session bills independently and cannot see the others' work.")]
 
@@ -360,7 +382,8 @@ def c_machine() -> list[dict]:
     for line in top.splitlines():
         parts = line.split(None, 2)
         if len(parts) == 3:
-            hot.append(f"{parts[2].split('/')[-1]} {parts[0]}% CPU / {int(parts[1]) // 1024}MB")
+            rss = int(parts[1]) // 1024 if parts[1].isdigit() else 0
+            hot.append(f"{parts[2].split('/')[-1]} {parts[0]}% CPU / {rss}MB")
     out = [row("machine", "Load average (1 / 5 / 15 min)", f"{l1} / {l5} / {l15}",
                CRIT if float(l15 or 0) > 10 else (WARN if float(l5 or 0) > 4 else OK),
                "uptime",
@@ -669,8 +692,32 @@ def selftest() -> int:
     data = collect()
     if not data["rows"]:
         fails.append("collect() returned no rows")
+
+    # A dead command must never reach the page as a grade. This is the exact defect that put
+    # "CLEAN -- laws injector selftest: __timeout__ after 12s" in front of the founder.
+    for value, detail, claimed in (("__timeout__ after 12s", "", OK),
+                                   ("3", "cached under __timeout__ after 12s", OK),
+                                   ("__error__ ValueError: boom", "", CRIT)):
+        r = row("agent", "probe", value, claimed, "proof", detail)
+        if r["severity"] != UNK:
+            fails.append(f"an unmeasured check rendered as {r['severity']}, not unknown")
+        if any(t in f"{r['value']} {r['detail']}" for t in UNMEASURED):
+            fails.append("the timeout sentinel leaked into a rendered field")
+    for r in data["rows"]:
+        if any(t in f"{r['value']} {r['detail']}" for t in UNMEASURED):
+            fails.append(f"sentinel reached a live row: {r['title']!r}")
     if data["duration_s"] > 60:
-        fails.append(f"build took {data['duration_s']}s -- too slow to schedule")
+        # Two very different faults produce one number, so name which one it was. On
+        # 2026-08-21 the build took 79.5s at load 431 while a commit gate held 7 of 12
+        # cores; the same code takes 21.7s on a quiet machine.
+        try:
+            load1 = os.getloadavg()[0]
+        except OSError:
+            load1 = -1.0
+        cause = ("the machine is saturated" if load1 > 2 * os.cpu_count()
+                 else "the checks themselves are too slow")
+        fails.append(f"build took {data['duration_s']}s -- too slow to schedule "
+                     f"({cause}; 1-min load {load1:.1f} on {os.cpu_count()} cores)")
     for r in data["rows"]:
         for k in ("domain", "title", "value", "severity", "proof"):
             if not r.get(k):
