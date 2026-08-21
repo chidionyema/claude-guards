@@ -950,7 +950,7 @@ def collect_founder_requests() -> list[Row]:
     dropped = max(0, len(ledgers) - 8)
     ledgers = ledgers[:8]
 
-    total = done = 0
+    total = done = cont = 0
     open_rows: list[tuple[str, str, str]] = []          # (ts, id, text)
     failed: list[str] = []
     for led in ledgers:
@@ -965,6 +965,12 @@ def collect_founder_requests() -> list[Row]:
                 continue
             mark, rid, ts, text = m.groups()
             total += 1
+            # A row with the ..cont marker is a FRAGMENT the ledger glued to the message before
+            # it, not a separate ask. Counting fragments as requests turned 1,744 things he said
+            # into 5,422 and would have put a number on his page that is not a number of requests.
+            if text.endswith("  ..cont"):
+                cont += 1
+                continue
             if mark == "x":
                 done += 1
             elif mark == " ":
@@ -975,11 +981,13 @@ def collect_founder_requests() -> list[Row]:
                          f"{tool} --ledger <f> --list all")]
 
     opened = len(open_rows)
-    pct = f"{done / total * 100:.0f}%" if total else "0%"
-    rows = [Row(BAD if (total and not done) else (WARN if opened else GOOD),
+    requests = total - cont
+    pct = f"{done / requests * 100:.0f}%" if requests else "0%"
+    rows = [Row(BAD if (requests and not done) else (WARN if opened else GOOD),
                 "Your requests, closed with proof",
-                f"{done} of {total} closed ({pct})",
-                f"{opened} still open across {len(ledgers)} project ledgers"
+                f"{done} of {requests} closed ({pct})",
+                f"{opened} still open across {len(ledgers)} project ledgers; "
+                f"{cont} continuation fragments folded out of {total} ledger rows"
                 + (f"; {dropped} older ledgers not read" if dropped else "")
                 + ("; " + "; ".join(failed) if failed else ""),
                 f"{tool} --project-dir ~/.claude/projects/<slug> --list open")]
