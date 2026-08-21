@@ -37,7 +37,15 @@ PROJECTS = Path.home() / ".claude" / "projects"
 MAX_TURNS = 40          # founder turns kept verbatim
 MAX_FILES = 40
 MAX_CMDS = 25
-SKIP_PREFIXES = ("<", "[SYSTEM", "Caveat:", "This session is being continued")
+# A "founder turn" is something a person typed. Everything else that arrives on the user
+# channel -- hook feedback, tool denials, system reminders, the compaction preamble -- is
+# machinery talking to the agent, and it buries the real asks if it is kept.
+SKIP_PREFIXES = (
+    "<", "[SYSTEM", "Caveat:", "This session is being continued",
+    "Stop hook feedback", "PreToolUse:", "PostToolUse:", "UserPromptSubmit:",
+    "[Request interrupted", "API Error", "Tool ran without output",
+    "The user doesn't want to proceed", "[Cross-session",
+)
 
 
 def _slug(cwd: str) -> str:
