@@ -37,6 +37,7 @@ import json
 import os
 import subprocess
 import sys
+import datetime as dt
 import time
 
 HOME = os.path.expanduser("~")
@@ -484,11 +485,190 @@ def collect_hooks_and_guards() -> list[Row]:
     return rows
 
 
+# --------------------------------------------------------------------------- founder friction
+
+# Words the founder actually uses when something has gone wrong. Measured off his own messages
+# in this estate's transcripts, never picked from a thesaurus -- an English word that merely
+# SOUNDS negative grades prose rather than frustration (memory:
+# a-guard-that-greps-a-word-also-greps-english). Typos are his, and they are load-bearing: he
+# types fast when he is annoyed, so the misspellings are part of the signal.
+FRICTION = (
+    "fuck", "fucck", "fucing", "fucking", "shit", "wtf",
+    "whats the point", "what's the point", "whats the fucking point",
+    "you keep", "keeps happening", "same nistake", "same mistake",
+    "still not", "not working", "doesnt work", "does not work",
+    "i said", "i told you", "i asked", "asked you",
+    "exhaust", "ehausint", "frustrat", "annoying", "tired of",
+    "sorry you", "sorryyou", "why are you", "why is this",
+    "black box", "blackbox", "ablack box", "black bes",
+    "no progress", "i dont see", "i don't see", "i ont see",
+    "hurry", "asap", "too slow", "the loegr", "longer you take",
+)
+
+
+def _epoch(iso: str | None) -> float:
+    """An ISO timestamp out of a transcript, as epoch seconds. 0.0 when it will not parse."""
+    if not iso:
+        return 0.0
+    try:
+        return dt.datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+    except (ValueError, AttributeError):
+        return 0.0
+
+
+def _ago(epoch: float) -> str:
+    """Epoch seconds -> `21m ago`. `_age` takes an ISO string; transcripts give us numbers."""
+    if not epoch:
+        return "undated"
+    m = int((time.time() - epoch) / 60)
+    return f"{m}m ago" if m < 90 else f"{m // 60}h ago"
+
+
+def _transcripts(max_age_s: float) -> list[tuple[str, float]]:
+    """Every session transcript touched inside the window, newest first."""
+    root = os.path.join(HOME, ".claude", "projects")
+    now, out = time.time(), []
+    for dirpath, _dirs, files in os.walk(root):
+        for f in files:
+            if not f.endswith(".jsonl"):
+                continue
+            path = os.path.join(dirpath, f)
+            try:
+                st = os.stat(path)
+            except OSError:
+                continue
+            if now - st.st_mtime <= max_age_s:
+                out.append((path, st.st_mtime))
+    out.sort(key=lambda t: -t[1])
+    return out
+
+
+def _founder_messages(path: str) -> list[tuple[float, str]]:
+    """(epoch, text) for the messages the FOUNDER actually typed in one transcript.
+
+    Everything else in a `type: user` line is machinery wearing the founder's role: tool
+    results, hook output, system reminders, the compaction preamble. Counting those as his
+    words would report frustration he never expressed, which is the same failure class as a
+    guard that grades a proxy.
+    """
+    out: list[tuple[float, str]] = []
+    try:
+        with open(path, errors="replace") as fh:
+            for line in fh:
+                if '"user"' not in line:
+                    continue
+                try:
+                    ev = json.loads(line)
+                except ValueError:
+                    continue
+                if ev.get("type") != "user" or ev.get("isMeta"):
+                    continue
+                content = (ev.get("message") or {}).get("content")
+                if isinstance(content, list):
+                    text = " ".join(b.get("text", "") for b in content
+                                    if isinstance(b, dict) and b.get("type") == "text")
+                elif isinstance(content, str):
+                    text = content
+                else:
+                    continue                      # a tool_result block is not a founder message
+                text = text.strip()
+                if not text or text.startswith("<") or text.startswith("["):
+                    continue
+                if "<system-reminder>" in text or "Caveat:" in text[:80]:
+                    continue
+                if "[Request interrupted" in text or "This session is being continued" in text:
+                    continue
+                out.append((_epoch(ev.get("timestamp")), text))
+    except OSError:
+        pass
+    return out
+
+
+def collect_founder_friction() -> list[Row]:
+    """What the founder said, and whether anyone acted on it.
+
+    His words, 2026-08-21: "you need o v across the transctips perdiocially to see the
+    founderss frustratios" and "nagaing different agent sessionsis ehausintg". Until this
+    ran, every complaint he made lived in ONE session's window and died there -- the session
+    that heard it either acted or did not, and no other session, and no later instance of the
+    same session after a compaction, ever knew he had said it.
+
+    This reads every transcript on the machine, so a complaint made to any session shows up
+    on his page whether or not that session did anything about it.
+    """
+    files = _transcripts(24 * 3600)
+    if not files:
+        return [_unknown("Your words in the last 24h", "no transcript touched in 24h",
+                         "ls ~/.claude/projects/*/*.jsonl")]
+
+    now = time.time()
+    hits: list[tuple[float, str, str]] = []          # (epoch, session, text)
+    said = 0
+    for path, _mtime in files[:80]:                  # newest 80 transcripts, bounded on purpose
+        session = os.path.basename(os.path.dirname(path))[-12:]
+        for ts, text in _founder_messages(path):
+            if ts and now - ts > 24 * 3600:
+                continue
+            said += 1
+            low = text.lower()
+            if any(w in low for w in FRICTION):
+                hits.append((ts, session, text))
+    hits.sort(key=lambda h: -h[0])
+
+    recent = [h for h in hits if h[0] and now - h[0] <= 6 * 3600]
+    state = BAD if recent else (WARN if hits else GOOD)
+    rows = [Row(state, "Times you had to complain (24h)",
+                f"{len(hits)} of {said} things you said",
+                f"{len(recent)} of them in the last 6 hours" if hits
+                else "nothing in your own words reads as a complaint",
+                "python3 ~/.claude/scripts/founder_board.py --json")]
+
+    for ts, session, text in hits[:5]:
+        one = " ".join(text.split())
+        rows.append(Row(BAD if now - ts <= 6 * 3600 else WARN,
+                        f"— {_ago(ts)}, session {session}",
+                        one[:160] + ("…" if len(one) > 160 else ""),
+                        "said to one session; no other session could see it until this row existed"))
+    return rows
+
+
+def collect_sessions() -> list[Row]:
+    """Every agent session on this machine, on one page.
+
+    His words: "nagaing different agent sessionsis ehausintg" and "the sooner wecan get fouder
+    out of loop the btter". Managing them one at a time is the cost this row removes: what each
+    one was last told, and how long since it did anything.
+    """
+    files = _transcripts(2 * 3600)
+    if not files:
+        return [Row(GOOD, "Agent sessions running", "0", "nothing active in 2 hours",
+                    "ls -lt ~/.claude/projects/*/*.jsonl | head")]
+
+    now = time.time()
+    live, lines = 0, []
+    for path, mtime in files[:20]:
+        idle = (now - mtime) / 60.0
+        if idle <= 30:
+            live += 1
+        session = os.path.basename(os.path.dirname(path))[-12:]
+        last = ""
+        msgs = _founder_messages(path)
+        if msgs:
+            last = " ".join(msgs[-1][1].split())[:90]
+        lines.append(f"{session}: idle {idle:.0f}m — last told: {last or '(nothing typed)'}")
+
+    return [Row(GOOD if live else WARN, "Agent sessions running", str(live),
+                " | ".join(lines[:6]) or "none",
+                "ls -lt ~/.claude/projects/*/*.jsonl | head")]
+
+
 COLLECTORS = [
     ("Money", collect_spend),
+    ("What you said, and whether it landed", collect_founder_friction),
     ("Work in flight", collect_prs),
     ("What is broken", collect_estate_checks),
     ("The machine that runs itself", collect_launchd),
+    ("Agent sessions", collect_sessions),
     ("Shipped — is it live?", collect_shipped_to_live),
     ("The guards themselves", collect_hooks_and_guards),
     ("What was asked for", collect_requirements),
