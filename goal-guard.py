@@ -57,7 +57,12 @@ LEDGER = HOME / ".claude" / "state" / "ledger.jsonl"
 DEFAULT_LANE = {
     "goal_required": False,
     "readonly_run_limit": 25,
-    "research_budget_calls": 0,      # 0 = off. Recon calls allowed before a decision.
+    #: `research_budget_calls` WAS here and was deleted 2026-08-21 without ever being enforced.
+    #: It is `readonly_run_limit` under a second name. That field does NOT count consecutive
+    #: calls -- classify() returns UNKNOWN for anything that is neither, and UNKNOWN moves
+    #: nothing, so `run` only ever resets on a WRITE. It already IS "recon calls allowed before
+    #: a decision". Building a second counter for one signal is PR #426's class: two tested
+    #: implementations, neither removable, racing in production.
     "proactive": False,              # claim an improvement item when idle
     "close_condition": False,        # turn must end DONE:/BLOCKED:
     "note": "starting values; readonly_run_limit is a guess, see the ledger",
