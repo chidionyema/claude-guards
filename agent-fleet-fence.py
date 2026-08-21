@@ -24,8 +24,8 @@ founder just paid for.
 There IS an honest early release, and an agent should use it: when a task-notification says an
 agent has completed, hand its lease back.
 
-    python3 ~/.claude/scripts/agent-fleet-fence.py --release      # one, the oldest
-    python3 ~/.claude/scripts/agent-fleet-fence.py --release-all  # only if you know all are done
+    python3 ~/.claude/scripts/agent-fleet-fence.py --release      # the oldest of YOURS
+    python3 ~/.claude/scripts/agent-fleet-fence.py --release-all  # all of YOURS, none of theirs
     python3 ~/.claude/scripts/agent-fleet-fence.py --status
 
 Prove it: python3 ~/.claude/scripts/agent-fleet-fence.py --selftest
@@ -137,6 +137,32 @@ def selftest():
     out = run(agent)
     if out:
         print(f"FAIL: an expired lease did not free a slot: {out}"); ok = False
+    # A SESSION MAY NEVER RELEASE ANOTHER SESSION'S LEASE. This is graded directly -- the store
+    # is inspected for the OTHER session's file by owner, not by counting how many leases remain,
+    # because a count cannot tell whose was deleted and that is the whole failure.
+    for f in d.glob("*.lease"):
+        f.unlink()
+    _g = {**env, "CLAUDE_SESSION_ID": "s1"}
+    subprocess.run([sys.executable, __file__], input=json.dumps(agent),
+                   capture_output=True, text=True, env=_g)
+    other = {"tool_name": "Agent", "session_id": "s2", "tool_input": {"description": "theirs"}}
+    subprocess.run([sys.executable, __file__], input=json.dumps(other),
+                   capture_output=True, text=True, env={**env, "CLAUDE_SESSION_ID": "s2"})
+
+    def owners():
+        return sorted(json.loads(f.read_text())["session"] for f in d.glob("*.lease"))
+
+    r = subprocess.run([sys.executable, __file__, "--release"], capture_output=True,
+                       text=True, env={**env, "CLAUDE_SESSION_ID": "s2"})
+    if owners() != ["s1"]:
+        print(f"FAIL: --release by s2 left {owners()}, expected only s1's lease"); ok = False
+    # And with no session id it must release NOTHING rather than guess.
+    _blind = {k: v for k, v in env.items() if k != "CLAUDE_SESSION_ID"}
+    subprocess.run([sys.executable, __file__, "--release-all"], capture_output=True,
+                   text=True, env=_blind)
+    if owners() != ["s1"]:
+        print(f"FAIL: --release-all with no session id released s1's lease"); ok = False
+
     print(f"PASS: cap holds at {CAP}, Workflow refused, Bash untouched, leases expire."
           if ok else "SELFTEST FAILED")
     return 0 if ok else 1
@@ -145,18 +171,33 @@ def selftest():
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         sys.exit(selftest())
-    if "--release-all" in sys.argv:
-        n = 0
-        for f in LEASES.glob("*.lease"):
-            f.unlink(missing_ok=True); n += 1
-        print(f"released {n} lease(s)"); sys.exit(0)
-    if "--release" in sys.argv:
-        live = _live()
-        if live:
-            live[-1][0].unlink(missing_ok=True); print("released 1 lease")
-        else:
-            print("no live leases")
-        sys.exit(0)
+    # RELEASE IS SESSION-SCOPED. It did not used to be, and that was a defect that made the
+    # documented advice actively harmful: `_live()` sorts by age ASCENDING, so `live[-1]` is the
+    # OLDEST lease on the machine -- and your own is always the NEWEST. Every session that
+    # followed the docstring and "handed its lease back" therefore deleted somebody else's,
+    # while its own kept counting. Measured 2026-08-21: two leases belonging to another live
+    # session were released this way in one command, and the store said 1/3 while four agents
+    # were running. `--release-all` was worse: it deleted every lease on the machine, and its
+    # own help text said "only if you know all are done", which no session can ever know about
+    # another session's agents.
+    if "--release-all" in sys.argv or "--release" in sys.argv:
+        me = os.environ.get("CLAUDE_SESSION_ID", "")
+        if not me:
+            # Fail SAFE, which here means releasing nothing. Under-counting the fleet is the
+            # failure the founder already paid for.
+            print("refused: CLAUDE_SESSION_ID is not set, so this cannot tell which leases are "
+                  "yours. Releasing nothing. Expired leases are pruned automatically.")
+            sys.exit(1)
+        mine = [(f, age) for f, age in _live()
+                if (json.loads(f.read_text()) if f.exists() else {}).get("session") == me]
+        if not mine:
+            print("no live leases of yours"); sys.exit(0)
+        if "--release-all" in sys.argv:
+            for f, _ in mine:
+                f.unlink(missing_ok=True)
+            print(f"released {len(mine)} lease(s) of yours"); sys.exit(0)
+        mine[-1][0].unlink(missing_ok=True)      # the oldest of MINE
+        print("released 1 lease of yours"); sys.exit(0)
     if "--status" in sys.argv:
         live = _live()
         print(f"{len(live)}/{CAP} leases live")
