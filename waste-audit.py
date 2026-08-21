@@ -143,6 +143,63 @@ def tool_path(inp):
     return None
 
 
+_HOOK_RE = __import__("re").compile(r"PreToolUse:\w+ hook error: \[[^\]]*?([\w.-]+\.(?:py|sh))[^\]]*\]")
+_EXIT_RE = __import__("re").compile(r"Exit code (\d+)")
+
+
+def why(text, tool):
+    """Name the CAUSE of a refusal or failure, from the text the harness wrote.
+
+    A denial and an error both cost a full context re-send, so the only useful
+    question is which mechanism keeps producing them. Our own PreToolUse guards
+    show up here by script name -- a guard that refuses is a guard that bills.
+    """
+    t = (text or "")[:600]
+    m = _HOOK_RE.search(t)
+    if m:
+        return f"guard:{m.group(1)}"
+    if "Command timed out" in t:
+        return "timeout"
+    if "Agent fleet cap" in t:
+        return "agent fleet cap"
+    if "doesn't want to proceed" in t or "user-rejected" in t:
+        return "founder rejected"
+    if "temporarily unavailable" in t or "overloaded" in t.lower():
+        return "model unavailable"
+    if "Auto mode could not evaluate" in t:
+        return "auto mode could not evaluate"
+    # ORDER MATTERS: a stale edit says "not found" too, and the generic branch
+    # below would swallow it. Specific before general, always.
+    if "String to replace not found" in t or "has not been read" in t:
+        return "stale edit"
+    if "requires approval" in t or "permission" in t.lower():
+        return "permission"
+    if "InputValidationError" in t or "validation" in t.lower():
+        return "bad tool input"
+    if "No such file" in t or "not found" in t:
+        return "not found"
+    m = _EXIT_RE.search(t)
+    if m:
+        return f"exit {m.group(1)}"
+    first = t.strip().splitlines()[0] if t.strip() else "?"
+    return first[:52]
+
+
+def cmd_head(inp):
+    """First meaningful word of a shell command, for ranking which commands fail."""
+    if not isinstance(inp, dict):
+        return None
+    c = inp.get("command")
+    if not isinstance(c, str):
+        return None
+    for tok in c.replace("(", " ").split():
+        t = tok.strip("\"'`;|&$")
+        if not t or "=" in t or t in ("cd", "sudo", "timeout", "env", "nohup", "!"):
+            continue
+        return t.split("/")[-1][:24]
+    return None
+
+
 class Session:
     __slots__ = ("sid", "project", "reqs", "usd", "out_usd", "ctx_usd", "turns",
                  "max_resident", "models", "first", "last")
@@ -164,6 +221,11 @@ def scan(paths, since_dt=None):
         "denial_usd": 0.0,
         "denial_out_tok": 0,
         "errors": collections.Counter(),
+        "why_denied": collections.Counter(),
+        "why_denied_usd": collections.Counter(),
+        "why_error": collections.Counter(),
+        "why_error_usd": collections.Counter(),
+        "bad_cmd": collections.Counter(),
         "error_usd": 0.0,
         "tool_sum_s": collections.Counter(),
         "tool_calls": collections.Counter(),
@@ -249,7 +311,8 @@ def scan(paths, since_dt=None):
                     for b in blocks(msg):
                         if b.get("type") == "tool_use" and t:
                             pending[b.get("id")] = (t, b.get("name"), side,
-                                                    tool_path(b.get("input")))
+                                                    tool_path(b.get("input")),
+                                                    cmd_head(b.get("input")))
                     last_asst_end = t
 
                 elif rtype == "user":
@@ -257,6 +320,9 @@ def scan(paths, since_dt=None):
                     if d.get("toolDenialKind"):
                         A["denials"][d.get("toolDenialKind")] += 1
                         A["denial_usd"] += last_req_cost
+                        w = why(d.get("toolUseResult"), None)
+                        A["why_denied"][w] += 1
+                        A["why_denied_usd"][w] += last_req_cost
                     for b in blocks(msg):
                         if b.get("type") != "tool_result":
                             continue
@@ -265,8 +331,14 @@ def scan(paths, since_dt=None):
                         if b.get("is_error"):
                             A["errors"][(got[1] if got else "?")] += 1
                             A["error_usd"] += last_req_cost
+                            w = why(b.get("content") if isinstance(b.get("content"), str)
+                                    else d.get("toolUseResult"), got[1] if got else None)
+                            A["why_error"][w] += 1
+                            A["why_error_usd"][w] += last_req_cost
+                            if got and got[4]:
+                                A["bad_cmd"][got[4]] += 1
                         if got and t:
-                            start, name, is_side, fpath = got
+                            start, name, is_side, fpath, chead = got
                             secs = (t - start).total_seconds()
                             if 0 <= secs <= IDLE_CEILING_S:
                                 A["tool_sum_s"][name] += secs
@@ -427,6 +499,23 @@ def main():
     if not lost:
         print("  nothing attributable in window")
 
+    if A["why_denied"] or A["why_error"]:
+        print()
+        print("  WHAT IS DOING THE REFUSING / FAILING (each one re-sends the whole context):")
+        merged = collections.Counter()
+        for k, v in A["why_denied_usd"].items():
+            merged[k] += v
+        for k, v in A["why_error_usd"].items():
+            merged[k] += v
+        cnt = A["why_denied"] + A["why_error"]
+        for k, usd in merged.most_common(args.top):
+            print(f"    ${usd:>8,.2f}  {cnt[k]:>5}x  {k}")
+    if A["bad_cmd"]:
+        print()
+        print("  shell commands that failed most:")
+        for c, n in A["bad_cmd"].most_common(8):
+            print(f"    {n:>5}x  {c}")
+
     if A["reread_paths"]:
         print()
         print("  most re-read paths (each repeat re-bills its content on every later turn):")
@@ -506,6 +595,9 @@ def main():
                 "tool_sum_s": dict(A["tool_sum_s"]),
                 "tool_calls": dict(A["tool_calls"]),
                 "denials": dict(A["denials"]),
+                "why_denied_usd": dict(A["why_denied_usd"]),
+                "why_error_usd": dict(A["why_error_usd"]),
+                "bad_cmd": dict(A["bad_cmd"]),
                 "errors": dict(A["errors"]),
                 "rereads": {p: n for p, n in A["reread_paths"].most_common(200)},
                 "sessions": [{"sid": s.sid, "project": s.project, "usd": s.usd,

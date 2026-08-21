@@ -35,6 +35,7 @@ import argparse
 import html
 import json
 import os
+import shutil
 import subprocess
 import sys
 import ast
@@ -51,10 +52,35 @@ SCRIPTS = os.path.join(HOME, ".claude", "scripts")
 GOOD, BAD, WARN, UNKNOWN = "good", "bad", "warn", "unknown"
 
 
+#: Where tools live on this machine, ahead of whatever PATH the caller happened to have.
+#: launchd hands a job PATH=/usr/bin:/bin:/usr/sbin:/sbin and nothing else, and `gh` lives in
+#: /usr/local/bin. So under `com.founder.board` -- the hourly job that writes the page the
+#: founder actually reads -- every row that shells out to gh reported
+#: "FileNotFoundError: [Errno 2] No such file or directory: 'gh'", including the open pull
+#: requests row, while gh worked perfectly in any terminal. Measured 2026-08-21: 8 of the
+#: page's rows read UNKNOWN for this one reason.
+#:
+#: The fix is here rather than in the plist because a PATH in the plist is right only for the
+#: one caller that has it. A second copy of this page, run by hand or by a different job, is
+#: then correct by accident.
+_TOOL_DIRS = (os.path.join(HOME, ".local", "bin"), "/usr/local/bin", "/opt/homebrew/bin")
+
+
+def tool_path() -> str:
+    """PATH for a subprocess: the known tool directories, then the caller's own."""
+    return os.pathsep.join((*_TOOL_DIRS, os.environ.get("PATH", "")))
+
+
 def sh(cmd: list[str], timeout: int, cwd: str | None = None) -> tuple[int, str, str]:
     """Run a command. Returns (rc, stdout, stderr). rc 124 is this function's timeout."""
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+        # execvpe looks argv[0] up in the PATH it is HANDED, not the parent's. Measured
+        # 2026-08-21: with PATH stripped to launchd's own, `gh --version` returns 0 through
+        # env= and raises FileNotFoundError without it. So env= is the whole fix; resolving
+        # argv[0] here as well would be dead code that no mutation can catch.
+        env = {**os.environ, "PATH": tool_path()}
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd,
+                           env=env)
         return p.returncode, p.stdout, p.stderr
     except subprocess.TimeoutExpired:
         return 124, "", f"timed out after {timeout}s"
@@ -976,6 +1002,27 @@ def selftest() -> int:
     check("sh reports a timeout as 124", rc == 124 and "timed out" in err)
     rc, _, err = sh(["/definitely/not/a/binary"], 5)
     check("sh reports an unspawnable command", rc == 127 and err)
+
+    # The launchd case, graded directly. This is the defect that made 8 rows on the live page
+    # read UNKNOWN on 2026-08-21: launchd's PATH has no /usr/local/bin, so `gh` was missing
+    # for the only caller that matters. Mutating tool_path() back to os.environ["PATH"] makes
+    # this fail.
+    saved_path = os.environ.get("PATH", "")
+    try:
+        os.environ["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"      # exactly what launchd gives
+        # Installed-ness is decided against the caller's REAL PATH, never against
+        # tool_path(). Asking the function under test whether to run the test is how a first
+        # draft of this check passed a mutant that broke tool_path() outright.
+        if shutil.which("gh", path=saved_path):
+            rc, out, err = sh(["gh", "--version"], 20)
+            check("gh runs under launchd's PATH", rc == 0 and "gh version" in out)
+        else:
+            # Reported, never dropped: an allow-list whose miss case is silent is how ten
+            # findings were lost in eighteen hours on this estate.
+            print("NOTE: gh is not installed anywhere in _TOOL_DIRS; the launchd PATH case "
+                  "could not be graded on this machine.")
+    finally:
+        os.environ["PATH"] = saved_path
 
     # The renderers must survive every state, including UNKNOWN with no command.
     fake = {"generated_at": time.time(), "bad": 1, "unknown": 1, "sections": [
