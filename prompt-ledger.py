@@ -116,6 +116,25 @@ def save(path: Path, rows: "dict[str, dict]") -> None:
         raise
 
 
+def marks_path(ledger: Path) -> Path:
+    return ledger.with_suffix(".offsets.json")
+
+
+def load_marks(ledger: Path) -> "dict[str, int]":
+    try:
+        d = json.loads(marks_path(ledger).read_text())
+        return {k: int(v) for k, v in d.items()} if isinstance(d, dict) else {}
+    except Exception:
+        return {}      # a lost offset file costs one full re-scan, never a lost prompt
+
+
+def save_marks(ledger: Path, marks: "dict[str, int]") -> None:
+    try:
+        marks_path(ledger).write_text(json.dumps(marks))
+    except Exception:
+        pass
+
+
 def norm(text: str) -> str:
     return re.sub(r"\s+", " ", (text or "")).strip()
 
@@ -150,7 +169,8 @@ def _ts_epoch(ts: str) -> float:
 
 # ---------------------------------------------------------------- extraction
 
-def extract(transcript: Path) -> "list[dict]":
+def extract(transcript: Path, start: int = 0,
+            consumed: "list[int] | None" = None) -> "list[dict]":
     """Every founder prompt in one transcript, in order, both arrival paths.
 
     The two row shapes, measured:
@@ -161,20 +181,43 @@ def extract(transcript: Path) -> "list[dict]":
 
     `operation: "remove"` is the SAME message being delivered into the turn. Reading
     it would double every mid-turn prompt, so only `enqueue` counts.
+
+    Reads from byte `start` and writes the byte it stopped at into `consumed[0]`.
     """
+    if consumed is None:
+        consumed = [0]
+    consumed[0] = start
     out: "list[dict]" = []
     try:
         size = transcript.stat().st_size
     except Exception:
         return out
+    # A transcript only ever grows, so re-reading it on every Stop is work already done.
+    # Measured 2026-08-21: 0.77s for 6.2MB, and this runs on EVERY Stop in EVERY session
+    # -- transcripts on this estate reach tens of MB, so the full scan is a tax that grows
+    # all day. `start` is where the last scan stopped at a complete line boundary.
+    # A file smaller than the offset was truncated or replaced, so start over.
+    if start > size:
+        start = 0
     try:
         with transcript.open("rb") as fh:
-            if size > MAX_TAIL_BYTES:
+            if start:
+                fh.seek(start)
+            elif size > MAX_TAIL_BYTES:
                 fh.seek(size - MAX_TAIL_BYTES)
                 fh.readline()          # drop the partial line the seek landed in
             blob = fh.read()
     except Exception:
         return out
+    # Never advance past a half-written line: the harness may be mid-append right now.
+    # Belt and braces: an incomplete trailing line is virtually never valid JSON, so the
+    # parse below would drop it anyway. The load-bearing part is the OFFSET, which must
+    # never advance past it -- that is what the selftest grades.
+    nl = blob.rfind(b"\n")
+    if nl == -1:
+        return out
+    consumed[0] = (start if start else (size - len(blob))) + nl + 1
+    blob = blob[:nl + 1]
 
     for raw in blob.decode("utf-8", "replace").splitlines():
         raw = raw.strip()
@@ -225,9 +268,14 @@ def reconcile(transcripts: "list[Path]", path: Path) -> "tuple[int,int]":
     """Fold transcripts into the ledger. Returns (new, total). Never resets a status."""
     rows = load(path)
     before = len(rows)
+    # An empty ledger means the offsets describe rows nobody holds any more -- a deleted
+    # or moved ledger must re-read everything rather than skip to the end of the file.
+    marks = load_marks(path) if rows else {}
     found: "list[dict]" = []
     for t in transcripts:
-        found.extend(extract(t))
+        stopped = [0]
+        found.extend(extract(t, marks.get(str(t), 0), stopped))
+        marks[str(t)] = stopped[0]
     found.sort(key=lambda p: p["ts"])
 
     prev_id, prev_t = None, 0.0
@@ -252,6 +300,7 @@ def reconcile(transcripts: "list[Path]", path: Path) -> "tuple[int,int]":
             "spec": None, "ac": [], "proof": None,
         }
     save(path, rows)
+    save_marks(path, marks)
     return len(rows) - before, len(rows)
 
 
@@ -449,6 +498,61 @@ def selftest() -> int:
            and all(x["rc"] == 0 for x in r6["proof"]["results"]))
         ck("verifying an unknown id is refused, not crashed", verify(led6, "deadbeef") == 1)
 
+        # --- incremental scanning ------------------------------------------------
+        # Every one of these is a way an offset silently eats a founder prompt.
+        t8, led8 = d / "t8.jsonl", d / "l8.jsonl"
+        w(t8, [q("first ask", ts="2026-08-21T07:00:00.000Z")])
+        reconcile([t8], led8)
+        with t8.open("a") as fh:
+            fh.write(json.dumps(q("second ask", ts="2026-08-21T07:01:00.000Z")) + "\n")
+        n8, tot8 = reconcile([t8], led8)
+        ck("an appended prompt is picked up by the next scan", n8 == 1 and tot8 == 2)
+        ck("the second scan re-read only the new bytes",
+           load_marks(led8)[str(t8)] == t8.stat().st_size)
+
+        # A half-written line is the normal state of a live transcript, and the case that
+        # matters is a COMPLETE row followed by a partial one in the same append -- a
+        # partial alone is caught by the no-newline early return, so testing only that
+        # grades nothing. Here the offset must stop between the two, not at end-of-file.
+        with t8.open("a") as fh:
+            fh.write(json.dumps(q("third ask", ts="2026-08-21T07:02:00.000Z")) + "\n")
+            fh.write('{"type":"queue-operation","operation":"enqueue","content":"tor')
+        n9, tot9 = reconcile([t8], led8)
+        ck("the complete row lands and the half-written one does not",
+           n9 == 1 and tot9 == 3)
+        ck("the offset stopped at the last COMPLETE line",
+           load_marks(led8)[str(t8)] < t8.stat().st_size)
+        with t8.open("a") as fh:
+            fh.write('n ask","timestamp":"2026-08-21T07:03:00.000Z","sessionId":"abcd1234ef"}\n')
+        n10, tot10 = reconcile([t8], led8)
+        ck("the half-written line is captured once it completes", n10 == 1 and tot10 == 4)
+
+        # Graded on extract() itself: reconcile() dedupes, so a scan that ignores the
+        # offset and re-reads the whole file still produces the right ledger. Only
+        # extract() can show whether the read was actually incremental.
+        mark = load_marks(led8)[str(t8)]
+        ck("extract() from the saved offset returns only what is new",
+           extract(t8, mark) == [])
+        with t8.open("a") as fh:
+            fh.write(json.dumps(q("fifth ask", ts="2026-08-21T07:04:00.000Z")) + "\n")
+        seen = extract(t8, mark)
+        ck("extract() from the saved offset returns exactly the new rows",
+           len(seen) == 1 and seen[0]["text"] == "fifth ask")
+
+        # A transcript that shrank was truncated or replaced; the offset is meaningless.
+        t9, led9 = d / "t9.jsonl", d / "l9.jsonl"
+        w(t9, [q("a", ts="2026-08-21T08:00:00.000Z"), q("b", ts="2026-08-21T08:00:01.000Z"),
+               q("c", ts="2026-08-21T08:00:02.000Z")])
+        reconcile([t9], led9)
+        w(t9, [q("d", ts="2026-08-21T08:00:03.000Z")])
+        _, tot_t = reconcile([t9], led9)
+        ck("a truncated transcript is re-scanned from the start", tot_t == 4)
+
+        # The offsets outliving their ledger is the worst case: every prompt skipped.
+        led9.unlink()
+        _, tot_r = reconcile([t9], led9)
+        ck("a deleted ledger re-reads the whole transcript, not none of it", tot_r == 1)
+
         # --- ledger robustness -------------------------------------------------------
         led7 = d / "l7.jsonl"
         led7.write_text(json.dumps({"id": "aaa", "text": "kept"}) + "\n{ broken\n"
@@ -457,7 +561,7 @@ def selftest() -> int:
         ck("a corrupt ledger line does not lose the rows around it",
            list(got) == ["aaa"])
 
-    print("\n%d checks, %d failed" % (25, len(fails)))
+    print("\n%d checks, %d failed" % (36, len(fails)))
     return 1 if fails else 0
 
 
