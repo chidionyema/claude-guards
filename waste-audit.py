@@ -186,17 +186,36 @@ def why(text, tool):
 
 
 def cmd_head(inp):
-    """First meaningful word of a shell command, for ranking which commands fail."""
+    """First real command word of a shell line, for ranking which commands fail.
+
+    Not just "the first token": `cd /tmp && git status` is a git failure, not a /tmp
+    one, and `timeout 60 rg foo` is an rg failure. Wrappers are stepped over, and the
+    argument a wrapper consumes is stepped over with it.
+    """
     if not isinstance(inp, dict):
         return None
     c = inp.get("command")
     if not isinstance(c, str):
         return None
-    for tok in c.replace("(", " ").split():
-        t = tok.strip("\"'`;|&$")
-        if not t or "=" in t or t in ("cd", "sudo", "timeout", "env", "nohup", "!"):
+    WRAPPERS = {"cd", "sudo", "timeout", "env", "nohup", "exec", "command", "xargs"}
+    TAKES_ARG = {"cd", "timeout"}          # consumes the token after it
+    OPS = {"&&", "||", ";", "|", "(", ")", "{", "}", "!", "then", "do"}
+    skip_next = False
+    for raw in c.replace("(", " ").replace(")", " ").split():
+        tok = raw.strip("\"'`;|&$")
+        if not tok:
             continue
-        return t.split("/")[-1][:24]
+        if skip_next:
+            skip_next = False
+            continue
+        if tok in OPS or "=" in tok or tok.isdigit():
+            continue
+        if tok in WRAPPERS:
+            skip_next = tok in TAKES_ARG
+            continue
+        if tok.startswith("-"):
+            continue
+        return tok.split("/")[-1][:24]
     return None
 
 
@@ -431,13 +450,72 @@ def collect(since_ts, date_filter):
     return out
 
 
+
+def selftest():
+    """Prove the two pieces of logic that can silently report a wrong number:
+    the refusal classifier, and the overlap-safe wall clock."""
+    fails = []
+    cases = [
+        ("Error: PreToolUse:Bash hook error: [python3 /x/scripts/hang-guard.py]: BLOCKED",
+         "guard:hang-guard.py"),
+        ("Exit code 143\nCommand timed out after 2m 0s", "timeout"),
+        ("Exit code 1\nboom", "exit 1"),
+        ("bash: foo: command not found", "not found"),
+        # a stale edit also says "not found"; specific must beat general
+        ("String to replace not found in file", "stale edit"),
+        ("File has not been read yet", "stale edit"),
+        ("Agent fleet cap: 3 of 3 leases are live", "agent fleet cap"),
+        ("The user doesn't want to proceed with this tool use.", "founder rejected"),
+        ("claude-sonnet-5[1m] is temporarily unavailable", "model unavailable"),
+        ("Auto mode could not evaluate this action and is blocked",
+         "auto mode could not evaluate"),
+    ]
+    for text, expect in cases:
+        got = why(text, None)
+        if got != expect:
+            fails.append(f"why({text[:34]!r}) = {got!r}, expected {expect!r}")
+
+    def T(sec):
+        return dt.datetime(2026, 1, 1, tzinfo=dt.timezone.utc) + dt.timedelta(seconds=sec)
+    clock_cases = [
+        ([], 0.0, "empty"),
+        ([(T(0), T(10))], 10.0, "one interval"),
+        ([(T(0), T(10)), (T(20), T(30))], 20.0, "disjoint"),
+        # the case that matters: a parallel tool batch runs in the SAME seconds
+        ([(T(0), T(10)), (T(0), T(10))], 10.0, "identical (parallel batch)"),
+        ([(T(0), T(10)), (T(5), T(15))], 15.0, "partial overlap"),
+        ([(T(0), T(30)), (T(5), T(10))], 30.0, "fully contained"),
+        ([(T(20), T(30)), (T(0), T(10))], 20.0, "out of order input"),
+    ]
+    for iv, expect, name in clock_cases:
+        got = union_seconds(iv)
+        if abs(got - expect) > 1e-6:
+            fails.append(f"union_seconds({name}) = {got}, expected {expect}")
+
+    if any(cmd_head({"command": c}) != e for c, e in
+           [("cd /tmp && git status", "git"), ("TZ=UTC python3 x.py", "python3"),
+            ("timeout 60 rg foo", "rg")]):
+        fails.append("cmd_head mis-parsed a shell command")
+
+    for f in fails:
+        print("FAIL", f)
+    total = len(cases) + len(clock_cases) + 1
+    print(f"selftest: {total - len(fails)}/{total} pass")
+    return 1 if fails else 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", default="1d", help="1d / 3d / 12h; window of transcript activity")
     ap.add_argument("--date", help="YYYY-MM-DD; files touched on or after this day")
     ap.add_argument("--top", type=int, default=10)
     ap.add_argument("--json", help="also dump machine-readable")
+    ap.add_argument("--selftest", action="store_true",
+                    help="prove the classifier and the wall-clock maths, then exit")
     args = ap.parse_args()
+
+    if args.selftest:
+        sys.exit(selftest())
 
     since_ts = None
     if args.date:
