@@ -63,6 +63,44 @@ HANG_PRONE_RE = re.compile(
     r"|\b(npm|pnpm|yarn)\s+run\s+dev\b"
     r"|\bnext\s+dev\b"
 )
+
+# A browser driver only hangs when it is RUN. It cannot hang when its name merely appears as
+# an argument -- `ls node_modules/playwright/index.mjs` and a grep for the word both matched
+# the pattern above and were both refused, on 2026-08-21, which is how this exemption came to
+# be written. The class is a guard that greps the whole command string and so cannot tell a
+# command's NAME from its ARGUMENTS; the same defect made a grep of THIS FILE unrunnable.
+#
+# The exemption is deliberately narrow. It asks one question -- is every simple command in this
+# line a known-inert reader -- and only then allows. A single segment that is anything else
+# (node, npx, a script, an unknown binary) falls straight back to the block. Inertness is a
+# property of the executable, so it is read from the FIRST word of each segment, never from
+# the line as a whole.
+INERT = {
+    "ls", "cat", "head", "tail", "wc", "stat", "file", "cp", "mv", "mkdir", "realpath",
+    "dirname", "basename", "echo", "printf", "true", "test", "[", "grep", "rg", "sed", "awk",
+    "cut", "sort", "uniq", "tr", "diff", "cmp", "shasum", "md5", "du", "df", "readlink",
+}
+_SEGMENT_SPLIT_RE = re.compile(r"\|\||&&|[|;\n()]")
+
+
+def _all_inert(cmd: str) -> bool:
+    """True when every simple command on the line is a reader that cannot drive a browser."""
+    segments = [seg.strip() for seg in _SEGMENT_SPLIT_RE.split(cmd)]
+    segments = [seg for seg in segments if seg]
+    if not segments:
+        return False
+    for seg in segments:
+        words = seg.split()
+        # Skip leading VAR=value assignments and `sudo`/`command`/`env` wrappers.
+        i = 0
+        while i < len(words) and ("=" in words[i].split("/")[0] or words[i] in ("sudo", "command", "env")):
+            i += 1
+        if i >= len(words):
+            return False
+        exe = words[i].rsplit("/", 1)[-1]
+        if exe not in INERT:
+            return False
+    return True
 # Backgrounded work is the caller's explicit choice and is tracked by the harness; it is not
 # the failure this guard exists for.
 BACKGROUNDED_RE = re.compile(r"&\s*$|\bnohup\b|\bdisown\b")
@@ -91,7 +129,7 @@ def check(cmd: str) -> int:
             "  timeout 60 grep -r ...        # if you really want grep, bound it\n"
         )
 
-    if HANG_PRONE_RE.search(cmd):
+    if HANG_PRONE_RE.search(cmd) and not _all_inert(cmd):
         return block(
             "BLOCKED by hang-guard: hang-prone harness with no timeout.\n"
             "Browser harnesses and dev servers fail by running forever, not by exiting "

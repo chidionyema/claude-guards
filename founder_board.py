@@ -77,36 +77,75 @@ def _unknown(label, why, command=""):
 # --------------------------------------------------------------------------- collectors
 
 def collect_spend() -> list[Row]:
-    """Money. This is the platform view and it goes first for that reason."""
-    cmd = ["/usr/local/bin/python3", os.path.join(HOME, ".claude", "scripts",
-                                                  "estate_cost_sentinel.py"), "--digest",
-           "--dry-run"]
-    rc, out, err = sh(cmd, 90)
-    # rc 1 means "over the warn line", which is a finding, not a failure of the probe.
-    if rc not in (0, 1) or not out.strip():
-        return [_unknown("Claude spend today", err.strip() or f"exit {rc}", " ".join(cmd))]
-    spend = cap = None
-    for line in out.splitlines():
-        if "of $" in line and "cap" in line:
-            try:
-                left, right = line.split(" of $", 1)
-                spend = float(left.rsplit("$", 1)[1].replace(",", ""))
-                cap = float(right.split()[0].replace(",", ""))
-            except (IndexError, ValueError):
-                pass
-            break
-    if spend is None or cap is None:
-        return [_unknown("Claude spend today", "digest printed no spend line", " ".join(cmd))]
-    armed = "DISARMED" not in out
-    rows = [Row(BAD if spend > cap else GOOD, "Claude spend today",
-                f"${spend:,.2f} of a ${cap:,.0f} cap",
-                f"{spend / cap:.1f}x the cap" if spend > cap else "inside the cap",
-                " ".join(cmd))]
-    rows.append(Row(GOOD if armed else BAD, "Automatic spend halt",
-                    "ARMED" if armed else "DISARMED",
-                    "" if armed else "nothing stops the spend; set halt_usd in "
-                                     "~/.claude/estate-budget.json",
-                    "grep halt_usd ~/.claude/estate-budget.json"))
+    """Money. This is the platform view and it goes first for that reason.
+
+    It reports WHERE the money goes, not only how much, because the two rows this used to
+    print sent the founder at the wrong lever. Measured 2026-08-21: the board said "spend
+    halt DISARMED -- nothing stops the spend" against a $516.79 day. `halt_usd` fires on the
+    DAEMON leg only (estate-budget.json says so in its own note), and the daemon spent $1.51
+    of that. Arming it would have saved 0.3% and stopped the engine. 99.7% was five
+    concurrent interactive coding sessions, which no halt in this estate can touch.
+    """
+    cmd = ["/usr/local/bin/python3",
+           os.path.join(HOME, ".claude", "scripts", "estate_spend.py"), "--json"]
+    rc, out, err = sh(cmd, 240)
+    if rc not in (0, 2) or not out.strip():      # rc 2 is --cap's "over the line", unused here
+        return [_unknown("Claude spend today", err.strip()[:200] or f"exit {rc}",
+                         " ".join(cmd))]
+    try:
+        spend = json.loads(out)
+    except json.JSONDecodeError as e:
+        return [_unknown("Claude spend today", f"meter printed no JSON: {e}", " ".join(cmd))]
+
+    budget_path = os.path.join(HOME, ".claude", "estate-budget.json")
+    try:
+        with open(budget_path) as fh:
+            budget = json.load(fh)
+        cap = float(budget.get("warn_usd") or 0)
+        halt = float(budget.get("halt_usd") or 0)
+        budget_err = ""
+    except (OSError, ValueError, json.JSONDecodeError) as e:
+        cap = halt = 0.0
+        budget_err = f"{type(e).__name__}: {e}"
+
+    total = float(spend.get("total") or 0)
+    by_owner = spend.get("by_owner") or {}
+    # The daemon leg is the ONLY thing halt_usd can stop, so it is the only number that makes
+    # arming it a decision rather than a gesture.
+    daemon = sum(v for k, v in by_owner.items() if "daemon" in k)
+
+    rows: list[Row] = []
+    if cap:
+        rows.append(Row(BAD if total > cap else GOOD, "Claude spend today",
+                        f"${total:,.2f} of a ${cap:,.0f} cap",
+                        f"{total / cap:.1f}x the cap" if total > cap else "inside the cap",
+                        " ".join(cmd)))
+    else:
+        rows.append(Row(WARN, "Claude spend today", f"${total:,.2f}",
+                        budget_err or "no warn_usd set, so there is no line to be over",
+                        " ".join(cmd)))
+
+    if by_owner:
+        top, top_usd = max(by_owner.items(), key=lambda kv: kv[1])
+        share = f"{top_usd / total * 100:.0f}%" if total else "n/a"
+        rows.append(Row(BAD if cap and total > cap else GOOD, "Where the money goes",
+                        f"{top} — ${top_usd:,.2f}",
+                        f"{share} of today's spend, over {spend.get('requests', 0):,} requests "
+                        f"in {spend.get('files', 0)} transcripts",
+                        " ".join(cmd)))
+    else:
+        rows.append(_unknown("Where the money goes", "the meter reported no owners",
+                             " ".join(cmd)))
+
+    # NOT "nothing stops the spend". Say what arming it would actually have stopped today.
+    armed = halt > 0
+    rows.append(Row(GOOD if armed else WARN, "Automatic spend halt",
+                    f"ARMED at ${halt:,.0f}" if armed else "DISARMED",
+                    (f"stops the daemon leg only; that leg is ${daemon:,.2f} of today's "
+                     f"${total:,.2f}, so arming it cannot touch the rest")
+                    if not armed else
+                    f"fires on the daemon leg, ${daemon:,.2f} so far today",
+                    f"grep halt_usd {budget_path}"))
     return rows
 
 
