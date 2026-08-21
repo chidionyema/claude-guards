@@ -520,6 +520,85 @@ AGGREGATORS = {"ci-ok"}
 FAILED_CONCLUSIONS = {"FAILURE", "TIMED_OUT", "STARTUP_FAILURE", "ACTION_REQUIRED"}
 
 
+def repo_root_from_broken_worktree(cwd: str) -> str | None:
+    """The main checkout, when `cwd` is a worktree whose gitdir no longer exists.
+
+    WHY (measured 2026-08-21, and it made this whole guard inert). This session's own cwd is
+    such a tree: its `.git` FILE names prospector/.git/worktrees/wt-storeroot, a directory that
+    does not exist. `git rev-parse --git-dir` fails there, so main() returned 0 and the guard
+    was SILENTLY OFF -- for the very session the founder was complaining about. 44 of 113
+    worktrees on this estate are in that state, and in every one of them `git ls-files` prints
+    nothing AND EXITS 0, so nothing ever fails loudly enough to notice.
+
+    The dead pointer still names the repository it belonged to, which is all this needs. The
+    session works in that repo's OTHER worktrees by `cd`, and those are exactly the branches it
+    owns, so falling back to the root finds the right set rather than a different one.
+    """
+    try:
+        raw = Path(cwd, ".git").read_text()
+    except Exception:  # noqa: BLE001 -- a real repo has a .git DIRECTORY; reading it fails
+        return None
+    if not raw.startswith("gitdir:"):
+        return None
+    pointer = Path(raw.split(":", 1)[1].strip())
+    for parent in pointer.parents:
+        # .../<root>/.git/worktrees/<name>  ->  <root>
+        if parent.name == ".git":
+            root = str(parent.parent)
+            return root if git(["rev-parse", "--git-dir"], root) is not None else None
+    return None
+
+
+def main_red_checks(cwd: str) -> set[str]:
+    """Check names failing on main's OWN latest run. Empty set when it cannot be asked.
+
+    A peer's bound, 2026-08-21, and it is better than the timer it replaces: never stop a
+    session over a check that is also red on main. That is the line between "your work is
+    broken" and "you inherited a broken baseline", and unlike a 45-minute re-arm it self-clears
+    the moment main goes green. It was not hypothetical today -- main went red on a doc-link
+    test that was in nobody's diff, and every open pull request inherited it.
+
+    Two calls, and only ever when there is already something to report, so a green estate pays
+    nothing for it.
+    """
+    def gh(args: list[str]) -> str | None:
+        try:
+            out = subprocess.run(["gh", *args], cwd=cwd, capture_output=True,
+                                 text=True, timeout=TIMEOUT)
+        except Exception:  # noqa: BLE001
+            return None
+        return out.stdout.strip() if out.returncode == 0 else None
+
+    run_id = gh(["run", "list", "--branch", "main", "--limit", "1",
+                 "--json", "databaseId", "--jq", ".[0].databaseId"])
+    if not run_id or not run_id.isdigit():
+        return set()
+    names = gh(["api", "repos/:owner/:repo/actions/runs/%s/jobs" % run_id,
+                "--jq", '.jobs[]|select(.conclusion=="failure")|.name'])
+    if not names:
+        return set()
+    return {n.strip() for n in names.splitlines() if n.strip()}
+
+
+def drop_inherited(findings: list[dict], red_on_main: set[str]) -> list[dict]:
+    """Remove what the session inherited from a red main, and say so in the ones that remain.
+
+    A CONFLICT is never inherited -- it is a fact about this branch and main together, and only
+    the branch owner can resolve it -- so the bound applies to RED only.
+    """
+    if not red_on_main:
+        return findings
+    kept = []
+    for f in findings:
+        if f["verdict"] != "RED":
+            kept.append(f)
+            continue
+        own = [n for n in f["failing"] if n not in red_on_main]
+        if own:
+            kept.append(dict(f, failing=own))
+    return kept
+
+
 def open_prs(cwd: str) -> list[dict] | None:
     """Every open pull request in this repo, or None when the question could not be asked.
 
@@ -646,7 +725,13 @@ def main() -> int:
     session_id = payload.get("session_id")
 
     if git(["rev-parse", "--git-dir"], cwd) is None:
-        return 0  # not a repo
+        # NOT simply "not a repo". A worktree whose gitdir was removed looks exactly like this,
+        # and 44 of 113 on this estate are in that state -- including the cwd of the session
+        # that shipped this guard. Falling back to the repository the dead pointer names is the
+        # difference between a guard that is off and a guard that works.
+        cwd = repo_root_from_broken_worktree(cwd) or ""
+        if not cwd:
+            return 0
 
     state = load_state()
     findings = []
@@ -684,6 +769,8 @@ def main() -> int:
         seen = load_json(STUCK_STATE)
         now = time.time()
         hits = stuck_findings(rows, mine, seen, now)
+        # Only now, and only if there is something to say, ask what main itself is failing.
+        hits = drop_inherited(hits, main_red_checks(cwd)) if hits else hits
         if hits:
             for h in hits:
                 seen[h["key"]] = now
