@@ -67,6 +67,11 @@ WRITE_1H = 2.0
 # A gap longer than this between two records is not work, it is a session left open.
 IDLE_CEILING_S = 900.0
 
+# Commands whose cost is fixed no matter what else is running. `echo` is `echo`.
+# If the median of THESE climbs, the machine got slower -- it cannot be the workload.
+CHEAP_CMDS = {"echo", "pwd", "date", "ls", "cat", "true", "whoami", "uptime",
+              "head", "tail", "wc", "basename", "dirname", "which"}
+
 
 def rate(model):
     m = (model or "").split("[")[0]
@@ -250,6 +255,8 @@ def scan(paths, since_dt=None):
         "tool_calls": collections.Counter(),
         "hour_sum_s": collections.Counter(),   # (tool, local hour) -> seconds
         "hour_calls": collections.Counter(),   # (tool, local hour) -> calls
+        "hour_durs": collections.defaultdict(list),    # (tool, hour) -> [seconds]
+        "hour_cheap": collections.defaultdict(list),   # same, trivial commands only
         "tool_slowest": {},
         "clock": collections.Counter(),   # main-thread union seconds by phase
         "sidechain_s": 0.0,
@@ -367,6 +374,9 @@ def scan(paths, since_dt=None):
                                 hr = start.astimezone().hour
                                 A["hour_sum_s"][(name, hr)] += secs
                                 A["hour_calls"][(name, hr)] += 1
+                                A["hour_durs"][(name, hr)].append(secs)
+                                if chead in CHEAP_CMDS:
+                                    A["hour_cheap"][(name, hr)].append(secs)
                                 if secs > A["tool_slowest"].get(name, (0, ""))[0]:
                                     A["tool_slowest"][name] = (secs, os.path.basename(path))
                                 (side_intervals if is_side else main_intervals["tool"]).append((start, t))
@@ -418,6 +428,14 @@ def scan(paths, since_dt=None):
                 A["rereads"][(sid, fpath)] = n
                 A["reread_paths"][fpath] += n - 1
     return A
+
+
+def pctl(v, p):
+    """p-th percentile by nearest rank. Empty -> 0.0."""
+    if not v:
+        return 0.0
+    srt = sorted(v)
+    return srt[min(len(srt) - 1, int(len(srt) * p))]
 
 
 def hms(sec):
@@ -502,9 +520,21 @@ def selftest():
             ("timeout 60 rg foo", "rg")]):
         fails.append("cmd_head mis-parsed a shell command")
 
+    pctl_cases = [
+        ([5, 1, 3, 2, 4], .50, 3, "median, unsorted input"),
+        ([1, 1, 1, 9], .10, 1, "p10 ignores the tail"),
+        ([1, 1, 1, 9], .90, 9, "p90 sees the tail"),
+        ([], .50, 0.0, "empty is 0, never a crash"),
+        ([7], .90, 7, "single sample, no index overflow"),
+    ]
+    for v, p, expect, name in pctl_cases:
+        got = pctl(v, p)
+        if got != expect:
+            fails.append(f"pctl({name}) = {got}, expected {expect}")
+
     for f in fails:
         print("FAIL", f)
-    total = len(cases) + len(clock_cases) + 1
+    total = len(cases) + len(clock_cases) + len(pctl_cases) + 1
     print(f"selftest: {total - len(fails)}/{total} pass")
     return 1 if fails else 0
 
@@ -653,19 +683,36 @@ def main():
         print(f"    {hms(secs):>8} {n:>6} {secs/n:>6.1f}s {worst:>6.0f}s  {name}")
     if A["tool_calls"]:
         busiest = A["tool_calls"].most_common(1)[0][0]
-        rows = [(h, A["hour_calls"][(busiest, h)], A["hour_sum_s"][(busiest, h)])
-                for h in range(24) if A["hour_calls"][(busiest, h)]]
+        rows = []
+        for h in range(24):
+            v = A["hour_durs"].get((busiest, h)) or []
+            if len(v) >= 20:
+                rows.append((h, v, A["hour_cheap"].get((busiest, h)) or []))
         if len(rows) > 1:
-            means = sorted(sec / n for _, n, sec in rows)
-            base = means[len(means) // 2]
+            # The FLOOR, never the mean. A busy hour runs heavier commands, and that
+            # moves the TAIL -- so a mean cannot tell a slow machine from hard work.
+            # Only a degraded box moves the cheapest decile, because `echo` costs the
+            # same whatever else is queued. p10 and the trivial-command median rising
+            # together is the machine; a fat p90 alone is just the workload.
+            best = min(pctl(v, .50) for _, v, _ in rows)
+            floor = min(pctl(v, .10) for _, v, _ in rows)
             print()
-            print(f"  {busiest} call time BY HOUR (local) -- a slow hour is the machine, not the work.")
-            print(f"    {'hour':>5} {'calls':>6} {'mean':>7}   vs median hour")
-            for h, n, sec in rows:
-                mean = sec / n
-                mark = "" if base <= 0 else f"  {mean / base:.1f}x"
-                print(f"    {h:02d}:00 {n:>6} {mean:>6.1f}s {mark}")
-            print(f"    median hour = {base:.1f}s/call across {len(rows)} hours")
+            print(f"  {busiest} call time BY HOUR (local) -- the FLOOR test.")
+            print("  Heavier work moves the tail; only a slower machine moves p10.")
+            print(f"    {'hour':>5} {'calls':>6} {'p10':>7} {'med':>7} {'p90':>7}"
+                  f" {'trivial':>8}   vs best")
+            excess = 0.0
+            for h, v, cheap in rows:
+                med = pctl(v, .50)
+                excess += len(v) * max(0.0, med - best)
+                cs = (f"{pctl(cheap, .50):>7.1f}s" if len(cheap) >= 5 else f"{'--':>8}")
+                print(f"    {h:02d}:00 {len(v):>6} {pctl(v, .10):>6.1f}s {med:>6.1f}s"
+                      f" {pctl(v, .90):>6.1f}s{cs}   {med / best:>4.1f}x")
+            calls = sum(len(v) for _, v, _ in rows)
+            print(f"    best hour {best:.1f}s/call, lowest floor {floor:.1f}s"
+                  f"   ({len(rows)} hours, {calls} calls)")
+            print(f"    excess over the best hour: {hms(excess)}"
+                  f"   <- recoverable if the machine is the cause")
 
     if A["unfinished_tools"]:
         print(f"    ({A['unfinished_tools']} tool calls have no result in the transcript --"
