@@ -174,7 +174,19 @@ LAWS_FILE = os.path.join(os.path.expanduser("~"), ".claude", "CLAUDE.md")
 # rules-only form, so 34000 is that block plus one more law of headroom. The selftest now fails if
 # the cap ever drops back under what `_rules_only` actually produces, so this cannot lag silently
 # again.
-LAWS_MAX_CHARS = 34000
+#
+# Raised 34000 -> 37000 on 2026-08-21, the day LAW 17 was written, for the SAME reason as the last
+# raise. Measured that day: `_rules_only` produces 34,863 chars for seventeen laws, 863 over the
+# cap, so LAW 17 was dropped and the injection ended at LAW 16. The truncation note did name it,
+# and the selftest did fail -- both guards worked -- but the founder's newest law still reached no
+# session until this line changed.
+#
+# THIS HAS NOW LAGGED TWICE IN TWO DAYS, which makes a fixed integer the wrong shape for it. The
+# average law costs 2,050 chars in rules-only form, so every second or third new law spends a
+# founder turn on this same edit. The durable fix is to derive the cap from `_rules_only` output
+# rather than store it, or to drop the OLDEST law rather than the newest when something must go.
+# Both are a founder decision because they change what every session is billed for.
+LAWS_MAX_CHARS = 37000
 
 
 # Paragraphs of a law that are DUPLICATED verbatim in the same context window and are therefore
