@@ -204,11 +204,69 @@ def report(kind: str, lane: str) -> str:
     )
 
 
-def _deadline(seconds: int = 3) -> None:
+def _deadline(seconds: int = 5) -> None:
     try:
         import signal
         signal.signal(signal.SIGALRM, lambda *_: os._exit(0))
         signal.alarm(seconds)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+OBSERVE = Path.home() / ".claude" / "state" / "close-guard-observe.jsonl"
+
+
+def settle(path: Path, max_wait: float = 1.2, quiet: float = 0.15) -> None:
+    """Wait until the transcript stops growing, or give up.
+
+    WHY THIS EXISTS. 2026-08-21, twenty minutes after this guard went live, it refused a reply
+    that opened with DONE:. The reply was row 2428 of the transcript and the guard graded row
+    2406, which was an interstitial line from earlier in the same turn. The final message was not
+    on disk when the hook ran. A Stop hook that reads the transcript as it finds it is grading
+    the second-to-last thing the session said, which is a different sentence written for a
+    different purpose.
+
+    Whether waiting is enough is a measurement, not an assumption -- if Claude Code writes the
+    final row only after every Stop hook returns, no wait can help and the check has to move to
+    the next turn instead. `observe()` below records both readings on every Stop so the answer
+    comes from this estate rather than from a guess.
+    """
+    import time
+    last, stable_since = -1, 0.0
+    deadline = time.time() + max_wait
+    while time.time() < deadline:
+        try:
+            size = path.stat().st_size
+        except OSError:
+            return
+        now = time.time()
+        if size != last:
+            last, stable_since = size, now
+        elif now - stable_since >= quiet:
+            return
+        time.sleep(0.03)
+
+
+def observe(path: Path, session: str) -> None:
+    """Record what the hook would have graded before and after waiting. Never raises."""
+    try:
+        import time
+        t0 = time.time()
+        before = last_assistant_text(path)
+        settle(path)
+        after = last_assistant_text(path)
+        line = json.dumps({
+            "session": session,
+            "waited_ms": int((time.time() - t0) * 1000),
+            "changed": before != after,
+            "before_marker": marker_of(before),
+            "before_head": before[:60],
+            "after_marker": marker_of(after),
+            "after_head": after[:60],
+        })
+        OBSERVE.parent.mkdir(parents=True, exist_ok=True)
+        with OBSERVE.open("a", encoding="utf-8") as fh:
+            fh.write(line + "\n")          # O_APPEND, one line, well under the pipe buffer
     except Exception:  # noqa: BLE001
         pass
 
@@ -220,7 +278,9 @@ def handle(payload: dict) -> int:
     session = str(payload.get("session_id") or "unknown")
     lane = current_lane(session)
     if not lane_wants_close(lane):
+        observe(Path(path), session)   # off for this lane, but still learning what to grade
         return 0
+    settle(Path(path))                 # the final message may not be on disk yet -- see settle()
     try:
         text = last_assistant_text(Path(path))
     except OSError:
