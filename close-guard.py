@@ -86,8 +86,32 @@ def marker_of(text: str) -> str | None:
     return None
 
 
+#: a markdown table of measured numbers is evidence. Two rows, because one `|` is a sentence.
+TABLE = re.compile(r"^[^\n]*\|[^\n]*\|[^\n]*$\n[^\n]*\|[^\n]*\|", re.M)
+#: a share is a measurement. "58.4%" is a receipt in a way that "about 3 goes" is not.
+PERCENT = re.compile(r"\d[\d.,]*\s?%")
+#: an inline span that is a runnable command or a path -- something the founder can re-run.
+INLINE_CMD = re.compile(r"`[^`\n]*[ /][^`\n]*`")
+
+
 def has_receipt(text: str) -> bool:
-    return bool(FENCE.search(text) or FILELINE.search(text) or VERDICT.search(text))
+    """Anything the founder can re-run, open or count. Deliberately wide.
+
+    It was narrower -- fence, file:line, verdict token -- and a peer pointed out that their
+    best-evidenced reply of the day would have been refused by it: a markdown table of measured
+    counts and a backticked `git worktree list`, with none of the three. A grader with a narrow
+    accept set does not raise the standard of evidence, it teaches sessions to paste a decorative
+    fenced block to get past it, which is the failure mode of every guard that grades a proxy.
+    The bar is "can the founder check this himself", not "is it formatted the way I expected".
+    """
+    return bool(
+        FENCE.search(text)
+        or FILELINE.search(text)
+        or VERDICT.search(text)
+        or TABLE.search(text)
+        or PERCENT.search(text)
+        or INLINE_CMD.search(text)
+    )
 
 
 def lane_wants_close(lane_name: str) -> bool:
@@ -317,6 +341,33 @@ def selftest() -> int:
             ck("a corrupt lanes file never refuses", run("I fixed it.", "s13") == 0)
         finally:
             STATE, LANES = keep_state, keep_lanes
+
+    # MEASURED 2026-08-21 on this estate's own transcript: the compaction summary is written as
+    # a row of type "user" with isCompactSummary true (10 such rows, all user), so an
+    # assistant-only reader never sees it. A peer raised this as a hazard -- four sessions blocked
+    # at once on a turn nobody wrote -- and the measurement refutes it. This check exists so that
+    # if Claude Code ever writes the summary as an assistant row, it fails here instead of in
+    # production.
+    with tempfile.TemporaryDirectory() as d2:
+        t2 = Path(d2) / "t.jsonl"
+        t2.write_text(
+            json.dumps({"type": "assistant",
+                        "message": {"content": [{"type": "text", "text": "DONE: 33/33 passed"}]}})
+            + "\n"
+            + json.dumps({"type": "user", "isCompactSummary": True,
+                          "message": {"content": [{"type": "text",
+                                                   "text": "This session is being continued"}]}})
+            + "\n", encoding="utf-8")
+        ck("a compaction summary is not graded as the reply",
+           last_assistant_text(t2) == "DONE: 33/33 passed", last_assistant_text(t2)[:40])
+
+    ck("a table of counts is a receipt",
+       has_receipt("DONE: it landed\n\n| what | n |\n|---|---|\n| merged | 4 |"))
+    ck("a percentage is a receipt", has_receipt("DONE: 58.4% of writes go through Bash"))
+    ck("a backticked command is a receipt", has_receipt("DONE: see `git worktree list`"))
+    ck("a backticked path is a receipt", has_receipt("DONE: it is in `~/.claude/lanes.json`"))
+    ck("a one-word backtick is not a receipt", not has_receipt("DONE: the `flag` is set"))
+    ck("one pipe is not a table", not has_receipt("DONE: a | b"))
 
     ck("the marker report names the three",
        all(m in report("marker", "default") for m in MARKERS))
