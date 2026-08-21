@@ -157,6 +157,58 @@ def creates_branch(argv: list[str]) -> str | None:
     return None
 
 
+def still_held(held: str, kind: str, cwd: str) -> bool:
+    """Does the recorded holding actually EXIST? A PreToolUse hook records on INTENT.
+
+    The hook runs BEFORE the command. If the command is then denied by the permission classifier,
+    or simply fails, the slot is consumed anyway and nothing ever gives it back -- so one denied
+    `git checkout -b` permanently costs a session its only branch, and the only way out is to
+    hand-edit state or switch the fence off. Measured 2026-08-21: that is exactly what happened,
+    twice, in the session that found it.
+
+    Verifying instead of trusting the record also gives the fence the release it never had: delete
+    the branch or remove the worktree and the slot frees itself, with no bookkeeping to maintain.
+
+    Fails OPEN, per this file's contract at the top: when git cannot answer, the slot is treated
+    as free. A wedged session costs the estate far more than one extra branch.
+    """
+    try:
+        if kind == "worktree":
+            return Path(held).exists()
+        rc, _ = sh(["git", "rev-parse", "--verify", "--quiet", f"refs/heads/{held}"], cwd)
+        return rc == 0
+    except Exception:  # noqa: BLE001 -- fail open
+        return False
+
+
+def held_name(argv: list[str], kind: str) -> str:
+    """The thing this command actually creates. NOT `argv[-1]`.
+
+    `argv[-1]` is the START POINT, not the branch. `git checkout -b feat/x origin/main` ends in
+    `origin/main`; `git checkout -b feat/x -q` ends in a flag. Recording either means the refusal
+    names something that is not a branch, so the session it refused cannot go and finish "the one
+    you have" -- it reads as a broken fence, and a fence that looks broken gets escape-hatched
+    rather than obeyed. Measured 2026-08-21: a live session was told it held `-1`.
+    """
+    if kind == "branch":
+        for flag in ("-b", "-B", "-c", "-C"):
+            if flag in argv:
+                i = argv.index(flag)
+                if i + 1 < len(argv) and not argv[i + 1].startswith("-"):
+                    return argv[i + 1]
+    elif kind == "worktree":
+        # `git worktree add [flags] <path> [ref]` -- the PATH is what is held, not the ref.
+        for a in argv[3:]:
+            if not a.startswith("-"):
+                return a
+    # Last resort: the last token that is at least not a flag. No worse than the old behaviour,
+    # and it can never print a bare `-q` or `-1` at an agent.
+    for a in reversed(argv):
+        if not a.startswith("-"):
+            return a
+    return "unknown"
+
+
 def pushed_ref(argv: list[str], cwd: str) -> str | None:
     if "push" not in argv[:4]:
         return None
@@ -215,6 +267,13 @@ def grade(cmd: str, session: str, cwd: str) -> int:
         if kind:
             # C -- second holding.
             held = st.get(kind)
+            if held and not still_held(held, kind, cwd):
+                # Recorded on intent, never created: denied by the classifier, or the command
+                # failed. Not a holding. Drop it rather than charging the session for it.
+                record("stale-holding", {"session": session, "held": held, "kind": kind})
+                st.pop(kind, None)
+                write_state(session, st)
+                held = None
             if held and held not in grandfathered():
                 record("second-" + kind, {"session": session, "held": held, "cmd": part[:200]})
                 if refusing:
@@ -227,7 +286,7 @@ def grade(cmd: str, session: str, cwd: str) -> int:
                         f"  <your command>  # second-worktree-intended"
                     )
             else:
-                st[kind] = argv[-1]
+                st[kind] = held_name(argv, kind)
                 write_state(session, st)
 
             # B -- stale base.
@@ -322,6 +381,29 @@ def selftest() -> int:
     check("creates_branch worktree list", creates_branch(shlex.split("git worktree list")), None)
     check("creates_branch commit", creates_branch(shlex.split("git commit -m x")), None)
 
+    # still_held -- a slot is only held while the thing exists. Intent is not a holding.
+    with tempfile.TemporaryDirectory() as d:
+        check("still_held worktree present", still_held(d, "worktree", "/"), True)
+        check("still_held worktree gone", still_held(d + "/nope", "worktree", "/"), False)
+    check("still_held branch that cannot exist",
+          still_held("no/such/branch/xyzzy", "branch", str(Path(__file__).parent)), False)
+
+    # held_name -- argv[-1] was the defect: it names the start point or a flag, not the branch.
+    check("held_name -b with start point",
+          held_name(shlex.split("git checkout -b feat/x origin/main"), "branch"), "feat/x")
+    check("held_name -b bare", held_name(shlex.split("git checkout -b feat/x"), "branch"), "feat/x")
+    check("held_name -b with trailing flag",
+          held_name(shlex.split("git checkout -q -b feat/x -q"), "branch"), "feat/x")
+    check("held_name switch -c",
+          held_name(shlex.split("git switch -c feat/x origin/main"), "branch"), "feat/x")
+    check("held_name -B force", held_name(shlex.split("git checkout -B feat/x main"), "branch"), "feat/x")
+    check("held_name worktree path not ref",
+          held_name(shlex.split("git worktree add --detach /tmp/wt origin/main"), "worktree"), "/tmp/wt")
+    check("held_name worktree bare",
+          held_name(shlex.split("git worktree add /tmp/wt"), "worktree"), "/tmp/wt")
+    check("held_name never returns a flag",
+          held_name(shlex.split("git checkout -b -q"), "branch").startswith("-"), False)
+
     check("pushed_ref explicit", pushed_ref(shlex.split("git push origin feat/x"), "/"), "feat/x")
     check("pushed_ref colon", pushed_ref(shlex.split("git push origin HEAD:integrate/a"), "/"), "HEAD")
     check("pushed_ref delete", pushed_ref(shlex.split("git push origin --delete feat/x"), "/"), None)
@@ -368,7 +450,7 @@ def selftest() -> int:
     finally:
         globals()["MODE_FILE"] = real_mode
 
-    print(f"one-branch-fence selftest: {14 + 4} checks, {len(fails)} failed")
+    print(f"one-branch-fence selftest: {14 + 4 + 8 + 3} checks, {len(fails)} failed")
     for f in fails:
         print("  FAIL " + f)
     return 1 if fails else 0
