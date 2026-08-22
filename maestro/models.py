@@ -57,6 +57,9 @@ class Config:
     DEFAULT_LOCAL_MODEL = os.getenv("MAESTRO_LOCAL_MODEL", "qwen2.5:7b")
     DEFAULT_API_MODEL = os.getenv("MAESTRO_API_MODEL", "deepseek-chat")
     ESTATE_AUDIT_PATH = os.getenv("MAESTRO_AUDIT", "~/.claude/state/estate-audit.json")
+    # Free space, not percent used. See check_disk for why percent lies on APFS.
+    DISK_FREE_GB_CRITICAL = float(os.getenv("MAESTRO_DISK_CRITICAL_GB", "5"))
+    DISK_FREE_GB_WARNING = float(os.getenv("MAESTRO_DISK_WARNING_GB", "15"))
     INTENT_LOG_DIR = os.getenv("MAESTRO_INTENTS", "~/.maestro/intents")
     SKILLS_DIR = os.getenv("MAESTRO_SKILLS", os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills"))
 

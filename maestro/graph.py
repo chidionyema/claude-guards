@@ -27,12 +27,34 @@ from models import Config, logger, State, Priority, Episode, Shape, Skill, Inten
 class ExperienceGraph:
     def __init__(self, db_path: str):
         self.db_path = os.path.expanduser(db_path)
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        # ":memory:" and a bare filename both have an empty dirname, and
+        # makedirs("") raises FileNotFoundError. An in-memory graph is how the
+        # law checks run in CI, so it has to be constructible.
+        parent = os.path.dirname(self.db_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
         self._init_schema()
+
+    def kv_get(self, key: str, default=None):
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute("SELECT value FROM kv WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else default
+
+    def kv_set(self, key: str, value: str):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO kv (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, str(value)),
+            )
 
     def _init_schema(self):
         with sqlite3.connect(self.db_path) as conn:
             conn.executescript("""
+                CREATE TABLE IF NOT EXISTS kv (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS episodes (
                     id TEXT PRIMARY KEY,
                     timestamp TEXT NOT NULL,
