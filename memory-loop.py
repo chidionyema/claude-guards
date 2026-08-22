@@ -186,7 +186,8 @@ LAWS_FILE = os.path.join(os.path.expanduser("~"), ".claude", "CLAUDE.md")
 # founder turn on this same edit. The durable fix is to derive the cap from `_rules_only` output
 # rather than store it, or to drop the OLDEST law rather than the newest when something must go.
 # Both are a founder decision because they change what every session is billed for.
-LAWS_MAX_CHARS = 37000
+LAWS_MAX_CHARS = 52000  # 2026-08-22: the 29-law block is 46,463 chars. At 37000 the
+                        # truncation path kept laws oldest-first and dropped 22 and 25-30.
 
 
 # Paragraphs of a law that are DUPLICATED verbatim in the same context window and are therefore
@@ -248,6 +249,66 @@ def _rules_only(head):
     return out + _LAWS_POINTER
 
 
+def _read_with_imports(path, _depth=0):
+    """The text of `path`, with any `@file` import lines replaced by the file they name.
+
+    CLAUDE.md stopped holding the laws on 2026-08-22: it became the single line `@AGENTS.md`, so
+    every agent tool could read one copy through its own symlink. This function did not follow
+    that pointer, so `read_laws()` saw 11 characters with no `# LAW ` heading in them and returned
+    None -- and SessionStart and PostCompact have injected NO laws since. The selftest caught it
+    the same day and reported it hourly into a log nobody opened, which is LAW 28.
+
+    Still never a copy: the import is followed to the real file, so there is one source.
+    """
+    if _depth > 3:
+        return None
+    try:
+        with open(path) as fh:
+            text = fh.read()
+    except OSError:
+        return None
+    base = os.path.dirname(os.path.abspath(path))
+    out = []
+    for line in text.split("\n"):
+        m = re.match(r"^@([^\s@][^\s]*)\s*$", line)
+        if not m:
+            out.append(line)
+            continue
+        target = os.path.expanduser(m.group(1))
+        if not os.path.isabs(target):
+            target = os.path.join(base, target)
+        sub = _read_with_imports(target, _depth + 1)
+        out.append(sub if sub is not None else line)
+    return "\n".join(out)
+
+
+def _laws_block(text):
+    """Everything from the top of the file down to the first non-LAW `# ` heading after the laws.
+
+    The boundary used to be the first `\n---\n` rule. That was right while the laws lived in
+    CLAUDE.md with a single rule under them. AGENTS.md puts a `---` BETWEEN laws -- nine of them --
+    so the old split ended the block at LAW 17 and threw away LAW 18 through LAW 30. Measured
+    2026-08-22: 17 of 29 laws survived the split, and the selftest could not see it because it
+    computed its own list of "declared" laws with the same split, so it graded the cut.
+
+    Falls back to the old rule when the file has no `# LAW ` heading at all.
+    """
+    lines = text.split("\n")
+    seen_law = False
+    for i, line in enumerate(lines):
+        if line.startswith("# LAW "):
+            seen_law = True
+            continue
+        if seen_law and re.match(r"^# (?!LAW )", line):
+            block = lines[:i]
+            while block and block[-1].strip() in ("", "---"):
+                block.pop()
+            return "\n".join(block).strip()
+    if not seen_law:
+        return text.split("\n---\n", 1)[0].strip()
+    return text.strip()
+
+
 def read_laws():
     """The headline block of ~/.claude/CLAUDE.md -- everything above its first `---` rule.
 
@@ -261,12 +322,10 @@ def read_laws():
     from the first, and then two agents would be obeying different laws -- which is the exact
     class of failure LAW 0 is about.
     """
-    try:
-        with open(LAWS_FILE) as fh:
-            text = fh.read()
-    except OSError:
+    text = _read_with_imports(LAWS_FILE)
+    if text is None:
         return None
-    head = text.split("\n---\n", 1)[0].strip()
+    head = _laws_block(text)
     # Guard against a rewritten CLAUDE.md whose first section is not the laws: injecting an
     # arbitrary 40KB preamble into every session would cost more than it protects.
     #

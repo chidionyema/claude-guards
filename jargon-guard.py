@@ -65,6 +65,22 @@ JARGON = {
     "thunk": "a function you call later",
 }
 
+#: The founder said "plain englioh always etf" on 2026-08-22, after a reply that used none of the
+#: words above. What he was correcting was shape, not vocabulary, and `~/.claude/AGENTS.md` under
+#: "Plain English" already bans these three. Each one below is a sentence I actually wrote to him.
+#: Keep it this short for the same reason the word list is short.
+SHAPES = [
+    (re.compile(r"^\s*(?:DONE|WORKING|BLOCKED)\s*:\s*(?:it'?s|they'?re|that'?s|this is|there'?s|there is)\s+not\b", re.I),
+     "opens by saying what the thing is not",
+     "open with what it is: \"run_v2.py is an ungrounded prototype\""),
+    (re.compile(r"\bthe\s+(?:engine|system|code|pipeline|suite|script|tool|test)\s+(?:exists to|wants|thinks|knows|believes|decides|likes|hates|feels|remembers)\b", re.I),
+     "gives software a mind",
+     "say who did what: \"we built the engine to ...\""),
+    (re.compile(r"[^\n]*?(?:\s-{1,2}\s|\s\u2014\s)[^\n]*?(?:\s-{1,2}\s|\s\u2014\s)"),
+     "stacks dashes in one line",
+     "two short sentences instead"),
+]
+
 FENCE = re.compile(r"```.*?```", re.S)
 INLINE = re.compile(r"`[^`]*`")
 URL = re.compile(r"https?://\S+")
@@ -96,6 +112,9 @@ def offences(text: str) -> list[tuple[str, str]]:
         pattern = r"(?<![\w-])" + re.escape(word) + r"(?![\w-])"
         if re.search(pattern, prose, re.I):
             found.append((word, plain))
+    for pattern, name, plain in SHAPES:
+        if pattern.search(prose):
+            found.append((name, plain))
     return found
 
 
@@ -140,7 +159,7 @@ def save_state(state: dict) -> None:
 
 
 def report(found: list[tuple[str, str]]) -> str:
-    lines = ["JARGON IN A REPLY TO THE FOUNDER. He should not have to decode it."]
+    lines = ["PLAIN ENGLISH BROKEN IN A REPLY TO THE FOUNDER. He should not have to decode it."]
     for word, plain in found:
         lines.append('  "%s"  ->  say "%s"' % (word, plain))
     lines.append("")
@@ -176,6 +195,26 @@ def selftest() -> int:
                    [w for w, _ in offences("This is idempotent.")] == ["idempotent"], None))
     checks.append(("the report names the word",
                    'idempotent' in report(offences("This is idempotent.")), None))
+
+    # The reply the founder corrected with "plain englioh always etf" on 2026-08-22.
+    shaped = ("DONE: they're not two versions of the same thing. `run.py` is the engine. "
+              "`run_v2.py` is an ungrounded prototype of the moat - the thing the engine "
+              "exists to not be.")
+    shaped_fix = ("DONE: `run.py` is the engine and `run_v2.py` is an ungrounded prototype. "
+                  "We built the engine to ground every claim in retrieval. The prototype "
+                  "retrieves nothing.")
+    got_shapes = {w for w, _ in offences(shaped)}
+    checks.append(("blocks the shapes he corrected",
+                   got_shapes == {"opens by saying what the thing is not", "gives software a mind"},
+                   sorted(got_shapes)))
+    checks.append(("passes the shape rewrite", offences(shaped_fix) == [], offences(shaped_fix)))
+    checks.append(("stacked dashes are a hit",
+                   [w for w, _ in offences("DONE: the fix landed - the gate is green - we can ship.")]
+                   == ["stacks dashes in one line"], None))
+    checks.append(("one dash is fine",
+                   offences("DONE: the fix landed - the gate is green.") == [], None))
+    checks.append(("a plain negative sentence is fine",
+                   offences("DONE: the scheduler is not running yet.") == [], None))
 
     bad = [(name, extra) for name, ok, extra in checks if not ok]
     for name, extra in bad:

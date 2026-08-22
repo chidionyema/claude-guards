@@ -219,6 +219,42 @@ def classify_checks(checks: list) -> tuple[list[str], int]:
     return red, len(checks) - len(done)
 
 
+def collect_estate_audit() -> list[Row]:
+    """estate_audit.py's own verdict, on the page the founder actually opens.
+
+    The audit has run hourly since 2026-08-21 and wrote its findings to
+    ~/.claude/state/logs/estate-audit.err.log. Nothing read that file. Two of the nine
+    criticals sitting in it were leaked credentials. The scanner was never the gap (LAW 28).
+
+    Reads the JSON the audit already wrote; it does not re-run it. A board that shells a
+    60-second scan is a board nobody loads.
+    """
+    cmd = ["/usr/bin/python3", os.path.expanduser("~/.claude/scripts/estate_watch.py"), "--json"]
+    rc, out, err = sh(cmd, 30)
+    if rc != 0:
+        return [_unknown("Estate audit", err.strip()[:200] or f"exit {rc}", " ".join(cmd))]
+    try:
+        d = json.loads(out)
+    except ValueError as e:
+        return [_unknown("Estate audit", f"watcher printed no JSON ({e})", " ".join(cmd))]
+    c = d.get("counts", {})
+    crit = d.get("critical", [])
+    age_m = int((d.get("age_s") or 0) / 60)
+    # A stale scan is UNKNOWN, never GOOD. "No criticals" and "no scan" look identical from
+    # here, and reporting the second as the first is the failure the whole file exists to stop.
+    if d.get("stale"):
+        rows = [_unknown("Estate audit", f"last scan {age_m}m ago — STALE",
+                         "launchctl list | grep estateaudit", " ".join(cmd))]
+    else:
+        rows = [Row(GOOD if not crit else BAD, "Estate audit", f"{len(crit)} critical",
+                    f"{c.get('warn', 0)} warn, {c.get('unknown', 0)} unknown, "
+                    f"{c.get('ok', 0)} ok — scanned {age_m}m ago", " ".join(cmd))]
+    for r in crit:
+        rows.append(Row(BAD, f"{r.get('domain')} — {r.get('title')}", str(r.get("value"))[:60],
+                        "", str(r.get("proof") or "")[:200]))
+    return rows
+
+
 def collect_prs() -> list[Row]:
     """What is in flight. A PR nobody can merge is the pipeline stopped (LAW 12)."""
     cmd = ["gh", "pr", "list", "--repo", "chidionyema/prospector", "--limit", "30",
@@ -1005,7 +1041,8 @@ COLLECTORS = [
     ("Your requests, closed with proof", collect_founder_requests),
     ("What you said, and whether it landed", collect_founder_friction),
     ("Work in flight", collect_prs),
-    ("What is broken", collect_estate_checks),
+    ("What is broken", collect_estate_audit),
+    ("What is broken (prospector)", collect_estate_checks),
     ("The machine that runs itself", collect_launchd),
     ("Agent sessions", collect_sessions),
     ("Shipped — is it live?", collect_shipped_to_live),

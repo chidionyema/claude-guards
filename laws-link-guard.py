@@ -35,6 +35,7 @@ LINKS = [
     os.path.join(HOME, ".claude", "AGENTS.md"),
     os.path.join(HOME, ".codex", "AGENTS.md"),
     os.path.join(HOME, ".gemini", "GEMINI.md"),
+    os.path.join(HOME, ".cursor", "AGENTS.md"),
 ]
 
 
