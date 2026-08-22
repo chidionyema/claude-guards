@@ -22,9 +22,15 @@ BACKENDS CASCADE. Tried in this order. The first one that is ready gets the
 question; if it errors the next one gets it, and the reply says which one
 answered.
 
-  kimi     ~/.kimi-code/bin/kimi -p        subscription; needs `kimi login` once
-  ollama   127.0.0.1:11434                 local, offline, weakest, always there
-  none     always ready, always 503        so the caller's fallback stays honest
+  kimi-bridge  127.0.0.1:8766              browser bridge to the kimi.ai web app
+  deepseek     127.0.0.1:8767              browser bridge to chat.deepseek.com
+  ollama       127.0.0.1:11434             local, offline, weakest, always there
+  none         always ready, always 503    so the caller's fallback stays honest
+
+NO KIMI CLI, removed 2026-08-22 on the founder's instruction. `kimi -p` calls
+api.kimi.com/coding, which is Kimi For Coding. This account does not hold that
+subscription and every readiness check returned 402. The web app subscription
+is a different product and is reached through the browser bridge above.
 
 NO GEMINI, on the founder's instruction, 2026-08-22. It had earned removal
 anyway: the free tier was spent, and its CLI retries a 429 internally instead
@@ -241,9 +247,15 @@ try:
 except Exception:  # noqa: BLE001
     pass
 
-# Order: the web bridges first (kimi, then deepseek), then the kimi CLI which
-# benches itself out on its own 402, then the local floor, then the honest 503.
-BACKENDS = _WEB_BRIDGES + [KimiBackend(), OllamaBackend(), NoneBackend()]
+# Order: the web bridges first (kimi, then deepseek), then the local floor,
+# then the honest 503.
+#
+# KimiBackend is deliberately NOT in this list. It calls api.kimi.com/coding,
+# which is Kimi For Coding, a subscription this account does not hold. Measured
+# 2026-08-22: every readiness check returned 402 and the daemon spent a network
+# round trip per cycle proving it. The class stays because subscribing is one
+# line away; the cascade does not carry a backend that cannot answer.
+BACKENDS = _WEB_BRIDGES + [OllamaBackend(), NoneBackend()]
 REAL = [b for b in BACKENDS if b.name != "none"]
 
 

@@ -54,6 +54,10 @@ def _cfg(generic, legacy, default):
 
 
 ROOT = Path(_cfg("BRIDGE_HOME", "KIMI_BRIDGE_HOME", Path.home() / ".kimi-bridge"))
+# One script, two jobs. The reply used to say "kimi-bridge" whichever job sent
+# it, so a deepseek answer arrived labelled as a kimi answer. The home
+# directory already names the job, so read it from there.
+NAME = ROOT.name.lstrip(".") or "bridge"
 PROFILE = ROOT / "profile"
 DB = ROOT / "session.db"
 LOG = ROOT / "logs" / "bridge.jsonl"
@@ -102,6 +106,24 @@ SEARCH_OFF = _cfg("BRIDGE_SEARCH_OFF", "KIMI_BRIDGE_SEARCH_OFF", "false") \
 # is read, which removes the need to reload a fresh chat every query.
 CAPTURE_URL = _cfg("BRIDGE_CAPTURE_URL", "KIMI_BRIDGE_CAPTURE_URL",
                    r"(kimi\.ai|deepseek\.com)/api")
+
+# Limits. Every one of these was an unbounded number that an edge case test
+# found on 2026-08-22, and an agent fleet is exactly the caller that finds
+# them: it retries in a loop, it sends whatever its own bug produced, and it
+# does not read the reply before sending the next one.
+MAX_BODY = int(_cfg("BRIDGE_MAX_BODY", "KIMI_BRIDGE_MAX_BODY", "1000000"))
+MAX_PROMPT = int(_cfg("BRIDGE_MAX_PROMPT", "KIMI_BRIDGE_MAX_PROMPT", "200000"))
+MIN_TIMEOUT, MAX_TIMEOUT = 5, int(_cfg("BRIDGE_MAX_TIMEOUT",
+                                       "KIMI_BRIDGE_MAX_TIMEOUT", "600"))
+# One browser means one job at a time. A caller that never stops asking must
+# be told the bridge is busy, not silently queued behind a queue with no end.
+QUEUE_MAX = int(_cfg("BRIDGE_QUEUE_MAX", "KIMI_BRIDGE_QUEUE_MAX", "16"))
+# How long after the caller's own deadline the handler still waits, so a
+# worker finishing at the last moment is not thrown away.
+GRACE = 5
+# Socket read timeout. Without it a Content-Length larger than the body sent
+# blocks rfile.read for ever and leaks one thread per such request.
+READ_TIMEOUT = int(_cfg("BRIDGE_READ_TIMEOUT", "KIMI_BRIDGE_READ_TIMEOUT", "10"))
 
 
 def _markers(generic, legacy, default):
@@ -243,7 +265,7 @@ STEALTH = r"""
 # when the network capture found nothing, so a UI change degrades the bridge
 # rather than breaking it.
 SETTLE = r"""
-(quietMs) => new Promise((resolve) => {
+({quietMs, capMs}) => new Promise((resolve) => {
   const started = Date.now();
   let last = '';
   let lastChange = Date.now();
@@ -258,7 +280,7 @@ SETTLE = r"""
     const now = read();
     if (now !== last) { last = now; lastChange = Date.now(); }
     if (last && Date.now() - lastChange > quietMs) return resolve(last);
-    if (Date.now() - started > 110000) return resolve(last);
+    if (Date.now() - started > capMs) return resolve(last);
     setTimeout(tick, 250);
   };
   const mo = new MutationObserver(() => {});
@@ -299,6 +321,73 @@ def sse_text(raw: str) -> str:
             elif isinstance(cur, list):
                 stack.extend(cur)
     return "".join(out).strip()
+
+
+def connect_frames(raw: bytes):
+    """Walk a Connect protocol streaming body: one flag byte, four length bytes
+    big-endian, then that many bytes of payload, repeating to the end.
+
+    Kimi's web app speaks Connect, not server-sent events. Measured 2026-08-22
+    against a recorded stream in fixtures/kimi-connect-stream.bin: 59 frames,
+    the first being b'\x00\x00\x00\x00\x10{"heartbeat":{}}'. A truncated tail
+    is ignored rather than raised on, because a stream can be cut off mid-frame
+    and the words already read are still worth returning.
+    """
+    i = 0
+    while i + 5 <= len(raw):
+        flags = raw[i]
+        ln = int.from_bytes(raw[i + 1:i + 5], "big")
+        payload = raw[i + 5:i + 5 + ln]
+        if len(payload) < ln:
+            return
+        i += 5 + ln
+        yield flags, payload
+
+
+def connect_stream_text(raw: bytes) -> str:
+    """The assistant's words out of a Connect stream, and nothing else.
+
+    Three things in that stream are not the answer and all three have burned
+    somebody before:
+
+    block.think.content is the model reasoning aloud. In the recorded stream it
+    is 35 of the 59 frames, so a parser that takes every content field returns
+    mostly deliberation. The web app renders it in a collapsed "Think" panel.
+
+    A notification frame carries "High demand. Switched to K2.6 Instant for
+    speed." It sits inside the answer area on screen, so any reader working off
+    the page glues it onto every reply.
+
+    Stage, status and heartbeat frames carry no words at all.
+
+    Only block.text.content is the answer. "set" replaces a block, "append"
+    extends it, and blocks are joined in the order they first appear.
+    """
+    blocks: dict = {}
+    order: list = []
+    for flags, payload in connect_frames(raw):
+        if flags & 0x02:            # end-of-stream trailers, never content
+            continue
+        try:
+            ev = json.loads(payload)
+        except Exception:
+            continue
+        mask = ev.get("mask") or ""
+        if not mask.startswith("block.text"):
+            continue
+        blk = ev.get("block") or {}
+        bid = blk.get("id")
+        content = (blk.get("text") or {}).get("content") or ""
+        if bid is None or not content:
+            continue
+        if bid not in blocks:
+            blocks[bid] = []
+            order.append(bid)
+        if ev.get("op") == "set":
+            blocks[bid] = [content]
+        else:
+            blocks[bid].append(content)
+    return "".join("".join(blocks[b]) for b in order).strip()
 
 
 def deepseek_stream_text(raw: str) -> str:
@@ -362,7 +451,7 @@ class Bridge:
             headed = _cfg("BRIDGE_HEADLESS", "KIMI_BRIDGE_HEADLESS", "true").strip().lower() \
                 in ("0", "false", "no", "off")
         self.headed = headed
-        self.jobs: queue.Queue = queue.Queue()
+        self.jobs: queue.Queue = queue.Queue(maxsize=QUEUE_MAX)
         self.con = db()
         self.page = None
         self.ctx = None
@@ -564,7 +653,7 @@ class Bridge:
         except Exception as e:
             log("search_toggle_err", err=f"{type(e).__name__}: {e}")
 
-    def _ask_once(self, prompt: str, timeout: int) -> str:
+    def _ask_once(self, prompt: str, timeout: int, deadline: float) -> str:
         if FRESH_CHAT:
             # Land on an empty compose screen so only this question streams.
             try:
@@ -593,17 +682,30 @@ class Bridge:
                 self.page.keyboard.type(line, delay=8)
         self.page.keyboard.press("Enter")
 
-        # Network first. The page's own response outlives any redesign.
-        deadline = time.time() + timeout
+        # Network first. The page's own response outlives any redesign. The
+        # network share of the budget is capped by the call's own deadline, so
+        # a retry can never push the caller past what it asked for.
+        net_deadline = min(time.time() + timeout, deadline)
         seen = set()
-        while time.time() < deadline:
+        while time.time() < net_deadline:
             for resp in list(self.captured):
                 if id(resp) in seen:
                     continue
                 seen.add(id(resp))
                 try:
-                    raw = resp.text()
+                    body = resp.body()
                 except Exception as _te:
+                    continue
+                # Connect framing first: its bodies are not valid UTF-8, so
+                # resp.text() raises and the text parsers never get a look.
+                text = connect_stream_text(body) if body[:1] in (b"\x00", b"\x01") else ""
+                if text:
+                    log("answer", source="connect",
+                        url=resp.url.split("?")[0], chars=len(text))
+                    return text.strip()
+                try:
+                    raw = body.decode("utf-8")
+                except Exception:
                     continue
                 if '"fragments"' in raw or '/content","o":"APPEND"' in raw:
                     text = deepseek_stream_text(raw)
@@ -631,7 +733,9 @@ class Bridge:
             self.page.wait_for_timeout(500)
 
         # DOM second, and say so, because it is the weaker of the two.
-        text = self.page.evaluate(SETTLE, 1500)
+        left = max(2.0, deadline - time.time())
+        text = self.page.evaluate(SETTLE, {"quietMs": 1500,
+                                           "capMs": int(left * 1000)})
         if text and len(text.strip()) >= 1:
             log("answer", source="dom", chars=len(text))
             return text.strip()
@@ -645,8 +749,16 @@ class Bridge:
             for resp in list(self.captured)[-20:]:
                 try:
                     body = resp.text()[:300]
-                except Exception as _e:
-                    body = f"<unreadable: {type(_e).__name__}>"
+                except Exception:
+                    try:
+                        raw_b = resp.body()
+                        # Keep the whole framed body on disk. 400 bytes of it
+                        # showed the frame header but stopped before the op
+                        # that carries the words, which is the one that matters.
+                        (ROOT / "logs" / "capture-miss.bin").write_bytes(raw_b)
+                        body = "<bytes:%d> " % len(raw_b) + repr(raw_b[:200])
+                    except Exception as _e:
+                        body = f"<unreadable: {type(_e).__name__}>"
                 shapes.append({"url": resp.url.split("?")[0], "head": body})
             page_text = ""
             try:
@@ -665,19 +777,30 @@ class Bridge:
             log("capture_miss_log_failed", error=f"{type(_e).__name__}: {_e}")
         raise RuntimeError("no answer captured from the network or the DOM")
 
-    def ask(self, prompt: str, timeout: int) -> str:
+    def ask(self, prompt: str, timeout: int, deadline: float | None = None) -> str:
         last = None
         self.last_used = time.time()
+        # One deadline for the whole call, retries included. The caller's
+        # timeout is a promise about when it hears back, not a per-attempt
+        # allowance, and the HTTP handler's own wait is built on this number.
+        # The handler passes its OWN absolute deadline, set when the request
+        # arrived, so time spent queued behind other jobs comes out of the
+        # caller's budget instead of extending it.
+        if deadline is None:
+            deadline = time.time() + timeout
         for attempt, wait in enumerate((0,) + RETRY_BACKOFF):
             if wait:
                 time.sleep(wait)
+            if time.time() >= deadline:
+                log("deadline_reached", attempt=attempt)
+                break
             try:
                 self._ensure()  # wake the browser if it was parked for idle
                 if self.refresh_health() != "healthy":
                     self.restart()
                     if self.refresh_health() != "healthy":
                         raise RuntimeError(self.detail)
-                out = self._ask_once(prompt, timeout)
+                out = self._ask_once(prompt, timeout, deadline)
                 self.last_used = time.time()
                 return out
             except Exception as e:
@@ -687,7 +810,7 @@ class Bridge:
                     self.page.goto(TARGET, wait_until="domcontentloaded", timeout=45000)
                 except Exception:
                     self.restart()
-        raise RuntimeError(str(last))
+        raise RuntimeError(str(last) if last else "deadline reached with no answer")
 
     # -- thread ------------------------------------------------------------
 
@@ -754,8 +877,19 @@ class Bridge:
                 self.stop()
                 return
             prompt, timeout, box = job
+            # Do not start work nobody is waiting for. A job that sat in the
+            # queue past its caller's deadline is a paid model call whose
+            # answer is thrown away, and while it runs it blocks every job
+            # behind it. Measured 2026-08-22: an abandoned job ran in full.
+            deadline = box.get("deadline")
+            if box.get("abandoned") or (deadline and time.time() >= deadline):
+                box["error"] = "dropped: the caller's deadline passed while queued"
+                box["done"].set()
+                log("job_dropped", queued_for=round(
+                    time.time() - box.get("queued_at", time.time()), 1))
+                continue
             try:
-                box["answer"] = self.ask(prompt, timeout)
+                box["answer"] = self.ask(prompt, timeout, deadline)
             except Exception as e:
                 box["error"] = f"{type(e).__name__}: {e}"
             finally:
@@ -769,6 +903,12 @@ BRIDGE: Bridge | None = None
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    # socketserver hands this to the socket, so a body that never arrives
+    # raises instead of parking a thread for ever.
+    timeout = READ_TIMEOUT
+
+    def log_message(self, fmt, *a):  # the jsonl log is the record, not stderr
+        pass
 
     def _send(self, code, obj):
         body = json.dumps(obj).encode()
@@ -781,7 +921,33 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def _guard(self, fn):
+        """No request may end without a reply.
+
+        Measured 2026-08-22: a prompt that was an int raised inside the
+        handler, socketserver closed the connection, and the caller saw
+        `RemoteDisconnected` with no status and no message. An agent cannot
+        tell that apart from the bridge being dead, so it retries a request
+        that will never work. Every unhandled error becomes a 500 with a body.
+        """
+        try:
+            fn()
+        except Exception as e:
+            log("handler_error", path=self.path, error=f"{type(e).__name__}: {e}")
+            try:
+                self._send(500, {"success": False,
+                                 "error": f"internal error: {type(e).__name__}",
+                                 "backend": NAME})
+            except Exception:
+                pass
+
     def do_GET(self):
+        self._guard(self._get)
+
+    def do_POST(self):
+        self._guard(self._post)
+
+    def _get(self):
         if self.path.rstrip("/") != "/health":
             return self._send(404, {"error": "not found"})
         b = BRIDGE
@@ -793,27 +959,70 @@ class Handler(BaseHTTPRequestHandler):
             "target": TARGET,
         })
 
-    def do_POST(self):
+    def _bad(self, code, msg):
+        return self._send(code, {"success": False, "error": msg, "backend": NAME})
+
+    def _post(self):
         if self.path.rstrip("/") != "/query":
             return self._send(404, {"error": "not found"})
-        n = int(self.headers.get("Content-Length") or 0)
         try:
-            req = json.loads(self.rfile.read(n) or b"{}")
+            n = int(self.headers.get("Content-Length") or 0)
         except ValueError:
-            return self._send(400, {"success": False, "error": "bad json"})
-        prompt = (req.get("prompt") or "").strip()
+            return self._bad(400, "bad content-length")
+        if n > MAX_BODY:
+            return self._bad(413, f"body over {MAX_BODY} bytes")
+        try:
+            body = self.rfile.read(n) if n else b"{}"
+        except Exception as e:
+            return self._bad(408, f"body never arrived: {type(e).__name__}")
+        try:
+            req = json.loads(body or b"{}")
+        except ValueError:
+            return self._bad(400, "bad json")
+        if not isinstance(req, dict):
+            return self._bad(400, "body must be a json object")
+
+        # Validate rather than coerce. Every one of these was a 500 or a
+        # dropped connection before 2026-08-22.
+        prompt = req.get("prompt")
+        if not isinstance(prompt, str):
+            return self._bad(400, "prompt must be a string")
+        prompt = prompt.strip()
         if not prompt:
-            return self._send(400, {"success": False, "error": "empty prompt"})
-        timeout = int(req.get("timeout") or ANSWER_TIMEOUT)
-        box = {"done": threading.Event()}
-        BRIDGE.jobs.put((prompt, timeout, box))
-        if not box["done"].wait(timeout + 40):
-            return self._send(504, {"success": False, "error": "bridge timed out"})
+            return self._bad(400, "empty prompt")
+        if len(prompt) > MAX_PROMPT:
+            return self._bad(413, f"prompt over {MAX_PROMPT} characters")
+        t = req.get("timeout")
+        if t is None or t == "":
+            timeout = ANSWER_TIMEOUT
+        else:
+            try:
+                timeout = int(float(t))
+            except (TypeError, ValueError):
+                return self._bad(400, "timeout must be a number of seconds")
+        timeout = max(MIN_TIMEOUT, min(timeout, MAX_TIMEOUT))
+
+        now = time.time()
+        box = {"done": threading.Event(), "deadline": now + timeout,
+               "queued_at": now}
+        try:
+            BRIDGE.jobs.put_nowait((prompt, timeout, box))
+        except queue.Full:
+            # One browser, one job at a time. Saying busy lets a caller back
+            # off; queueing without limit lets it fill memory and then time
+            # out anyway, which is the same failure with a longer fuse.
+            log("queue_full", depth=BRIDGE.jobs.qsize())
+            return self._bad(503, "bridge busy: the queue is full, retry shortly")
+
+        if not box["done"].wait(max(1.0, box["deadline"] - time.time()) + GRACE):
+            # Tell the worker nobody is listening any more, so it drops the
+            # job instead of spending a model call on an answer with no home.
+            box["abandoned"] = True
+            return self._bad(504, "bridge timed out")
         if "answer" in box:
             return self._send(200, {"success": True, "answer": box["answer"],
-                                    "backend": "kimi-bridge"})
-        self._send(502, {"success": False, "error": box.get("error", "unknown"),
-                         "backend": "kimi-bridge"})
+                                    "backend": NAME})
+        return self._bad(502, box.get("error", "unknown"))
 
 
 # ---------------------------------------------------------------------- main
@@ -844,6 +1053,34 @@ def daemon_pid():
         return pid
     except Exception:
         return -1  # something holds the port and it is not ours to stop
+
+
+def reap_stale_driver():
+    """Kill whatever the last run of THIS bridge left behind.
+
+    `launchctl kickstart -k` sends SIGKILL, which no handler can catch, so the
+    python dies and its playwright node driver is reparented to launchd and
+    keeps the profile directory locked. The next run then meets a chromium that
+    is already running against the same profile and dies with `write EPIPE`.
+
+    Scoping matters: one script drives two bridges. The pidfile lives under
+    ROOT, so it names only this bridge's last process. The python is its own
+    process group leader (measured 2026-08-22: pid 49334, pgid 49334) and the
+    node driver joins that group, so killing the group takes the driver with
+    it. Refuse to touch our own group, and treat "no such process" as the
+    normal case, because a clean shutdown removes the pidfile.
+    """
+    try:
+        old = int(PIDFILE.read_text().strip())
+    except Exception:
+        return
+    if old <= 1 or old == os.getpid() or old == os.getpgrp():
+        return
+    try:
+        os.killpg(old, signal.SIGKILL)
+    except Exception:
+        return
+    log("reaped_stale_driver", pgid=old)
 
 
 def stop_daemon(pid):
@@ -946,8 +1183,9 @@ def main():
         return 0 if state == "healthy" else 1
 
     if ns.daemon:
+        reap_stale_driver()
         BRIDGE = Bridge()
-        t = threading.Thread(target=BRIDGE.run, daemon=True, name="kimi-bridge")
+        t = threading.Thread(target=BRIDGE.run, daemon=True, name=NAME)
         t.start()
         srv = ThreadingHTTPServer((HOST, PORT), Handler)
         PIDFILE.parent.mkdir(parents=True, exist_ok=True)
