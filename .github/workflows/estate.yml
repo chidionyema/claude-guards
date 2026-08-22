@@ -1,0 +1,41 @@
+name: estate
+
+# The sensors are proved here; the sensing happens on the Mac.
+# estate_audit.py reads local disk, launchd jobs, keychain state and bridge
+# ports -- none of which exist on a GitHub runner. So this workflow does the
+# one thing a runner honestly can: prove the sensors still boot and that their
+# own selftests pass before a change reaches the machine that runs them.
+# The hourly scan itself is com.founder.estateaudit, StartInterval 3600.
+
+on:
+  push:
+    paths: ["estate/**", ".github/workflows/estate.yml"]
+  pull_request:
+    paths: ["estate/**"]
+  schedule:
+    - cron: "17 * * * *"   # a heartbeat: if the sensors stop compiling, this goes red
+  workflow_dispatch:
+
+jobs:
+  sensors:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: every sensor compiles
+        run: python -m compileall -q estate/
+
+      - name: estate_watch selftest
+        run: python estate/estate_watch.py --selftest
+
+      - name: no credential value committed under estate/
+        run: |
+          # LAW 21: naming a secret is fine, printing one is not.
+          if grep -rInE '(sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16})' estate/; then
+            echo "::error::a credential-shaped literal is committed under estate/"
+            exit 1
+          fi
+          echo "clean"

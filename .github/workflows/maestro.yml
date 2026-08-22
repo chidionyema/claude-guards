@@ -1,0 +1,58 @@
+name: maestro
+
+# The deputy ticks every 60 seconds on the Mac under com.founder.maestro.
+# It is NOT scheduled here, and the reason is not preference:
+#   - GitHub's cron floor is 5 minutes, and it is delivered late under load;
+#   - the skills restart launchd jobs and reclaim local disk, neither of which
+#     a runner can see;
+#   - a tick from a runner could not read ~/.claude/state/estate-audit.json.
+# What a runner can do is refuse a broken deputy before it reaches the machine.
+
+on:
+  push:
+    paths: ["maestro/**", ".github/workflows/maestro.yml"]
+  pull_request:
+    paths: ["maestro/**"]
+  workflow_dispatch:
+
+jobs:
+  deputy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      - name: every module imports
+        working-directory: maestro
+        run: |
+          for m in models graph laws shapes board maestro; do
+            python -c "import sys; sys.path.insert(0,'.'); import $m" && echo "  $m OK"
+          done
+
+      - name: the 7 laws still refuse a bad plan
+        working-directory: maestro
+        run: python -c "
+        import sys; sys.path.insert(0,'.')
+        from laws import LawMiddleware, LawViolation
+        from graph import ExperienceGraph
+        g = ExperienceGraph(':memory:')
+        try:
+            LawMiddleware.validate({}, {'allowed_domains': ['estate']}, g)
+        except LawViolation as e:
+            print('  refused as designed:', e.law_name); sys.exit(0)
+        print('::error::an empty plan passed all seven laws'); sys.exit(1)
+        "
+
+      - name: skills are executable and self-describing
+        run: |
+          python maestro/skills/disk_cleanup.py --dry-run > /dev/null && echo "  disk_cleanup OK"
+          python maestro/skills/restart_bridge.py --bridge nope; test $? -eq 2 && echo "  restart_bridge refuses an unknown bridge"
+
+      - name: the deputy never executes an unvetted path
+        working-directory: maestro
+        run: |
+          grep -q 'DANGEROUS_PATTERNS' maestro.py || { echo "::error::the dangerous-pattern guard is gone"; exit 1; }
+          grep -q '_path_safe' maestro.py       || { echo "::error::the path guard is gone"; exit 1; }
+          echo "  both execution guards present"

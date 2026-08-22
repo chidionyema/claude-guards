@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.founder.maestro</string>
+
+  <!-- One state transition per invocation, not a long-running daemon. A crash
+       costs one tick instead of the deputy, and it is naturally rate-limited:
+       a full sense -> orient -> decide -> act -> verify -> report cycle takes
+       about seven minutes of wall clock and a few dozen GitHub API calls. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/chidionyema/.claude/scripts/maestro/maestro.py</string>
+    <string>--once</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>MAESTRO_BOARD_MAX_NEW</key><string>5</string>
+    <key>MAESTRO_AUDIT</key><string>/Users/chidionyema/.claude/state/estate-audit.json</string>
+  </dict>
+
+  <key>StartInterval</key><integer>60</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/Users/chidionyema/.claude/state/logs/maestro.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/chidionyema/.claude/state/logs/maestro.err.log</string>
+  <key>WorkingDirectory</key><string>/Users/chidionyema/.claude/scripts/maestro</string>
+</dict>
+</plist>

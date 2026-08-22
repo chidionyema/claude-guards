@@ -4,3 +4,9 @@ __pycache__/
 *.bak-*
 *.bak.*
 *.before-*
+
+# maestro runtime state: memory and decision stream live outside the repo
+maestro/*.db
+maestro/*.db-journal
+maestro/intents/*.json
+maestro/_maestro_monolith.py

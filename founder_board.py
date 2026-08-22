@@ -229,7 +229,7 @@ def collect_estate_audit() -> list[Row]:
     Reads the JSON the audit already wrote; it does not re-run it. A board that shells a
     60-second scan is a board nobody loads.
     """
-    cmd = ["/usr/bin/python3", os.path.expanduser("~/.claude/scripts/estate_watch.py"), "--json"]
+    cmd = ["/usr/bin/python3", os.path.expanduser("~/.claude/scripts/estate/estate_watch.py"), "--json"]
     rc, out, err = sh(cmd, 30)
     if rc != 0:
         return [_unknown("Estate audit", err.strip()[:200] or f"exit {rc}", " ".join(cmd))]

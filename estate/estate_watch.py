@@ -46,7 +46,10 @@ SEEN = HOME / ".claude/state/estate-watch-seen.json"
 STALE_H = float(os.environ.get("ESTATE_WATCH_STALE_H", "3"))
 ESCALATE_AFTER_H = float(os.environ.get("ESTATE_WATCH_ESCALATE_H", "24"))
 
-sys.path.insert(0, str(HOME / ".hermes/scripts"))
+# estate_alert.py now lives beside this file. ~/.hermes is the discontinued
+# estate; keep it as a fallback only so an old checkout still sends.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+sys.path.append(str(HOME / ".hermes/scripts"))
 
 
 def _send(text: str, key: str, dry: bool) -> bool:
