@@ -27,11 +27,14 @@ CANON = os.path.join(HOME, "AGENTS.md")
 # back and gives a deleted ~/AGENTS.md something to come back from.
 SNAPSHOT = os.path.join(HOME, ".claude", "AGENTS.snapshot.md")
 
+# Deliberately NOT ~/CLAUDE.md. A session whose working directory is $HOME
+# reads that as a project memory file, so the laws would be injected a second
+# time and billed a second time. Claude Code enters through ~/.claude/CLAUDE.md,
+# which imports AGENTS.md.
 LINKS = [
     os.path.join(HOME, ".claude", "AGENTS.md"),
     os.path.join(HOME, ".codex", "AGENTS.md"),
     os.path.join(HOME, ".gemini", "GEMINI.md"),
-    os.path.join(HOME, "CLAUDE.md"),
 ]
 
 
