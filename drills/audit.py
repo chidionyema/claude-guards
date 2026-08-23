@@ -71,6 +71,23 @@ def discover(root, deps_path, exclude):
     # repository's dependencies. When claude-guards audits itself, root IS the
     # guards checkout and there is nothing to subtract.
     riding_along = GUARDS != root and GUARDS.startswith(root + os.sep)
+
+    # Read the git index, not the working tree. A runner checks out tracked
+    # files and nothing else, so a walk of a developer's directory reads build
+    # output, virtualenvs and scratch files that CI will never see -- and the
+    # two readings then disagree for a reason that has nothing to do with
+    # dependencies. Asking git makes the local answer and the pull request's
+    # answer the same measurement (LAW 15).
+    tracked = None
+    try:
+        p = subprocess.run(["git", "-C", root, "ls-files", "-z"],
+                           capture_output=True, timeout=120)
+        if p.returncode == 0:
+            tracked = {os.path.join(root, f.decode())
+                       for f in p.stdout.split(b"\0") if f}
+    except (OSError, subprocess.SubprocessError):
+        tracked = None
+
     for dirpath, dirnames, filenames in os.walk(root):
         here = os.path.abspath(dirpath)
         if riding_along and (here == GUARDS or here.startswith(GUARDS + os.sep)):
@@ -81,6 +98,8 @@ def discover(root, deps_path, exclude):
             full = os.path.join(dirpath, fn)
             rel = os.path.relpath(full, root)
             if full == deps_path or fn == "audit.py" or fn.endswith(BINARY):
+                continue
+            if tracked is not None and full not in tracked:
                 continue
             if any(fnmatch.fnmatch(rel, pat) or rel.startswith(pat.rstrip("/") + "/")
                    for pat in exclude):
