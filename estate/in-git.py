@@ -10,6 +10,8 @@ closed is how the last four holes survived:
   mirrors   the live copy and the committed copy still identical
   secrets   a credential file has a committed example naming its keys, and the
             values are still absent from the repo (LAW 21 outranks LAW 24)
+  offsite   every repo has a recent, verified bundle off this machine, because
+            "it is on GitHub" is one suspended account away from being wrong
 
 What it is NOT allowed to do is pass because it did not look. Every class that
 cannot run reports UNKNOWN and fails the sweep, never a quiet zero.
@@ -183,9 +185,55 @@ def check_secrets(d, mm):
     return ok, holes
 
 
+def check_escrow(d, _mm):
+    """A repo pushed only to GitHub is one suspended account from gone.
+
+    This is the class that made two agents give two answers to one question:
+    a bundle failed, was fixed an hour later, and each of them reported the
+    moment they happened to look. A receipt with an age on it does not have
+    that problem.
+    """
+    cfg = d.get("escrow")
+    if not cfg:
+        return 0, ["no escrow declared, so nothing checks the offsite copy"]
+    p = os.path.expanduser(cfg["receipt"])
+    if not os.path.exists(p):
+        return 0, ["no bundle receipts at " + cfg["receipt"] + ", the offsite copy is unproven"]
+    last = {}
+    for line in open(p):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        last[r.get("slug") or r.get("repo")] = r
+    if not last:
+        return 0, ["the receipts file is empty, no repo has an offsite copy"]
+    now, holes, ok = __import__("time").time(), [], 0
+    want = {os.path.basename(os.path.expanduser(e["path"]).rstrip("/")) for e in d["repos"]}
+    for slug, r in sorted(last.items()):
+        state = r.get("restore") or r.get("status") or "unknown"
+        age_h = (now - r.get("ts", 0)) / 3600.0
+        if state not in cfg["ok_states"]:
+            holes.append("%s: last offsite copy is %s" % (slug, state))
+        elif age_h > cfg["max_age_hours"]:
+            holes.append("%s: offsite copy is %.0fh old, older than %sh" %
+                         (slug, age_h, cfg["max_age_hours"]))
+        else:
+            ok += 1
+    # A declared repo with no receipt at all is the quiet failure: nothing red,
+    # nothing kept. Match on the tail of the slug, which is how the pusher names them.
+    for name in want:
+        if not any(s and s.endswith(name) for s in last):
+            holes.append("%s: has no offsite copy at all" % name)
+    return ok, holes
+
+
 CLASSES = [("runners", check_runners), ("declared", check_declared),
            ("repos", check_repos), ("mirrors", check_mirrors),
-           ("secrets", check_secrets)]
+           ("secrets", check_secrets), ("offsite", check_escrow)]
 
 
 def main():
