@@ -20,14 +20,18 @@ register does not.
 | offsite-backup-restore | yes | the prospector data is gone and the offsite copy is all that is left |
 | key-escrow-restore | yes | this Mac dies and nothing can decrypt the offsite copies |
 | secret-rotation | no | a credential leaks and has to be replaced |
-| telegram-delivery | no | something breaks at 03:00 and the message never arrives |
+| telegram-delivery | yes | something breaks at 03:00 and the message never arrives |
 | windows-rebuild | no | the rebuild has to happen on a machine that is not a Mac |
 | github-gone | no | GitHub is unreachable and both estate repositories are there |
 | cloudflare-gone | no | R2 holds the offsite copy and Cloudflare is the way in |
 | stripe-gone | no | payments stop and there is no second processor |
+| db-integrity | yes | a database loses its indexes and every backup copies the damage |
+| recovery-posture | yes | a scheduled job stops running and nothing on this Mac notices |
 
-Read 2026-08-23. An earlier version of this page said six entries and named a
-`fly-rollback` drill that is not in the register.
+Read 2026-08-24. An earlier version of this page said six entries and named a
+`fly-rollback` drill that is not in the register. The same version still called
+`telegram-delivery` unwritten after it had been written, which is why the line
+above the table says the register is the live answer and this table is not.
 
 ## How it runs
 
