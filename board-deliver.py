@@ -169,7 +169,13 @@ def main() -> int:
         order = {"p0": 0, "critical": 0, "urgent": 0, "p1": 1, "warn": 2, "info": 3}
         return (order.get(p, 3), str(e.get("ts") or ""))
 
-    fresh.sort(key=rank)
+    # Newest first, then a stable sort by priority. A directive still comes
+    # above a status update, but within a priority the recent post wins: the
+    # first version of this dropped The Architect's 22:37 status of all three
+    # sessions, the single most useful thing on the board, because four drill
+    # notices from 21:41 sorted ahead of it and filled the window.
+    fresh.sort(key=lambda e: str(e.get("ts") or ""), reverse=True)
+    fresh.sort(key=lambda e: rank(e)[0])
 
     # The same post reaches the board twice when two writers relay it. The
     # founder's 22:40 directive is on there twice for exactly that reason, and
