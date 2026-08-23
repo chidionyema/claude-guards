@@ -129,7 +129,7 @@ REFUSED = []
 
 
 def _copy(src, dst):
-    """Copy unless the file looks like it holds a secret. LAW 10 outranks LAW 10."""
+    """Copy unless the file looks like it holds a secret. LAW 21 outranks LAW 24."""
     why = looks_secret(src)
     if why:
         REFUSED.append((src, why))
@@ -243,7 +243,7 @@ def sync():
 
     changed = [l[3:] for l in status.splitlines()]
     git("add", "--", *paths)
-    msg = ("LAW 10: %d load-bearing file(s) changed outside git\n\n%s\n\n"
+    msg = ("LAW 24: %d load-bearing file(s) changed outside git\n\n%s\n\n"
            "Committed by the scheduled guard, not by a person.\n"
            % (len(changed), "\n".join("  " + c for c in changed)))
     c = git("commit", "-m", msg)
@@ -364,7 +364,7 @@ def main():
 
     if a.pull:
         if REFUSED:
-            print(f"\nREFUSED {len(REFUSED)} file(s). LAW 10: a secret is never committed.")
+            print(f"\nREFUSED {len(REFUSED)} file(s). LAW 21: a secret is never committed.")
             for path, why in REFUSED:
                 print(f"    {path}\n        {why}")
             print("    Record what these must contain in rebuild/PREREQUISITES.md, by name.")
@@ -376,7 +376,7 @@ def main():
         drift += 1
 
     if drift:
-        print(f"\n{drift} difference(s). LAW 10: run `tracked.py --pull`, then commit.")
+        print(f"\n{drift} difference(s). LAW 24: run `tracked.py --pull`, then commit.")
         return 1 if a.check else 0
     print(f"in step: every tracked path matches its committed copy")
     return 0

@@ -74,7 +74,7 @@ def run_one(p: pathlib.Path) -> dict:
 
 
 def _alert(bad: list[dict], payload: dict) -> None:
-    """Say it out loud. An alert that fails to arrive is worse than no alert (LAW 6)."""
+    """Say it out loud. An alert that fails to arrive is worse than no alert (LAW 28)."""
     sys.path.insert(0, str(ROOT / "estate"))
     v = payload["verdict"]
     detail = {r["name"]: r["detail"] for r in bad}

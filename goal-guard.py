@@ -186,7 +186,7 @@ def replan(target: str, n: int, st: dict, lane_name: str) -> str:
     return (
         f"[goal-guard/{lane_name}] THIS IS ATTEMPT {n} AT THE SAME TARGET: {target}\n"
         f"  GOAL  {goal}\n"
-        f"  LAW 5: two turns without progress means stop and CHANGE APPROACH -- not a third\n"
+        f"  LAW 9: two turns without progress means stop and CHANGE APPROACH -- not a third\n"
         f"  attempt at the same thing with a better flag.\n"
         f"  Answer these three before the next call, one line each. It is not a refusal: if\n"
         f"  the answers are good, carry on.\n"
@@ -591,7 +591,7 @@ def selftest() -> int:
     call("Bash", "python3 /tmp/b2.py", sess="rh2")
     call("Edit", fp="/tmp/b2.py", sess="rh2")
     o = call("Bash", "python3 /tmp/b2.py", sess="rh2")
-    ck("AN EDIT BETWEEN ATTEMPTS DOES NOT EXCUSE THEM -- run/rewrite/run is LAW 5's own "
+    ck("AN EDIT BETWEEN ATTEMPTS DOES NOT EXCUSE THEM -- run/rewrite/run is LAW 9's own "
        "worked example", "ATTEMPT 3" in o)
     ck("and the read-only counter really did score zero on that same run",
        read_state("rh2").get("run", 0) == 0)
