@@ -46,6 +46,7 @@ WINDOW_S = 12 * 3600          # a finding goes stale; the estate changes underne
 # fence thing") which is exactly the repeat worth refusing, so it grades shared-over-smaller.
 CONTAINMENT = 0.55            # observed: same subject 0.73, different subject 0.00, floor is noise
 MIN_TOKENS = 4                # below this a message is too short to fingerprint honestly
+FANOUT_S = 300                # one broadcast to N sessions is N sends of ONE message, not N-1 repeats
 KEEP = 400                    # board entries retained
 
 RE_RAISE = re.compile(r"(?im)^\s*Re-raising:\s*\S")
@@ -114,6 +115,7 @@ def check(message: str, to: str, session: str, now: float, board: list[dict],
               "text": (message or "")[:300], "reraise": True}, dest)
         return 0
 
+    fanout = False
     for e in reversed(board):
         try:
             if now - float(e.get("ts", 0)) > WINDOW_S:
@@ -124,6 +126,18 @@ def check(message: str, to: str, session: str, now: float, board: list[dict],
         except Exception:
             continue
         if score >= CONTAINMENT and shared >= MIN_TOKENS:
+            # A FAN-OUT IS NOT A REPEAT. One broadcast to six sessions is six sends of one
+            # message, and this fence read five of them as loops. Found 2026-08-23 wiring the
+            # fence to PreToolUse: the estate-wide canonical-root broadcast would have reached
+            # peer 1 and been refused to peers 2-6. The fence and the broadcast are each correct
+            # alone and deadlocked together, which is the pair LAW 12 says is the defect.
+            # Same sender, DIFFERENT recipient, inside the fan-out window: this is leg N of one
+            # delivery. Let it through, and do not post a second board line for it.
+            if (str(e.get("session")) == str(session)
+                    and str(e.get("to")) != str(to)
+                    and now - float(e.get("ts", 0)) <= FANOUT_S):
+                fanout = True
+                continue
             when = time.strftime("%H:%M", time.localtime(float(e.get("ts", now))))
             who = str(e.get("session", "another session"))[-8:]
             sys.stderr.write(
@@ -138,6 +152,8 @@ def check(message: str, to: str, session: str, now: float, board: list[dict],
             )
             return 2
 
+    if fanout:
+        return 0        # leg N of a broadcast: already on the board from leg 1
     post({"ts": now, "session": session, "to": to, "tokens": sorted(tk)[:60],
           "text": (message or "")[:300]}, dest)
     return 0
@@ -224,13 +240,30 @@ def selftest() -> int:
          "interpreter and reports it as a gate violation on your branch against main", board, 0),
         ("a terse restatement of a long finding IS refused -- this is why containment, not jaccard",
          "still stuck: integrate/2026-08-20-final ancestor of main, fence refuses the push", board, 2),
+        # 2026-08-23: wiring this fence to PreToolUse would have refused legs 2-6 of the
+        # canonical-root broadcast. A fan-out is one message to many, not many repeats.
+        ("leg 2 of MY OWN fan-out to a DIFFERENT peer is not a repeat",
+         wedge, [{"ts": now - 5, "session": "sess-cccc3333", "to": "peer-a",
+                  "tokens": sorted(tokens(wedge))[:60], "text": wedge}], 0,
+         "peer-b", "sess-cccc3333"),
+        ("but the SAME message to the SAME peer is still a repeat",
+         wedge, [{"ts": now - 5, "session": "sess-cccc3333", "to": "peer-a",
+                  "tokens": sorted(tokens(wedge))[:60], "text": wedge}], 2,
+         "peer-a", "sess-cccc3333"),
+        ("and ANOTHER session repeating it is still refused -- the fence's whole job",
+         wedge, [{"ts": now - 5, "session": "sess-cccc3333", "to": "peer-a",
+                  "tokens": sorted(tokens(wedge))[:60], "text": wedge}], 2,
+         "peer-b", "sess-dddd4444"),
     ]
     failures = []
-    for name, msg, bd, want in cases:
+    for case in cases:
+        name, msg, bd, want = case[:4]
+        to_ = case[4] if len(case) > 4 else "peer-x"
+        sess_ = case[5] if len(case) > 5 else "sess-bbbb2222"
         tmp = pathlib.Path(tempfile.mkdtemp()) / "board.jsonl"
         err = io.StringIO()
         with contextlib.redirect_stderr(err):
-            got = check(msg, "peer-x", "sess-bbbb2222", now, bd, board_path=tmp)
+            got = check(msg, to_, sess_, now, bd, board_path=tmp)
         mark = "ok" if got == want else "FAIL"
         if got != want:
             failures.append(name)
