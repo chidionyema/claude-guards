@@ -62,9 +62,12 @@
     {
       "id": "telegram-delivery",
       "what_breaks": "Something breaks at 03:00 and the message never arrives.",
-      "why": "LAW 28: prove the arrival, not the send. The old coordinator fired escalate 18 times and delivered 0 notifications, and nothing caught it for four days.",
-      "cmd": null,
-      "todo": "Send a marked message and read it back off the API, so a dead poller or a wrong chat id fails the drill rather than passing it."
+      "why": "LAW 28: prove the arrival, not the send. The old coordinator fired escalate 18 times and delivered 0 notifications, and nothing caught it for four days. The drill authenticates the bot (getMe) and proves the route to the founder's chat (sendChatAction), which fail differently: a revoked token kills the first, a wrong or blocked chat id kills the second. It deliberately does NOT read messages back: that needs getUpdates, and a second getUpdates consumer is the exact trap that made the gateway deaf for 31.5 hours on 2026-08-22 (one token, one poller).",
+      "cmd": [
+        "/usr/bin/python3",
+        "{HERE}/check_telegram_delivery.py"
+      ],
+      "max_age_days": 2
     },
     {
       "id": "windows-rebuild",
