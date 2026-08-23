@@ -94,8 +94,26 @@ def marker_of(text: str) -> str | None:
 TABLE = re.compile(r"^[^\n|]*\|[^\n]*$\n[^\n|]*\|", re.M)
 #: a share is a measurement. "58.4%" is a receipt in a way that "about 3 goes" is not.
 PERCENT = re.compile(r"\d[\d.,]*\s?%")
-#: an inline span that is a runnable command or a path -- something the founder can re-run.
-INLINE_CMD = re.compile(r"`[^`\n]*[ /][^`\n]*`")
+#: an inline span that is a RUNNABLE COMMAND -- it needs a space, because a command takes an
+#: argument. It used to accept a space OR a slash, which let a bare path count: `~/.claude/lanes.json`
+#: is a location, not a result, and naming where a thing lives says nothing about whether it works.
+INLINE_CMD = re.compile(r"`[^`\n]*\s[^`\n]*`")
+
+#: Receipt shapes the checks above miss. Measured 2026-08-23 by replaying 967 DONE: replies from
+#: 135 sessions: the accept set above passed 98.7% of them, so it was grading formatting rather
+#: than evidence. Dropping the bare-path accept refused 149, and reading those 149 by hand showed
+#: most carried real evidence in a shape no pattern here recognised -- a PR link the founder can
+#: open, "selftest 10/10", "stranded=34", "0 failures". Those are receipts. These are them.
+CHECKABLE = re.compile(
+    r"(https?://\S+"                                   # a page he can open -- a LAW 9 channel
+    r"|\b(?:PR|issue)\s*#\d+\b"                        # PR #254
+    r"|\b\d+\s*/\s*\d+\b"                              # selftest 10/10
+    r"|\b\d+\s+(?:failures?|errors?|warnings?|repos?|items?|files?|rows?|jobs?|tests?)\b"
+    r"|\b\w+=-?\d+\b"                                  # stranded=34
+    r"|\bHTTP\s*\d{3}\b"                               # HTTP 502
+    r"|\b[0-9a-f]{7,40}\b(?=\s+(?:on|in|to)\b))",       # aae8f47 on <branch>
+    re.I,
+)
 
 
 def has_receipt(text: str) -> bool:
@@ -115,6 +133,7 @@ def has_receipt(text: str) -> bool:
         or TABLE.search(text)
         or PERCENT.search(text)
         or INLINE_CMD.search(text)
+        or CHECKABLE.search(text)
     )
 
 
@@ -458,7 +477,16 @@ def selftest() -> int:
        has_receipt("DONE: it landed\n\n| what | n |\n|---|---|\n| merged | 4 |"))
     ck("a percentage is a receipt", has_receipt("DONE: 58.4% of writes go through Bash"))
     ck("a backticked command is a receipt", has_receipt("DONE: see `git worktree list`"))
-    ck("a backticked path is a receipt", has_receipt("DONE: it is in `~/.claude/lanes.json`"))
+    ck("a backticked path alone is NOT a receipt",
+       not has_receipt("DONE: it is in `~/.claude/lanes.json`"))
+    ck("a url is a receipt", has_receipt("DONE: PR is open https://github.com/x/y/pull/254"))
+    ck("a PR number is a receipt", has_receipt("DONE: PR #254 is open and mergeable"))
+    ck("a bare ratio is a receipt", has_receipt("DONE: selftest 10/10 and ruff clean"))
+    ck("a counted noun is a receipt", has_receipt("DONE: the backfill ran, 0 failures"))
+    ck("a key=value count is a receipt", has_receipt("DONE: stranded=34, shelf=74"))
+    ck("an http status is a receipt", has_receipt("DONE: the shelf was HTTP 502, now serving"))
+    ck("a sha on a branch is a receipt", has_receipt("DONE: aae8f47 on feat/research-batch"))
+    ck("a bare word is still not a receipt", not has_receipt("DONE: the thing is done now"))
     ck("a one-word backtick is not a receipt", not has_receipt("DONE: the `flag` is set"))
     ck("one pipe on one line is not a table", not has_receipt("DONE: a | b"))
     ck("two lines with a column separator is a table",
