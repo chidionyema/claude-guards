@@ -88,3 +88,27 @@ exactly like a dead key. The cap is 2000 tokens for that reason.
 It does not promise the alternative is as good, and nobody has measured that. What
 it buys is a day where work continues instead of stopping, which is the difference
 between an inconvenience and the end of the company.
+
+## Agent rails that do not work, and why, so nobody tests them again
+
+Measured 2026-08-23. Both were tried on every auth path available on this machine.
+
+**cursor-agent** stops before it does anything: "Set a Spend Limit to continue
+with Auto. Your usage limits will reset when your monthly cycle ends on
+8/30/2026." That is a setting on the founder's Cursor account. No amount of
+local configuration reaches it.
+
+**gemini CLI** fails on both of its auth paths. With the API key it returns 429,
+because `~/.gemini/settings.json` selects `gemini-api-key` and that key's account
+reports its prepayment credits depleted. On the free personal OAuth tier
+(`GEMINI_DEFAULT_AUTH_TYPE=oauth-personal`) it also returns 429 and leaves the
+file unchanged at `version = 1`. Two different doors, one shut account.
+
+Neither is a bug in the drill. Both become live rails the moment somebody puts
+money or a spend limit behind them, and the drill will report them the next
+morning without anyone editing it.
+
+**aider on the free Groq rail does work, and it is rate limited.** It changed the
+file to `version = 2`, having first been told to wait 32 seconds. A free tier
+under load is slow, not absent. Treat it as the rail that keeps working when the
+paid ones stop, not as the fast one.
