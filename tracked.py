@@ -337,6 +337,20 @@ def main():
             n = pull_one(e)
             if any(n):
                 print(f"{e['repo']}: pulled {n[0]} new, {n[2]} changed, {n[1]} removed")
+                #: Naming them is the whole fix. On 2026-08-23 a pull silently put
+                #: five vulnerable pins back into migration/requirements after a
+                #: session had bumped them to close 36 dependabot alerts, and the
+                #: only thing on screen was "2 changed". The 30-minute --sync job
+                #: would have committed that revert with nobody's name on it. A
+                #: pull that says WHICH committed file it overwrote turns a silent
+                #: revert into one the agent sees in its own tool output.
+                for f in sorted(miss) + sorted(chg):
+                    where = "new" if f in miss else "OVERWROTE the committed copy"
+                    print(f"    {where}: {e['repo']}/{f}" if e.get("tree") or "glob" in e
+                          else f"    {where}: {e['repo']}")
+                if chg:
+                    print("    if a commit of yours was in there, it is gone from the "
+                          "working tree now; check git diff before the sync job runs")
             continue
         if miss or gone or chg:
             drift += len(miss) + len(gone) + len(chg)
