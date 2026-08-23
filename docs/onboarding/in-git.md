@@ -62,3 +62,23 @@ The second commonest is a checkout sitting on a branch that is not main. Nothing
 when that happens, but work committed there does not reach main, so it looks lost. The fix
 is to push that branch rather than to switch it, because another session is usually standing
 on it.
+
+## Running it somewhere that is not this Mac
+
+Five of the six classes read this machine: the launchd jobs, the live checkouts,
+the live env file, the bundle receipts. A CI runner has none of them, so the full
+sweep there would report every class as a hole and everyone would learn to ignore
+the step.
+
+`--ci` runs the part a runner can honestly answer, reading only the checkout it is
+sitting in:
+
+```
+python3 estate/in-git.py --ci
+```
+
+It exits 1 when a mirror entry in `tracked.json` names a copy nobody committed,
+and when a committed example file carries a value rather than just the key name.
+Both are faults that live in the repository and travel with it, so both belong on
+a pull request. It writes no state file and sends no message, because the
+founder's board is about this machine.

@@ -393,20 +393,34 @@ def collect_launchd() -> list[Row]:
 
 
 def _runners_in_git() -> Row:
-    """Six classes: runners, declared paths, repos, mirrors, secrets, offsite (LAW 24)."""
-    guard = os.path.join(SCRIPTS, "estate", "in-git.py")
-    cmd = f"{guard} --quiet"
-    if not os.path.exists(guard):
-        return _unknown("Everything load-bearing is in git", "guard is missing", cmd)
-    rc, out, err = sh([sys.executable, guard, "--quiet"], 120)
-    line = next((l for l in out.splitlines() if l.startswith("load-bearing holes:")), "")
-    if not line:
-        return _unknown("Everything load-bearing is in git",
-                        (err or out).strip()[:160] or f"exit {rc}", cmd)
-    holes = [l.strip() for l in out.splitlines() if l.strip().startswith("HOLE")]
-    n = line.split("holes:")[-1].strip()
-    return Row(GOOD if rc == 0 else BAD, "Everything load-bearing is in git",
-               f"{n} not kept", "; ".join(h.split("HOLE")[-1].strip() for h in holes[:4]) or "every class clean", cmd)
+    """Six classes: runners, declared paths, repos, mirrors, secrets, offsite (LAW 24).
+
+    Reads what the hourly job wrote rather than running the sweep here. The sweep
+    fetches five repositories over the network, and doing that inside page
+    generation made the page take longer than its own timeout, so the founder's
+    board went an hour stale while every part of it was working.
+
+    Reading a file also lets the row tell PASS from NOT RUN, which running the
+    sweep cannot: a checker that died reports nothing, and nothing renders green.
+    """
+    state = os.path.expanduser("~/.claude/state/in-git-status.json")
+    label = "Everything load-bearing is in git"
+    cmd = "~/.claude/scripts/estate/in-git.py"
+    try:
+        with open(state) as f:
+            d = json.load(f)
+    except (OSError, ValueError) as e:
+        return _unknown(label, f"com.founder.ingit has never written {state}: {e}", cmd)
+
+    age_h = (time.time() - float(d.get("ts") or 0)) / 3600.0
+    holes = d.get("holes") or []
+    #: Two scheduled runs missed. The answer on screen is about a world that has
+    #: moved on, and saying so is the honest row.
+    if age_h > 2.5:
+        return _unknown(label, "last checked %.1fh ago, the hourly job has stopped" % age_h, cmd)
+    if holes:
+        return Row(BAD, label, f"{len(holes)} not kept", "; ".join(holes[:4]), cmd)
+    return Row(GOOD, label, "0 not kept", "every class clean", cmd)
 
 
 def collect_founder_decisions() -> list[Row]:

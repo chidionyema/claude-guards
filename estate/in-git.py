@@ -322,6 +322,58 @@ def deliver(holes, lines):
             f.write(str(time.time()))
 
 
+def check_repo_only(d, mm):
+    """The part of the declaration a CI runner can honestly answer.
+
+    Five of the six classes read this machine: launchd jobs, live checkouts, the
+    live env file, the bundle receipts. A runner has none of that, so running the
+    full sweep there would report every class as a hole and teach everyone to
+    ignore the step. What a runner does hold is the repository, and two things in
+    it can be wrong on their own:
+
+      * a declaration naming a repo copy that nobody committed, which is how a
+        mirror entry silently stops mirroring anything;
+      * an example file that carries a value, which is LAW 21 breached in git
+        history where deleting it does not help.
+
+    Both are caught by reading the checkout alone, so both belong on a runner.
+    """
+    holes, ok = [], 0
+    #: The checkout this file is sitting in, not ~/.claude/scripts. Every other
+    #: class is about this machine and is right to look there. This one is about
+    #: whatever tree CI just checked out, and pointing it at the live repo made
+    #: the clone test pass three times with the file it was checking deleted.
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    #: The mirror declaration lives in tracked.json, next to the tool that acts
+    #: on it, not in load-bearing.json. Reading the wrong file here reported
+    #: zero mirrors and a clean pass, which is the shape of a gate that guards
+    #: nothing.
+    try:
+        tracked = json.load(open(os.path.join(root, "tracked.json")))
+    except (OSError, ValueError) as exc:
+        return 0, ["tracked.json cannot be read: %s" % exc]
+    for e in tracked:
+        if os.path.exists(os.path.join(root, e["repo"])):
+            ok += 1
+        else:
+            holes.append(f"{e['repo']}: declared as the kept copy of {e['live']}, "
+                         f"but no such path is committed")
+    for e in d.get("secrets", []):
+        ex = os.path.join(root, e["example"])
+        if not os.path.exists(ex):
+            holes.append(f"{e['example']}: declared as the example for {e['path']}, "
+                         f"but no such file is committed")
+            continue
+        leaked = [l.split("=", 1)[0].strip() for l in open(ex)
+                  if "=" in l and not l.strip().startswith("#")
+                  and len(l.split("=", 1)[1].strip().strip('"\'')) > 8]
+        if leaked:
+            holes.append(f"{e['example']}: {len(leaked)} key(s) carry a value, LAW 21")
+        else:
+            ok += 1
+    return ok, holes
+
+
 CLASSES = [("runners", check_runners), ("declared", check_declared),
            ("repos", check_repos), ("mirrors", check_mirrors),
            ("secrets", check_secrets), ("offsite", check_escrow)]
@@ -329,10 +381,14 @@ CLASSES = [("runners", check_runners), ("declared", check_declared),
 
 def main():
     quiet = "--quiet" in sys.argv
+    #: A runner has no launchd, no live checkouts and no env file, so it runs the
+    #: one class that reads the repository alone. It also writes no state and
+    #: sends no message: the founder's board is about this machine.
+    ci = "--ci" in sys.argv
     d = json.load(open(DECL))
-    mm = mirrors()
+    mm = {} if ci else mirrors()
     all_holes, lines, counts = [], [], {}
-    for name, fn in CLASSES:
+    for name, fn in ([("repo-only", check_repo_only)] if ci else CLASSES):
         try:
             ok, holes = fn(d, mm)
         except Exception as e:
@@ -346,6 +402,8 @@ def main():
         print("\n".join(lines))
     print("load-bearing holes: %d" % len(all_holes))
 
+    if ci:
+        return 1 if all_holes else 0
     if "--no-deliver" not in sys.argv:
         deliver(all_holes, lines)
     # Written last, so the next run compares against a state the founder was

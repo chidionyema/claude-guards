@@ -39,3 +39,25 @@ the founder's board both read the same answer.
 The founder is never the one who types that command. `com.founder.ingit` runs it hourly and
 messages Telegram when the set of holes changes, plus one green a day so silence never means
 nobody checked. The board at http://127.0.0.1:8787 carries the same line, live.
+
+## The same tool on a runner
+
+```
+$ python3 estate/in-git.py --ci
+  repo-only kept=11  holes=0
+load-bearing holes: 0
+$ echo $?
+0
+```
+
+And what it looks like when a declared mirror copy is not committed, taken from a
+clone with `launchagents/` deleted:
+
+```
+$ python3 estate/in-git.py --ci
+  repo-only kept=10  holes=1
+     HOLE  launchagents: declared as the kept copy of ~/Library/LaunchAgents, but no such path is committed
+load-bearing holes: 1
+$ echo $?
+1
+```
