@@ -98,6 +98,24 @@
     "WorkingDirectory": "{HOME}/.kimi-bridge",
     "label": "ai.estate.kimi-bridge"
   },
+  "ai.estate.tracked-guard": {
+    "EnvironmentVariables": {
+      "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+    },
+    "Nice": 5,
+    "ProcessType": "Background",
+    "ProgramArguments": [
+      "/usr/bin/python3",
+      "{HOME}/.claude/scripts/tracked.py",
+      "--sync"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.claude/state/logs/tracked-guard.err.log",
+    "StandardOutPath": "{HOME}/.claude/state/logs/tracked-guard.out.log",
+    "StartInterval": 1800,
+    "WorkingDirectory": "{HOME}/.claude/scripts",
+    "label": "ai.estate.tracked-guard"
+  },
   "ai.hermes.gateway": {
     "EnvironmentVariables": {
       "HERMES_HOME": "{HOME}/dev/code/hermes-v2",

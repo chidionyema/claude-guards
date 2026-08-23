@@ -10,6 +10,9 @@ fails when the copy and the live file drift apart.
                           about to trust the committed copy.
     tracked.py --pull     bring the live files in so the difference can be
                           committed.
+    tracked.py --sync     pull, commit and push, with no person involved.
+                          This is what the scheduled job runs. LAW 31: the
+                          founder does not run scripts.
 
 A stale copy is worse than none, because it reads as a record. That is what
 --check is for.
@@ -142,11 +145,75 @@ def pull_one(e):
     return len(a), len(b), len(c)
 
 
+BOARD = os.path.expanduser("~/.claude/ESTATE_BOARD.jsonl")
+
+
+def board(kind, text):
+    """Every session is handed the board at startup. LAW 28: an instrument
+    nobody reads is not an instrument, and a log file is nobody."""
+    try:
+        import datetime
+        with open(BOARD, "a") as fh:
+            fh.write(json.dumps({
+                "ts": datetime.datetime.now(datetime.timezone.utc)
+                        .strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "from": "tracked.py", "kind": kind, "text": text}) + "\n")
+    except OSError:
+        pass
+
+
+def sync():
+    """Pull the drift, commit it, push it. Report only what a person would act on."""
+    import subprocess
+    paths = sorted({e["repo"].split("/")[0] for e in entries()})
+
+    moved = 0
+    for e in entries():
+        moved += sum(pull_one(e))
+
+    if REFUSED:
+        board("secret-refused",
+              "tracked.py refused to commit %d file(s) that look like credentials: %s. "
+              "They belong in rebuild/PREREQUISITES.md by name, never by value."
+              % (len(REFUSED), ", ".join(os.path.basename(p) for p, _ in REFUSED)))
+
+    def git(*args):
+        return subprocess.run(["git", "-C", HERE, *args],
+                              capture_output=True, text=True, timeout=120)
+
+    if not git("status", "--porcelain", "--", *paths).stdout.strip():
+        return 0
+
+    changed = [l[3:] for l in git("status", "--porcelain", "--", *paths).stdout.splitlines()]
+    git("add", "--", *paths)
+    msg = ("LAW 24: %d load-bearing file(s) changed outside git\n\n%s\n\n"
+           "Committed by the scheduled guard, not by a person.\n"
+           % (len(changed), "\n".join("  " + c for c in changed)))
+    c = git("commit", "-m", msg)
+    if c.returncode:
+        board("guard-broken", "tracked.py could not commit: " + c.stderr.strip()[:300])
+        return 1
+    p = git("push", "origin", "HEAD")
+    if p.returncode:
+        board("guard-broken",
+              "tracked.py committed %d changed file(s) but could not push: %s. "
+              "The record is local only until someone pushes it."
+              % (len(changed), p.stderr.strip()[:200]))
+        return 1
+    board("tracked", "committed and pushed %d load-bearing file(s) changed outside git: %s"
+          % (len(changed), ", ".join(changed[:8])))
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--pull", action="store_true")
+    ap.add_argument("--sync", action="store_true")
     a = ap.parse_args()
+
+    if a.sync:
+        return sync()
 
     drift = 0
     for e in entries():
