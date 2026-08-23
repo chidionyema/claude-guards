@@ -72,4 +72,3 @@ export STANDARD_COMPUTE_API_KEY=$(cat ~/.pi/agent/.stdcompute_key)
 # glob and answers "zsh: bad pattern: #", so every commented command block pasted
 # into this shell errors on its first line. bash has this on by default.
 setopt interactivecomments
-# guard probe 1787491092
