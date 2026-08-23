@@ -2,17 +2,22 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.founder.estatewatch</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>/usr/bin/python3</string>
-    <string>/Users/chidionyema/.claude/scripts/estate/estate_watch.py</string>
-  </array>
-  <key>RunAtLoad</key><true/>
-  <!-- 1800s, not 3600s. The audit runs hourly; a reader on the same period can sit up to an
-       hour behind a finding for no reason. Only CHANGES are sent, so the extra run is free. -->
-  <key>StartInterval</key><integer>1800</integer>
-  <key>StandardOutPath</key><string>/Users/chidionyema/.claude/state/logs/estate-watch.out.log</string>
-  <key>StandardErrorPath</key><string>/Users/chidionyema/.claude/state/logs/estate-watch.err.log</string>
+	<key>Label</key>
+	<string>com.founder.estatewatch</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/chidionyema/.estate/guards/bin/estate-gate</string>
+		<string>com.founder.estatewatch</string>
+		<string>/usr/bin/python3</string>
+		<string>/Users/chidionyema/.claude/scripts/estate/estate_watch.py</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/chidionyema/.claude/state/logs/estate-watch.err.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/chidionyema/.claude/state/logs/estate-watch.out.log</string>
+	<key>StartInterval</key>
+	<integer>1800</integer>
 </dict>
 </plist>

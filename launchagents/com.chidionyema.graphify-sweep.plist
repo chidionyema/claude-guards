@@ -13,6 +13,8 @@
 	<integer>5</integer>
 	<key>ProgramArguments</key>
 	<array>
+		<string>/Users/chidionyema/.estate/guards/bin/estate-gate</string>
+		<string>com.chidionyema.graphify-sweep</string>
 		<string>/Users/chidionyema/Documents/code/prospector/.venv/bin/python</string>
 		<string>/Users/chidionyema/.hermes/scripts/launchd_receipt.py</string>
 		<string>--label</string>

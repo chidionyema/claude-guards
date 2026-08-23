@@ -204,19 +204,38 @@ it.
 
 # LAW 4 — THINK IT THROUGH BEFORE YOU TOUCH IT
 
-Write the edge cases down before the first edit. What is the empty case, the one case, the many
-case? What if it is already running? What if two agents do this at once? What if it half-succeeds?
-A case you did not name is a case you did not handle.
+**Sweep these six before the first edit, and write down what each one gives you.** This list is the
+estate's one definition of what "think it through" means. It is a list because without one, the
+instruction is a sentence two agents obey differently, and each of the six has already cost an
+incident here.
 
-Follow the effects to the third order: what the change does, what that causes, what someone
-downstream now sees. Say all three out loud, then address them. An effect you named and left is the
-same as one you missed, except you have no excuse.
+1. **Surfaces** — what calls this, what reads its output, who sees it. A shared file, a hook every
+   session loads, a branch another checkout is standing on, a page the founder has open.
+2. **Dependencies** — what this needs in order to work, and what is standing on it. Both
+   directions. The second one is the direction that surprises you.
+3. **Edge cases** — the empty case, the one case, the many case. Already running. Two agents at
+   once. Half-succeeded. A case you did not name is a case you did not handle.
+4. **Unknowns** — what you know you cannot see from here. Name each one, then ask whether a command
+   would answer it. If one would, run it; an unknown you could have measured is a choice.
+5. **Unknown unknowns** — you cannot list these, so use the only instrument that works on them: a
+   peer holding a different half of the estate, asked "tell me what I have not considered". This is
+   why LAW 11 is a law and not politeness. No amount of care finds what your own window cannot show.
+6. **Risk** — the blast radius if you are wrong, and the one thing that would make you stop. Say
+   both out loud before the first edit, while the answer can still change the plan.
+
+Then follow the effects to the third order: what the change does, what that causes, what someone
+downstream now sees. An effect you named and left is the same as one you missed, except you have no
+excuse.
 
 Reversibility sets the depth. One command to undo, act. Destroys, spends, deploys, merges or is seen
-by a customer, map it first.
+by a customer, map all six first.
 
-**You are breaking it when** a number in your plan came from what sounded tidy instead of from the
-data. A number in a plan is a claim.
+**The other laws that command analysis mean this list.** LAW 5, 8, 10, 11, 20 and 32 each tell you
+to work something out; none of them restates the six, and none of them should. One copy, here, so
+there is one thing to change when the list is wrong.
+
+**You are breaking it when** you wrote down the cases you could see and never asked who else touches
+this. Naming three edge cases and no surfaces is the common shape of it.
 
 # LAW 5 — UNBLOCK YOURSELF
 
@@ -808,6 +827,7 @@ What lives where, so nobody has to guess:
 | what | where |
 |---|---|
 | architecture decisions | `DECISIONS.md` in the crew repo |
+| **the estate right now, read this first** | **`crew/STATE.md`**, rebuilt hourly, every row a command and its output |
 | current state | `crew status`, and the project's own probe |
 | who is doing what | crew issues, assigned |
 | what changed when | the crew repo's git history |
@@ -1162,6 +1182,13 @@ code.
   own recollection. When anything disagrees with the probe, the probe is right — fix the doc.
 - Before claiming done, run the probe and quote the green line. If a project has no probe, write one
   rather than asserting state.
+- **Read the estate snapshot before you measure anything, and before you ask him anything.**
+  `~/dev/code/crew/STATE.md`, also at github.com/chidionyema/crew/blob/main/STATE.md, rebuilt hourly
+  by `com.founder.estatesnapshot`. It holds The Architect, maestro, Fly and the open P1 fires, and
+  every row is a command and its output. It exists because six sessions that cannot see each other
+  were each re-measuring the same estate and then asking him what he had already answered. It is a
+  starting point, never a verdict: regenerate it with `crew/scripts/estate-snapshot` rather than
+  quoting a row whose timestamp you have not checked.
 
 # Compact instructions
 

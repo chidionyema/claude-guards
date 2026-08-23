@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.founder.estatesnapshot</string>
+
+  <!-- Regenerates crew/STATE.md and pushes it, so the one page every session reads
+       is never more than an hour stale. The founder never runs this. LAW 31. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/chidionyema/dev/code/crew/scripts/estate-snapshot</string>
+    <string>--commit</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/chidionyema/dev/code/crew</string>
+
+  <!-- Hourly, offset from com.founder.estatepush at :00 so the two do not contend
+       for the same git index or the same flyctl rate limit. -->
+  <key>StartInterval</key>
+  <integer>3600</integer>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/chidionyema/.claude/state/logs/estate-snapshot.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/chidionyema/.claude/state/logs/estate-snapshot.err.log</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+</dict>
+</plist>

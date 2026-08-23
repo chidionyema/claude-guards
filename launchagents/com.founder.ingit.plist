@@ -2,37 +2,29 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key>
-    <string>com.founder.ingit</string>
-
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/local/bin/python3</string>
-        <string>/Users/chidionyema/.claude/scripts/estate/in-git.py</string>
-    </array>
-
-    <key>WorkingDirectory</key>
-    <string>/Users/chidionyema/.claude/scripts/estate</string>
-
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    </dict>
-
-    <!-- Hourly. It only reads, so the run is git commands and a few stats.
-         Alerts fire on the SET of holes changing, not on holes existing, so a
-         hole nobody has closed yet does not send the same line every hour and
-         teach him to mute the channel. One green a day says the checker is
-         alive, because silence is also what a dead checker sounds like. -->
-    <key>StartInterval</key>
-    <integer>3600</integer>
-    <key>RunAtLoad</key>
-    <true/>
-
-    <key>StandardOutPath</key>
-    <string>/Users/chidionyema/.claude/state/ingit.out.log</string>
-    <key>StandardErrorPath</key>
-    <string>/Users/chidionyema/.claude/state/ingit.err.log</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>Label</key>
+	<string>com.founder.ingit</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/chidionyema/.estate/guards/bin/estate-gate</string>
+		<string>com.founder.ingit</string>
+		<string>/usr/local/bin/python3</string>
+		<string>/Users/chidionyema/.claude/scripts/estate/in-git.py</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/chidionyema/.claude/state/ingit.err.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/chidionyema/.claude/state/ingit.out.log</string>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>WorkingDirectory</key>
+	<string>/Users/chidionyema/.claude/scripts/estate</string>
 </dict>
 </plist>

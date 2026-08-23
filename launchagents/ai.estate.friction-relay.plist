@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>ai.estate.friction-relay</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/local/bin/python3</string>
+    <string>/Users/chidionyema/.claude/scripts/friction-relay.py</string>
+    <string>--refresh</string>
+  </array>
+  <key>StartInterval</key><integer>600</integer>
+  <key>RunAtLoad</key><true/>
+  <key>Nice</key><integer>10</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>WorkingDirectory</key><string>/Users/chidionyema</string>
+  <key>StandardOutPath</key><string>/Users/chidionyema/.claude/state/logs/friction-relay.out</string>
+  <key>StandardErrorPath</key><string>/Users/chidionyema/.claude/state/logs/friction-relay.err</string>
+</dict></plist>

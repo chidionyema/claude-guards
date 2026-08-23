@@ -13,6 +13,8 @@
 	<integer>5</integer>
 	<key>ProgramArguments</key>
 	<array>
+		<string>/Users/chidionyema/.estate/guards/bin/estate-gate</string>
+		<string>com.founder.estatepush</string>
 		<string>/bin/bash</string>
 		<string>/Users/chidionyema/.claude/scripts/estate/estate_push.sh</string>
 	</array>

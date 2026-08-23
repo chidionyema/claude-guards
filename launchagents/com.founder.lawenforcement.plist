@@ -2,44 +2,29 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>Label</key>
-    <string>com.founder.lawenforcement</string>
-
-    <key>ProgramArguments</key>
-    <array>
-        <string>/usr/bin/python3</string>
-        <string>/Users/chidionyema/dev/code/crew/science/law_enforcement.py</string>
-    </array>
-
-    <key>WorkingDirectory</key>
-    <string>/Users/chidionyema/dev/code/crew</string>
-
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-    </dict>
-
-    <!-- Hourly, and it only reads: the laws file, settings.json, the guard
-         scripts and six tracking files. It writes one JSON verdict that the
-         founder's board reads.
-
-         It exits 1 whenever a mechanical law is unenforced, which is almost
-         always. That is the verdict, not a crash, so there is no KeepAlive
-         here: a nonzero exit must not make launchd restart it in a loop.
-
-         The board reads the file rather than running this, because a file can
-         say NOT RUN and a probe that died says nothing at all. The board turns
-         the row UNKNOWN once the file is 6 hours old, so six missed runs
-         surface as a stopped job instead of a stale number reading as current. -->
-    <key>StartInterval</key>
-    <integer>3600</integer>
-    <key>RunAtLoad</key>
-    <true/>
-
-    <key>StandardOutPath</key>
-    <string>/Users/chidionyema/.claude/state/lawenforcement.out.log</string>
-    <key>StandardErrorPath</key>
-    <string>/Users/chidionyema/.claude/state/lawenforcement.err.log</string>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>Label</key>
+	<string>com.founder.lawenforcement</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/chidionyema/.estate/guards/bin/estate-gate</string>
+		<string>com.founder.lawenforcement</string>
+		<string>/usr/bin/python3</string>
+		<string>/Users/chidionyema/dev/code/crew/science/law_enforcement.py</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/chidionyema/.claude/state/lawenforcement.err.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/chidionyema/.claude/state/lawenforcement.out.log</string>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>WorkingDirectory</key>
+	<string>/Users/chidionyema/dev/code/crew</string>
 </dict>
 </plist>
