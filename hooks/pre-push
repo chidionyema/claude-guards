@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Refuse a push that ships a feature the founder cannot see or try.
+"""Two push gates: LAW 32 (a feature ships with a demo and an onboarding) and
+LAW 7 (refresh on main before you ask for review).
+
+LAW 32 -- refuse a push that ships a feature the founder cannot see or try.
 
 The founder's rule, in his words: "every new feature needs demo and onboarding
 for founder ... can this be enforced in git ?" This is the yes.
@@ -33,6 +36,7 @@ gets `--no-verify`d, and a bypassed gate protects nothing.
 
 Installed per repository with:  git config core.hooksPath scripts/hooks
 """
+import json
 import os
 import re
 import subprocess
@@ -52,6 +56,10 @@ MIN_BODY_CHARS = 200
 STALE_OK = re.compile(r"(?im)^\s*Stale-OK:\s*\S")
 #: Pushing these IS the integration; they cannot be stale against themselves.
 TRUNK = {"main", "master"}
+#: LAW 22's escape hatch, same shape as LAW 7's.
+EVIDENCE_OK = re.compile(r"(?im)^\s*No-Evidence:\s*\S")
+#: The tool that already knows what evidence looks like. Do not reimplement it.
+PR_EVIDENCE = os.path.expanduser("~/.claude/scripts/pr-evidence.py")
 
 
 def git(*args):
@@ -151,9 +159,59 @@ def stale(local_ref, local_sha, shas):
     return None
 
 
+def evidence(local_ref, shas):
+    """LAW 22: a pull request under review carries a picture of the green run.
+
+    Pasted text is typed by hand in seconds and reads identically whether the
+    run happened or not. A screenshot is a photograph of something that existed.
+    It is not proof against a determined forger and it is not meant to be. It
+    raises the cost of a claim from zero to something, and zero is where every
+    false green has come from.
+
+    Only fires when an OPEN pull request already exists for the branch, which is
+    the moment the law is actually about: before review is asked for. The first
+    push, which creates the branch, has nothing to attach evidence to yet.
+
+    Fails open on every unknown: no gh, not authenticated, no pull request, the
+    checker missing. A gate that blocks a push because a network call failed has
+    stopped the estate to enforce a screenshot.
+    """
+    branch = local_ref.rsplit("/", 1)[-1]
+    if branch in TRUNK:
+        return None
+    if any(EVIDENCE_OK.search(git("show", "-s", "--format=%B", c)) for c in shas):
+        return None
+    if not os.path.exists(PR_EVIDENCE):
+        return None
+    try:
+        r = subprocess.run(["gh", "pr", "view", branch, "--json", "number,state"],
+                           capture_output=True, text=True, timeout=25)
+    except Exception:
+        return None
+    if r.returncode != 0:
+        return None                      # no PR yet, or no gh: nothing to gate
+    try:
+        info = json.loads(r.stdout)
+    except ValueError:
+        return None
+    if info.get("state") != "OPEN" or not info.get("number"):
+        return None
+    n = info["number"]
+    try:
+        c = subprocess.run([sys.executable, PR_EVIDENCE, "check", "--pr", str(n)],
+                           capture_output=True, text=True, timeout=60)
+    except Exception:
+        return None
+    if c.returncode == 0:
+        return None
+    said = (c.stdout + c.stderr).strip().splitlines()
+    return f"  PR #{n}: {said[-1] if said else 'carries no verification evidence'}"
+
+
 def main():
     problems = []
     stale_problems = []
+    evidence_problems = []
     for line in sys.stdin:
         parts = line.split()
         if len(parts) < 4:
@@ -165,6 +223,9 @@ def main():
         behind = stale(parts[0], local, shas)
         if behind:
             stale_problems.append(behind)
+        missing = evidence(parts[0], shas)
+        if missing:
+            evidence_problems.append(missing)
         for name, why in features(local, shas).items():
             for kind in ("demo", "onboarding"):
                 path = f"docs/{kind}/{name}.md"
@@ -191,6 +252,25 @@ a force push destroys work you never saw arrive.
 If this genuinely must go stale, put one honest line in the commit message:
 
   Stale-OK: <why>
+""")
+        return 1
+    if evidence_problems:
+        sys.stderr.write(
+            "\npush refused: this pull request has no picture of the run (LAW 22).\n\n"
+            + "\n".join(evidence_problems) + """
+
+Pasted output is typed by hand in seconds and reads the same whether the run
+happened or not. Attach a photograph of it instead:
+
+  pr-evidence.py shot - --out /tmp/p.png --title "pytest -q" < run.log
+  pr-evidence.py attach --pr <n> /tmp/p.png --caption "what it proves"
+
+The image is committed into this branch under docs/evidence/pr-<n>/, not into
+GitHub's attachment store, so the proof leaves with the code when we do.
+
+If this push genuinely cannot carry evidence, say why in the commit message:
+
+  No-Evidence: <why>
 """)
         return 1
     if not problems:
