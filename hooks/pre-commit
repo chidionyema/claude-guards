@@ -92,7 +92,52 @@ def staged_blobs(paths):
     return out
 
 
+#: The two checkouts every session on this machine shares. A commit here is
+#: never one agent's private business, because five other sessions have the same
+#: working tree open and stage into the same index.
+SHARED = ("/.claude/scripts", "/.claude")
+
+
+def shared_branch_warning():
+    """Say it at the moment it can still be avoided, not an hour later.
+
+    Three times in one afternoon a session ran `git add -A` in a shared checkout
+    that another session had left on a feature branch. Five files written for the
+    load-bearing sweep were committed to `zz-gate-test`, where nothing on main
+    could see them, and had to be recovered one at a time. A commit on main is
+    visible to every session; a commit on a stray branch in a shared checkout is
+    the trap.
+
+    This warns rather than refuses. Refusing would wedge whichever session is
+    mid-branch right now, and a warning printed into an agent's own tool output
+    has a reader, which an hourly report does not.
+    """
+    try:
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True).stdout.strip()
+        head = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                              capture_output=True, text=True).stdout.strip()
+    except Exception:
+        return
+    if not top or not any(top.endswith(s) for s in SHARED):
+        return
+    if head in ("main", "HEAD"):      # HEAD means a detached worktree, which is the fix
+        return
+    print(f"WARNING: committing to '{head}' in a shared checkout ({top}).",
+          file=sys.stderr)
+    print("Five other sessions have this working tree open. Work committed here",
+          file=sys.stderr)
+    print("does not reach main, and the next `git add -A` by any of them will",
+          file=sys.stderr)
+    print("sweep your files onto this branch. Use your own worktree instead:",
+          file=sys.stderr)
+    print(f"  git -C {top} worktree add /tmp/wt-$$ main", file=sys.stderr)
+    print("See crew #40 for the allocation. The commit is going ahead.",
+          file=sys.stderr)
+
+
 def main():
+    shared_branch_warning()
     bad = []
     paths = [p for p in staged_paths() if os.path.realpath(p) != SELF]
     blobs = staged_blobs(paths)
