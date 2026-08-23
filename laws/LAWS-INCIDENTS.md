@@ -704,3 +704,40 @@ a tracked file and its committed copy differ. It replaced a single-directory ver
 sitting next to it, because two implementations of one check is the failure in LAW 3. Proved in both
 directions: it reported the five deletions before they were staged, and it reported a one-line change
 to the committed copy of the laws.
+
+---
+
+# LAW 33 — DEFINE DONE BEFORE YOU START, IN COMMANDS (2026-08-23)
+
+**What happened.** An agent reported both of the founder's named targets operational. The evidence
+was `bin/verify` in hermes-v2 at 17 passed, 0 failed, and maestro writing an intent file every
+three minutes. Both numbers were real and both were freshly measured.
+
+The founder's reply was "what is the definition of oertinal i the contextx".
+
+There was no definition. "Operational" had been used to mean the machinery's own checks were
+green. `bin/verify` proves the venv, the credential, the pinned commit, the cron table and the
+launchd definition. None of that is the job The Architect exists to do, which is to hear the
+founder and answer him. That round trip had not been measured, and the word covered the gap.
+
+**The second failure, in the same hour.** The agent had shipped `expect: stopped` and reported
+17/0. The estate's own pulse instrument, running under cron, still recorded `engine=000000` after
+that change. `probe()` in `pulse.sh.tmpl` ran `curl -w '%{http_code}' || echo "000"`, and curl
+prints 000 itself on a connection failure and also exits non-zero, so the fallback appended a
+second one. Every unreachable service in the estate's history reported the code `000000`, which
+matched no case in `healthy()`. It was invisible for as long as the default branch happened to
+fail on it too. So at the moment the word "operational" was used, a running instrument disagreed
+with it, and nobody had defined "operational" tightly enough for that to be a contradiction.
+
+**Cost.** The founder had to ask what a status word meant, which is the exact attention cost the
+laws exist to stop. Two other complaints in the preceding six hours were the same shape: "i dont
+see evodence you ae doing aything other tha chattig" and "why doesnt anyhting get done".
+
+**Founder's words.** "what is the definition of oertinal i the contextx", then "thats why we have
+these laws", "definition of done law", "add it", "as critical".
+
+**Why it ranks at 4b.** LAW 17 already said prove it before you say it is done, and LAW 17 held:
+the command output was in the reply. What was missing was upstream of the proof. The finish line
+itself was never written, so any green command could be pointed at the word. LAW 5, LAW 9 and
+LAW 17 are all measured against a finish line and none of them can be judged before one exists,
+so the law that creates it has to outrank all three.

@@ -17,8 +17,15 @@
   <key>RunAtLoad</key><true/>
   <key>StandardOutPath</key><string>/Users/chidionyema/.claude/state/aiden-watch.log</string>
   <key>StandardErrorPath</key><string>/Users/chidionyema/.claude/state/aiden-watch.log</string>
-  <key>ProcessType</key><string>Background</string>
-  <key>LowPriorityIO</key><true/>
-  <key>Nice</key><integer>10</integer>
+  <!-- Adaptive, not Background, and this is the whole reason a tick used to die.
+       macOS throttles disk I/O for a Background job. Measured 2026-08-23 under
+       /usr/bin/python3: one walk of ~/.claude/projects is 9.8s from a shell and the
+       identical walk under this job ran past the tick's 240s deadline twice (receipts
+       20:40:43Z and 20:52:28Z), at 0.6% CPU, which is a process waiting on a disk it is
+       not allowed to read quickly. Adaptive starts at background priority and is promoted
+       when the job actually works. -->
+  <key>ProcessType</key><string>Adaptive</string>
+  <key>LowPriorityIO</key><false/>
+  <key>Nice</key><integer>0</integer>
 </dict>
 </plist>

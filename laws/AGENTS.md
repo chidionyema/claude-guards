@@ -6,7 +6,7 @@ through a symlink into its own directory — `~/.claude/AGENTS.md`, `~/.codex/AG
 belong to the estate, not to whichever vendor's CLI is open. Founder, 2026-08-22: "all agents
 regardless of provider must follow all laws."
 
-Thirty-two rules, in priority order, numbered to 32. LAW 24 stood empty until 2026-08-23 and now
+Thirty-three rules, in priority order, numbered to 33. LAW 24 stood empty until 2026-08-23 and now
 holds the rule about version control. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
@@ -20,8 +20,8 @@ remain only for the founder's words and the reason each law exists.
 **Effective order, HOW to work.** Read left to right. A letter means the law is a sharpening of the
 one it hangs off and inherits its rank.
 
-    1 · 2 · 2b(29) · 3 · 4 · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10 · 11 · 11b(26) · 12 · 13
-    14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
+    1 · 2 · 2b(29) · 3 · 4 · 4b(33) · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10 · 11 · 11b(26)
+    12 · 13 · 14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
 
 **Effective order, WHAT to build.** A separate axis. It does not compete with the one above; when a
 HOW law and a WHAT law disagree, they are answering different questions and both apply.
@@ -70,6 +70,7 @@ keep.
 | 30 | Experience accumulates, or it is not research | every time a run produces something worth knowing |
 | 31 | The founder does not run scripts | every time you build something a person has to invoke |
 | 32 | A feature ships with a demo and an onboarding | before any new feature is pushed |
+| 33 | Define done before you start, in commands | before the first edit, and before any word of status |
 
 **19-21 are a different axis and do not compete for that tie-break.** Laws 1-18 say HOW to work.
 Laws 19-21 say WHAT to build, and they rank against each other in that order: portability first,
@@ -116,6 +117,14 @@ three. LAW 27 kills a setup step repeated at him, LAW 31 kills a command aimed a
 says the thing itself does not exist until he can see it working and knows how to stop it. Founder,
 2026-08-23: "every new feature needs deno and onboarding for founder , can this be enforced in git
 ?" The answer was yes, and the gate is `hooks/pre-push` in claude-guards.
+
+**LAW 33 is a HOW law and ranks fourth, not last.** Read it as 4b. LAW 4 says sweep six things
+before the first edit; LAW 33 says the finish line is swept first and written as a command, because
+a definition of done invented afterwards is a description of where the agent stopped. It beats
+LAW 5, LAW 9 and LAW 17 on purpose: unblocking yourself, staying on the job and proving it are all
+measured against a finish line, and none of them can be judged before one exists. Founder,
+2026-08-23: "what is the definition of operational in this context", then "definition of done law",
+"add it", "as critical".
 
 **28-30 are the research laws, and they are HOW laws that rank early.** They were written last
 and the tie-break would otherwise bury all three under laws they are meant to sharpen. Read
@@ -198,9 +207,36 @@ be deleted, and they race in production.
 When a memory file turns out to be wrong on disk, correct it in the same turn. A stale memory is a
 mistake that repeats itself with your signature on it.
 
+**A problem that has happened before is not a bug, it is a recurring issue, and the two are
+repaired differently.** Founder, 2026-08-23: "its a recurring issue, neevr nake the sane nisate need
+to epand to recurring issues", "we need to eradicate this probel". A bug gets fixed. A recurring
+issue has already been fixed at least once, which is the proof that fixing the instance does not
+work, so fixing the instance again is banned.
+
+Check before you repair, in one command. `~/.claude/LAWS.dynamic.md` is the estate's counted record
+of what keeps happening, rebuilt hourly and injected into every session. If the thing in front of
+you is on it, or the board or a memory file already names it, you are holding a recurring issue and
+the instance fix is the wrong move.
+
+Then do these three, in order, and none of them is optional:
+
+1. **Count it.** How many times, over what window, in how many sessions. A recurrence you did not
+   count is one you will argue about later.
+2. **Eradicate the class, not the instance.** The order is LAW 6's: self-healing first, then a guard
+   a machine enforces, then a memory file. A recurring issue closed with a note is a recurring
+   issue.
+3. **If you cannot eradicate it this turn, it is a GitHub issue before you move**, with the count in
+   the title and the instances linked. Not a line in a handoff, not a sentence to the founder. He is
+   prompting several sessions at once and cannot hold the thread for you.
+
+**Recurrence outranks severity.** A small annoyance on its fourth appearance beats a larger one on
+its first, because the fourth appearance is evidence that something in the system produces it and
+the first is not.
+
 **You are breaking it when** you are about to write the exact thing the error message named. The
 more precisely a log names the missing piece, the harder it pushes you to write it instead of find
-it.
+it. The other shape of it: you fixed this same thing last week, in another session, and repaired the
+instance again without once asking why it came back.
 
 # LAW 4 — THINK IT THROUGH BEFORE YOU TOUCH IT
 
@@ -1010,6 +1046,40 @@ reads it later. These two files exist for one reader, on a phone, who did not bu
 should not have to.
 
 **You are breaking it when** you finished a feature and the only way to see it work is to be you.
+
+---
+
+# LAW 33 — DEFINE DONE BEFORE YOU START, IN COMMANDS
+
+Write the finish line before the first edit. Not a sentence about what good would look like: the
+command that will be run at the end, and what its output has to say for the work to be over. A
+definition of done written afterwards is not a definition, it is a description of where the agent
+stopped, and it always fits.
+
+**Done is the outcome the founder asked for, never the machinery you touched.** A suite passing,
+a service installed, a file written and a config flag set are all facts about the machinery. The
+outcome is the thing doing its job for the person who needs it: a message answered, a page served,
+a job delivered, a customer charged. When the two disagree, the outcome is done and the machinery
+is not.
+
+**Every word of status is defined or it is banned.** Operational, healthy, working, live, ready,
+migrated, green, stable. Before any one of them reaches the founder, say what command would prove
+it false. If no command would, the word is decoration and you may not use it.
+
+**His words set the definition.** When a request carries a word of his, that word means what he
+meant, not what is convenient to prove. Look for what he has already said about it before deciding
+you cannot tell; the transcript usually answers it. When it genuinely does not, and the two
+readings would produce different work, that is the one question worth his time.
+
+**The mechanism already exists and is LAW 18's ledger.** `--statement` is what done means, in one
+sentence. Each `--ac` is a shell command that must exit 0. Write both before the work, not after,
+because an acceptance criterion authored by the agent that just finished is a test written to pass.
+
+**A definition of done is falsifiable or it is not one.** Name the case that would make you say
+this is not finished. If nothing would, you have written a wish.
+
+**You are breaking it when** you reported a status whose definition you would have to invent in
+order to defend it. The tell is being asked what the word means and having to think.
 
 
 ---
