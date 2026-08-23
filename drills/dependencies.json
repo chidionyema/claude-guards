@@ -1,61 +1,223 @@
 {
   "_why": "The audit's answer key. drills/audit.py discovers external dependencies from the tree and refuses anything that is not in here. Every entry is either covered_by a drill id or dismissed with a reason, and there is no third state, because an unclassified dependency is one nobody has decided about.",
   "hosts": {
-    "api.anthropic.com":              {"is": "the vendor every agent thinks with", "covered_by": "no-anthropic"},
-    "openrouter.ai":                  {"is": "substrate rail, proves Anthropic is replaceable", "covered_by": "no-anthropic"},
-    "api.groq.com":                   {"is": "substrate rail", "covered_by": "no-anthropic"},
-    "api.mistral.ai":                 {"is": "substrate rail and the only working agent rail", "covered_by": "no-anthropic"},
-    "api.deepseek.com":               {"is": "substrate rail, unpaid since 2026-08-23", "covered_by": "no-anthropic"},
-    "generativelanguage.googleapis.com": {"is": "substrate rail, prepaid credits empty since 2026-08-23", "covered_by": "no-anthropic"},
-    "api.cerebras.ai":                {"is": "substrate rail, has a key and is not in the drill's rail list", "covered_by": "no-anthropic"},
-    "api.kimi.com":                   {"is": "coding agent vendor", "covered_by": "no-anthropic"},
-    "github.com":                     {"is": "where every recovery path starts", "covered_by": "github-gone"},
-    "api.telegram.org":               {"is": "the only channel that reaches the founder", "covered_by": "telegram-delivery"},
-
-    "auth.kimi.com":                  {"is": "sign-in for api.kimi.com", "dismissed": "the same vendor as api.kimi.com; drilling a vendor twice does not drill it harder"},
-    "console.anthropic.com":          {"is": "a dashboard a person opens", "dismissed": "a browser page for a human, not a call any code makes"},
-    "console.mistral.ai":             {"is": "a dashboard a person opens", "dismissed": "same"},
-    "cloud.cerebras.ai":              {"is": "a dashboard a person opens", "dismissed": "same"},
-    "platform.deepseek.com":          {"is": "a dashboard a person opens", "dismissed": "same"},
-    "chat.deepseek.com":              {"is": "a dashboard a person opens", "dismissed": "same"},
-    "aistudio.google.com":            {"is": "a dashboard a person opens", "dismissed": "same"},
-    "dashboard.exa.ai":               {"is": "a dashboard a person opens", "dismissed": "same"},
-    "www.kimi.ai":                    {"is": "a marketing page", "dismissed": "same"},
-    "www.minimax.io":                 {"is": "a marketing page", "dismissed": "same"},
-    "www.cloudflare.com":             {"is": "a marketing page", "dismissed": "same. The R2 bucket that matters is reached through an account-specific endpoint, not this host"},
-    "huggingface.co":                 {"is": "model weights, pulled once", "dismissed": "nothing scheduled reads it; a local model already downloaded survives the host going away"},
-    "hermes-agent.nousresearch.com":  {"is": "named in an archived hermes config", "dismissed": "hermes-v2.ARCHIVED.20260822; nothing loaded calls it"},
-    "mumchimp.com":                   {"is": "a domain the estate owns", "dismissed": "no scheduled job calls it. It belongs on the register the day something does"},
-    "registry.npmjs.org":             {"is": "package registry", "dismissed": "build-time only; no scheduled job installs from it"},
-    "www.apple.com":                  {"is": "the plist DTD URL", "dismissed": "a schema identifier in every plist header. It is not fetched"},
-    "schemas.microsoft.com":          {"is": "the Task Scheduler XML namespace", "dismissed": "a namespace identifier, not fetched"},
-    "fonts.googleapis.com":           {"is": "web font CSS", "dismissed": "a page renders without it"},
-    "fonts.gstatic.com":              {"is": "web font files", "dismissed": "same"},
-    "prospector-store-api.fly.dev":   {"is": "prospector store, on Fly", "dismissed": "the estate is moving off Fly, founder 2026-08-23. It returns to this file named for the platform that replaces it"},
-    "prospector-store-web.fly.dev":   {"is": "prospector store, on Fly", "dismissed": "same"},
-    "tie-api.fly.dev":                {"is": "tie, on Fly", "dismissed": "same"},
-    "tie-web.fly.dev":                {"is": "tie, on Fly", "dismissed": "same"}
+    "aistudio.google.com": {
+      "is": "a dashboard a person opens",
+      "dismissed": "same"
+    },
+    "api.anthropic.com": {
+      "is": "the vendor every agent thinks with",
+      "covered_by": "no-anthropic"
+    },
+    "api.cerebras.ai": {
+      "is": "substrate rail, has a key and is not in the drill's rail list",
+      "covered_by": "no-anthropic"
+    },
+    "api.deepseek.com": {
+      "is": "substrate rail, unpaid since 2026-08-23",
+      "covered_by": "no-anthropic"
+    },
+    "api.fly.io": {
+      "is": "the Fly control plane every deploy and secret goes through",
+      "dismissed": "the estate is moving off Fly, founder 2026-08-23. It returns to this file named for the platform that replaces it"
+    },
+    "api.groq.com": {
+      "is": "substrate rail",
+      "covered_by": "no-anthropic"
+    },
+    "api.kimi.com": {
+      "is": "coding agent vendor",
+      "covered_by": "no-anthropic"
+    },
+    "api.mistral.ai": {
+      "is": "substrate rail and the only working agent rail",
+      "covered_by": "no-anthropic"
+    },
+    "api.telegram.org": {
+      "is": "the only channel that reaches the founder",
+      "covered_by": "telegram-delivery"
+    },
+    "auth.kimi.com": {
+      "is": "sign-in for api.kimi.com",
+      "dismissed": "the same vendor as api.kimi.com; drilling a vendor twice does not drill it harder"
+    },
+    "chat.deepseek.com": {
+      "is": "a dashboard a person opens",
+      "dismissed": "same"
+    },
+    "cloud.cerebras.ai": {
+      "is": "a dashboard a person opens",
+      "dismissed": "same"
+    },
+    "console.anthropic.com": {
+      "is": "a dashboard a person opens",
+      "dismissed": "a browser page for a human, not a call any code makes"
+    },
+    "console.mistral.ai": {
+      "is": "a dashboard a person opens",
+      "dismissed": "same"
+    },
+    "dashboard.exa.ai": {
+      "is": "a dashboard a person opens",
+      "dismissed": "same"
+    },
+    "fly.io": {
+      "is": "Fly's own site and API surface",
+      "dismissed": "the estate is moving off Fly, founder 2026-08-23. It returns to this file named for the platform that replaces it"
+    },
+    "fonts.googleapis.com": {
+      "is": "web font CSS",
+      "dismissed": "a page renders without it"
+    },
+    "fonts.gstatic.com": {
+      "is": "web font files",
+      "dismissed": "same"
+    },
+    "generativelanguage.googleapis.com": {
+      "is": "substrate rail, prepaid credits empty since 2026-08-23",
+      "covered_by": "no-anthropic"
+    },
+    "github.com": {
+      "is": "where every recovery path starts",
+      "covered_by": "github-gone"
+    },
+    "hermes-agent.nousresearch.com": {
+      "is": "named in an archived hermes config",
+      "dismissed": "hermes-v2.ARCHIVED.20260822; nothing loaded calls it"
+    },
+    "huggingface.co": {
+      "is": "model weights, pulled once",
+      "dismissed": "nothing scheduled reads it; a local model already downloaded survives the host going away"
+    },
+    "mumchimp.com": {
+      "is": "a domain the estate owns",
+      "dismissed": "no scheduled job calls it. It belongs on the register the day something does"
+    },
+    "openrouter.ai": {
+      "is": "substrate rail, proves Anthropic is replaceable",
+      "covered_by": "no-anthropic"
+    },
+    "platform.deepseek.com": {
+      "is": "a dashboard a person opens",
+      "dismissed": "same"
+    },
+    "prospector-store-api.fly.dev": {
+      "is": "prospector store, on Fly",
+      "dismissed": "the estate is moving off Fly, founder 2026-08-23. It returns to this file named for the platform that replaces it"
+    },
+    "prospector-store-web.fly.dev": {
+      "is": "prospector store, on Fly",
+      "dismissed": "same"
+    },
+    "registry.npmjs.org": {
+      "is": "package registry",
+      "dismissed": "build-time only; no scheduled job installs from it"
+    },
+    "schemas.microsoft.com": {
+      "is": "the Task Scheduler XML namespace",
+      "dismissed": "a namespace identifier, not fetched"
+    },
+    "tie-api.fly.dev": {
+      "is": "tie, on Fly",
+      "dismissed": "same"
+    },
+    "tie-web.fly.dev": {
+      "is": "tie, on Fly",
+      "dismissed": "same"
+    },
+    "www.apple.com": {
+      "is": "the plist DTD URL",
+      "dismissed": "a schema identifier in every plist header. It is not fetched"
+    },
+    "www.cloudflare.com": {
+      "is": "a marketing page",
+      "dismissed": "same. The R2 bucket that matters is reached through an account-specific endpoint, not this host"
+    },
+    "www.kimi.ai": {
+      "is": "a marketing page",
+      "dismissed": "same"
+    },
+    "www.minimax.io": {
+      "is": "a marketing page",
+      "dismissed": "same"
+    }
   },
   "credentials": {
-    "ANTHROPIC_API_KEY":  {"is": "the vendor every agent thinks with", "covered_by": "no-anthropic"},
-    "CLAUDE_API_KEY":     {"is": "the same vendor under a second name", "covered_by": "no-anthropic"},
-    "OPENROUTER_API_KEY": {"is": "substrate rail", "covered_by": "no-anthropic"},
-    "GROQ_API_KEY":       {"is": "substrate rail", "covered_by": "no-anthropic"},
-    "MISTRAL_API_KEY":    {"is": "substrate rail and the agent rail", "covered_by": "no-anthropic"},
-    "DEEPSEEK_API_KEY":   {"is": "substrate rail", "covered_by": "no-anthropic"},
-    "GEMINI_API_KEY":     {"is": "substrate rail", "covered_by": "no-anthropic"},
-    "TELEGRAM_TOKEN":     {"is": "the only channel that reaches the founder", "covered_by": "telegram-delivery"},
-    "GH_TOKEN":           {"is": "every push, every recovery clone", "covered_by": "github-gone"},
-    "GITHUB_TOKEN":       {"is": "the same, inside Actions", "covered_by": "github-gone"},
-    "R2_ACCOUNT_ID":      {"is": "the offsite bundle bucket", "covered_by": "offsite-backup-restore"},
-
-    "CEREBRAS_API_KEY":   {"is": "substrate rail with a key and no rail in the drill", "dismissed": "no scheduled job uses it. It is a spare, and a spare nobody calls is not a dependency"},
-    "MINIMAX_API_KEY":    {"is": "spare rail", "dismissed": "same"},
-    "OPENAI_API_KEY":     {"is": "spare rail", "dismissed": "same"},
-    "HF_TOKEN":           {"is": "model downloads", "dismissed": "build-time only"},
-    "EXA_API_KEY":        {"is": "search", "dismissed": "no scheduled job calls it"},
-    "LANGCHAIN_API_KEY":  {"is": "tracing", "dismissed": "observability for a thing that is not running"},
-    "LANGSMITH_API_KEY":  {"is": "tracing", "dismissed": "same"},
-    "CONSULT_TOKEN":      {"is": "auth between two local processes on this Mac", "dismissed": "local, and it dies with the machine the rebuild drill already covers"}
+    "ANTHROPIC_API_KEY": {
+      "is": "the vendor every agent thinks with",
+      "covered_by": "no-anthropic"
+    },
+    "CLAUDE_API_KEY": {
+      "is": "the same vendor under a second name",
+      "covered_by": "no-anthropic"
+    },
+    "OPENROUTER_API_KEY": {
+      "is": "substrate rail",
+      "covered_by": "no-anthropic"
+    },
+    "GROQ_API_KEY": {
+      "is": "substrate rail",
+      "covered_by": "no-anthropic"
+    },
+    "MISTRAL_API_KEY": {
+      "is": "substrate rail and the agent rail",
+      "covered_by": "no-anthropic"
+    },
+    "DEEPSEEK_API_KEY": {
+      "is": "substrate rail",
+      "covered_by": "no-anthropic"
+    },
+    "GEMINI_API_KEY": {
+      "is": "substrate rail",
+      "covered_by": "no-anthropic"
+    },
+    "TELEGRAM_TOKEN": {
+      "is": "the only channel that reaches the founder",
+      "covered_by": "telegram-delivery"
+    },
+    "GH_TOKEN": {
+      "is": "every push, every recovery clone",
+      "covered_by": "github-gone"
+    },
+    "GITHUB_TOKEN": {
+      "is": "the same, inside Actions",
+      "covered_by": "github-gone"
+    },
+    "R2_ACCOUNT_ID": {
+      "is": "the offsite bundle bucket",
+      "covered_by": "offsite-backup-restore"
+    },
+    "CEREBRAS_API_KEY": {
+      "is": "substrate rail with a key and no rail in the drill",
+      "dismissed": "no scheduled job uses it. It is a spare, and a spare nobody calls is not a dependency"
+    },
+    "MINIMAX_API_KEY": {
+      "is": "spare rail",
+      "dismissed": "same"
+    },
+    "OPENAI_API_KEY": {
+      "is": "spare rail",
+      "dismissed": "same"
+    },
+    "HF_TOKEN": {
+      "is": "model downloads",
+      "dismissed": "build-time only"
+    },
+    "EXA_API_KEY": {
+      "is": "search",
+      "dismissed": "no scheduled job calls it"
+    },
+    "LANGCHAIN_API_KEY": {
+      "is": "tracing",
+      "dismissed": "observability for a thing that is not running"
+    },
+    "LANGSMITH_API_KEY": {
+      "is": "tracing",
+      "dismissed": "same"
+    },
+    "CONSULT_TOKEN": {
+      "is": "auth between two local processes on this Mac",
+      "dismissed": "local, and it dies with the machine the rebuild drill already covers"
+    }
   }
 }
