@@ -37,6 +37,7 @@ import html
 import calendar
 import json
 import os
+import plistlib
 import re
 import shutil
 import subprocess
@@ -364,14 +365,117 @@ def collect_agent_certification() -> list[Row]:
                              "agents.json")]
 
 
-#: Jobs whose non-zero exit means "I found something", not "I crashed".
-#: founder_board.py itself ends `return 1 if board["bad"] else 0` (main, near the
-#: bottom of this file), so every hour that the estate has a single red row this
-#: job stores exit 1 in launchd. Counting that as a failure made the board report
-#: itself broken for doing its job. Any job added here must be one whose exit code
-#: is a finding count; a job that is merely noisy does not belong on this list,
-#: because that is how a real crash gets hidden.
-FINDING_EXIT_JOBS = {"com.founder.board"}
+#: How many missed turns before a scheduled job counts as not running. Three,
+#: because one is a deferral and two is a slow machine.
+STALE_TURNS = 3
+
+#: What we assume a StartCalendarInterval job's period is when it names an hour
+#: but no day. Daily. Used only to decide whether its output is stale.
+CALENDAR_PERIOD = 86400
+
+
+def _launchd_plists() -> dict:
+    """label -> (path, parsed plist) for every job definition on this Mac."""
+    found = {}
+    for d in (os.path.expanduser("~/Library/LaunchAgents"),
+              "/Library/LaunchAgents", "/Library/LaunchDaemons"):
+        if not os.path.isdir(d):
+            continue
+        for name in os.listdir(d):
+            if not name.endswith(".plist"):
+                continue
+            path = os.path.join(d, name)
+            try:
+                with open(path, "rb") as fh:
+                    pl = plistlib.load(fh)
+            except Exception:
+                continue
+            found[pl.get("Label", name[:-6])] = (path, pl)
+    return found
+
+
+def _log_age_minutes(path: str):
+    """Minutes since a log was last written, or None if there is no log."""
+    if not path:
+        return None
+    path = os.path.expanduser(path)
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    if st.st_size == 0:
+        return None
+    return (time.time() - st.st_mtime) / 60.0
+
+
+def _grade_job(label: str, pid: str, code: int, pl: dict):
+    """Why this job is failing, or None. The exit code is never the verdict.
+
+    Measured 2026-08-23: nine of this Mac's jobs sat at exit 1 and the board
+    called all nine of them failing. Every one had run, written its output and
+    in three cases delivered a Telegram alert. Their exit code is a count of
+    what they found, which is what a job whose whole purpose is finding things
+    returns. A board that says nine jobs are broken when none of them is
+    teaches its reader to ignore the colour, and that is how the ops dashboard
+    died behind a green board earlier the same night.
+
+    So grade the work, not the return value. A job is failing when it is a
+    service that should be up and is not, when it has produced nothing for
+    several turns running, or when it wrote to stderr recently. A traceback
+    lands on stderr; a finding count does not.
+    """
+    alive = pid.strip() not in ("", "-")
+    keepalive = bool(pl.get("KeepAlive"))
+    interval = pl.get("StartInterval")
+    if not interval and pl.get("StartCalendarInterval"):
+        interval = CALENDAR_PERIOD
+
+    if keepalive and not interval and not alive:
+        return "service is down"
+
+    #: There is no stderr test here on purpose. Two attempts at one were wrong
+    #: in different ways on this estate. Most jobs point StandardErrorPath and
+    #: StandardOutPath at the same file, so a fresh "error" log is the job
+    #: talking: that read 21 failures of 39. Narrowing it to a stderr file of
+    #: its own still flagged maestro and the gateway, because python's logging
+    #: module writes to stderr by default and a running service therefore has a
+    #: permanently fresh error log. A signal that fires for healthy jobs is a
+    #: proxy, not a measurement, and grading proxies is what put nine jobs on
+    #: this row that were all working.
+
+    if interval and not alive:
+        #: estate-gate stamps gate.lastrun.<label> at the moment it hands a job
+        #: to the shell. That is the only file on this Mac that records a run
+        #: rather than the noise a run made, so where it exists it decides.
+        #: ai.estate.tracked-guard ran at 23:41 and wrote nothing, because it
+        #: had nothing to say; log freshness called it six hours dead. A quiet
+        #: job and a stopped job look identical in a log and do not look
+        #: identical here.
+        stamped = _log_age_minutes(
+            os.path.expanduser(f"~/.estate/state/gate.lastrun.{label}"))
+        #: Whichever of its two logs it wrote to most recently. Half the jobs
+        #: here write only to stderr, so testing stdout alone called
+        #: com.founder.estateaudit dead 20 minutes after it refreshed the
+        #: founder's dashboard.
+        ages = [stamped] if stamped is not None else [
+            a for a in (_log_age_minutes(pl.get("StandardOutPath")),
+                        _log_age_minutes(pl.get("StandardErrorPath")))
+            if a is not None]
+        limit = (interval / 60.0) * STALE_TURNS
+        if not ages:
+            return "has never written any output"
+        out_age = min(ages)
+        if out_age < -5:
+            return "its log is stamped in the future, so nothing here can be graded"
+        if out_age > 60 * 24 * 365:
+            return "its log timestamp is unusable, so nothing here can be graded"
+        if out_age > limit:
+            return f"no output for {out_age / 60:.1f}h, runs every {interval / 3600:.1f}h"
+
+    if code > 0 and not alive and not interval and not keepalive:
+        # Nothing else to grade it by: no schedule, no service, no logs.
+        return f"exit {code}, and nothing else to check it against"
+    return None
 
 
 def collect_launchd() -> list[Row]:
@@ -379,6 +483,7 @@ def collect_launchd() -> list[Row]:
     rc, out, err = sh(["launchctl", "list"], 30)
     if rc != 0:
         return [_unknown("Background jobs", err.strip()[:160] or f"exit {rc}", "launchctl list")]
+    plists = _launchd_plists()
     watched, dead = 0, []
     for line in out.splitlines():
         parts = line.split("\t")
@@ -400,18 +505,22 @@ def collect_launchd() -> list[Row]:
             code = int(status)
         except ValueError:
             continue
-        # A negative status is a signal, which for a periodic job usually means it is running
-        # right now. Only a positive exit code is a job that ran and failed.
-        #
         #: The first column is the live pid, and a pid means the job is running at this
         #: instant. The status column is then the exit code of the PREVIOUS run, which is
         #: history and not a state. ai.architect.gateway was restarted at 23:0x and sat
         #: here as "exit 1" with pid 91037 beside it: alive, and reported dead. Reporting
         #: a stale exit as a current failure is the same defect as reporting a deferral as
         #: a success, pointed the other way.
-        alive = pid.strip() not in ("", "-")
-        if code > 0 and not alive and label not in FINDING_EXIT_JOBS:
-            dead.append(f"{label} (exit {code})")
+        entry = plists.get(label)
+        if entry is None:
+            # Loaded with no definition on disk. Nothing to grade it against, so
+            # say that rather than guessing from the exit code.
+            if code > 0 and pid.strip() in ("", "-"):
+                dead.append(f"{label} (exit {code}, no plist on disk)")
+            continue
+        why = _grade_job(label, pid, code, entry[1])
+        if why:
+            dead.append(f"{label} ({why})")
     rows = [Row(GOOD if not dead else BAD, "Background jobs failing",
                 f"{len(dead)} of {watched}", "; ".join(dead[:6]), "launchctl list")]
     rows.append(_jobs_not_running())
