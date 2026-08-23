@@ -5,14 +5,20 @@
       "id": "rebuild",
       "what_breaks": "This Mac dies and the estate has to come back on a new machine.",
       "why": "LAW 19: a dependency whose exit has never been drilled is not portable, it is a hope.",
-      "cmd": ["/bin/bash", "{HERE}/../rebuild/drill.sh"],
+      "cmd": [
+        "/bin/bash",
+        "{HERE}/../rebuild/drill.sh"
+      ],
       "max_age_days": 8
     },
     {
       "id": "estate-bundle-restore",
       "what_breaks": "A commit exists only on this Mac and the Mac dies.",
       "why": "estate_bundle_push.sh already clones each bundle back after uploading it. The drill is that the newest receipt says so and is recent, because a push script that stopped running still leaves yesterday's green receipt behind.",
-      "cmd": ["/usr/bin/python3", "{HERE}/check_bundle_restore.py"],
+      "cmd": [
+        "/usr/bin/python3",
+        "{HERE}/check_bundle_restore.py"
+      ],
       "max_age_days": 2
     },
     {
@@ -42,6 +48,13 @@
       "why": "LAW 19 grades a dependency by its exit. The exit from a bad Fly release is a rollback nobody has run.",
       "cmd": null,
       "todo": "On a non-customer app, deploy a known-bad release, roll it back, and assert the health endpoint answers again."
+    },
+    {
+      "id": "windows-rebuild",
+      "what_breaks": "The laptop dies and the replacement is a Windows machine.",
+      "why": "The rebuild drill restores this estate into a throwaway home on THIS operating system. It has never once been run on Windows, so the honest state of a Windows rebuild is unproven, not hard. jobs/render_windows.py turns all 29 jobs into Task Scheduler XML and every one of them loses something on the way.",
+      "cmd": null,
+      "todo": "Render every job to Task Scheduler XML, import it on a real Windows host or a Windows container, start one job, and read its output back. Until a job has actually run there, the renderer is a file format exercise."
     }
   ]
 }
