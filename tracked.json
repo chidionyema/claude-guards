@@ -76,8 +76,9 @@
     "exclude": [
       "deleted-plists*",
       "*.pyc",
-      "__pycache__*"
+      "__pycache__*",
+      "requirements/signalengine.txt"
     ],
-    "why": "the move-to-dev plan, the job verdicts and the rebuild analysis; in no repository until now"
+    "why": "the move-to-dev plan, the job verdicts and the rebuild analysis; in no repository until now [signalengine excluded 2026-08-23: the founder ruled the project dead, so its pin file is not load-bearing. It was also the one entry that made --pull revert a dependabot fix, because a dead project's live copy is never updated and always looks authoritative.]"
   }
 ]
