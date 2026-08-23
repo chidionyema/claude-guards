@@ -59,6 +59,15 @@ def _gh() -> str:
 
 GH = _gh()
 
+#: What a new ticket is budgeted at until somebody sets a real number. Measured 2026-08-23 across
+#: the 6 sessions currently bound to an issue: median $558, mean $492, max $795, $2,954 in total.
+#: The default below is deliberately far under that median. A default set at the observed median
+#: blesses whatever the estate happens to be spending and can never detect anything, which makes
+#: it decoration rather than a budget. Set low, it is wrong often -- and being wrong is visible on
+#: close, which is the behaviour wanted.
+DEFAULT_BUDGET_USD = 50
+DEFAULT_BUDGET_MIN = 120
+
 #: Tools that change the world. A read never needs a ticket: he is not trying to stop an agent
 #: from looking at a file, he is trying to stop work from happening off the board.
 MUTATING = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
@@ -153,8 +162,14 @@ def open_issue(sid: str, words: str, cwd: str) -> int:
         "**The founder's own words, first thing he typed in this session:**\n\n> %s\n\n"
         "- working directory: `%s`\n- session: `%s`\n\n"
         "This issue exists so the work is followed up rather than lost between tabs. "
-        "Close it when a command proves the outcome, not when an agent says so.\n"
-        % (words or "(nothing captured)", cwd, sid)
+        "Close it when a command proves the outcome, not when an agent says so.\n\n"
+        "## Budget\n"
+        "- cost: $%s\n"
+        "- time: %sm\n\n"
+        "A default, not an estimate. Revise it now if this job is bigger or smaller, because the "
+        "comparison printed when this issue closes is only worth reading if the number was set "
+        "before the work rather than after it.\n" % (
+            words or "(nothing captured)", cwd, sid, DEFAULT_BUDGET_USD, DEFAULT_BUDGET_MIN)
     )
     res = subprocess.run(
         [GH, "issue", "create", "--repo", REPO, "--title", title,
