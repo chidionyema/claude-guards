@@ -89,6 +89,26 @@ def commits(local, remote):
     return [c for c in git("rev-list", rng).split() if c]
 
 
+def paired_docs(local, shas):
+    """Feature names this push adds BOTH a demo and an onboarding for.
+
+    Read off the added files, not off the commit subject, so a `feat:` with no scope is judged
+    on what it actually ships. Both halves are required: a demo with no onboarding is a page
+    showing something work with no way to stop it.
+    """
+    seen = {"demo": set(), "onboarding": set()}
+    for sha in shas:
+        added = git("diff-tree", "--no-commit-id", "--name-only", "-r",
+                    "--diff-filter=A", sha).split("\n")
+        for path in added:
+            path = path.strip()
+            for kind in seen:
+                prefix = f"docs/{kind}/"
+                if path.startswith(prefix) and path.endswith(".md"):
+                    seen[kind].add(path[len(prefix):-3])
+    return sorted(seen["demo"] & seen["onboarding"])
+
+
 def features(local, shas):
     """Every feature name this push introduces, with why it counts.
 
@@ -103,8 +123,26 @@ def features(local, shas):
         subject = git("log", "-1", "--format=%s", sha).strip()
         m = FEAT.match(subject)
         if m:
-            name = m.group("scope") or m.group("word")
-            found.setdefault(name, f"commit {sha[:8]} says `{subject[:60]}`")
+            #: The scope names the feature. Without one, the gate does not know the name and
+            #: must not guess: `feat: no session changes a file without a GitHub issue` was read
+            #: as a feature called "no" and the push was refused until somebody wrote
+            #: docs/demo/no.md. That is the same defect the scope rule above was written for,
+            #: one step further along -- the first fix covered `feat(scope):` and left the bare
+            #: `feat:` still taking the verb.
+            #:
+            #: So when there is no scope, the demand is the law's demand and nothing more: this
+            #: push adds a demo and an onboarding that go together. Which name they carry is the
+            #: author's business, not the gate's.
+            name = m.group("scope")
+            if name:
+                found.setdefault(name, f"commit {sha[:8]} says `{subject[:60]}`")
+            else:
+                for pair in paired_docs(local, shas):
+                    found.setdefault(pair, f"commit {sha[:8]} says `{subject[:60]}`")
+                if not paired_docs(local, shas):
+                    found.setdefault(m.group("word"),
+                                     f"commit {sha[:8]} says `{subject[:60]}` and this push adds "
+                                     f"no docs/demo + docs/onboarding pair")
         #: Files this commit ADDED, against its first parent. A new top-level
         #: directory shows up here as the first source file inside it.
         added = git("diff-tree", "--no-commit-id", "--name-only", "-r",
