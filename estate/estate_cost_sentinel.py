@@ -41,7 +41,12 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.expanduser("~/.hermes/scripts"))
+# APPEND, never insert. ~/.hermes is retired and is a symlink into ~/Documents,
+# which macOS TCC hides from a bootstrapped LaunchAgent. With insert(0) the retired
+# tree outranked this file's own directory, so the sentinel ran that copy of
+# estate_alert and would have gone silent the day the tree goes. Append leaves it as
+# a fallback for telegram_ledger until crew #13 moves that too.
+sys.path.append(os.path.expanduser("~/.hermes/scripts"))
 
 import estate_spend  # noqa: E402
 
