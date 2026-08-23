@@ -553,6 +553,66 @@ def c_envfiles() -> list[dict]:
 
 CHECKS.append(c_envfiles)
 
+
+def c_clock() -> list[dict]:
+    """Is the system clock right, and did it jump?
+
+    Written 2026-08-23. On 2026-08-22 this machine lost power at 21:51 with the
+    battery at level 3 and 124 mAh, and came back with the clock 19.77 hours in
+    the past. It then ran for thirteen hours with the wrong date and not one thing
+    on this machine said a word. The founder found it himself, in the morning.
+
+    Why it survived the reboot, which is the part worth knowing: no time daemon
+    will STEP a correction that large. An offset of 77841 seconds normally means
+    the measurement is wrong, not the clock, so timed measures it cleanly, refuses
+    to act, and does that forever. The component whose job is to fix the clock is
+    the reason a bad clock persists.
+
+    Two angles, because one instrument here can lie in a way the other cannot.
+    sntp says how wrong the clock is NOW. The pmset log says whether it JUMPED,
+    which is a fact about the past that survives the clock being corrected since.
+    A machine that is right now but jumped an hour ago is not a healthy machine.
+
+    Nothing here sets the clock. A probe that repairs is a probe you cannot trust
+    to report, and a 20-hour forward step stampedes every launchd job at once.
+    """
+    out = []
+
+    rc, sn = sh("/usr/bin/sntp -t 5 time.apple.com 2>&1 | tail -1", timeout=15)
+    m = re.match(r"([+-][\d.]+)\s+\+/-\s+([\d.]+)", sn.strip())
+    if not m:
+        out.append(row("machine", "System clock offset", sn.strip() or "no reply", UNK,
+                       "/usr/bin/sntp -t 5 time.apple.com",
+                       "No usable reply, so this row carries no verdict. It is not a pass."))
+    else:
+        off, err = float(m.group(1)), float(m.group(2))
+        sev = CRIT if abs(off) > 300 else (WARN if abs(off) > 5 else OK)
+        detail = f"Measurement error +/- {err:.3f}s."
+        if sev == CRIT:
+            detail += (" No time daemon will step a correction this large on its own, so it "
+                       "will not fix itself and it survives a reboot. "
+                       "Fix: sudo sntp -sS time.apple.com")
+        out.append(row("machine", "System clock offset", f"{off:+.3f}s", sev,
+                       "/usr/bin/sntp -t 5 time.apple.com", detail))
+
+    rc2, steps = sh("/usr/bin/pmset -g log 2>/dev/null | awk "
+                    "'/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] /"
+                    "{t=substr($0,1,19); if (prev!=\"\" && t<prev) print prev\" -> \"t; prev=t}'",
+                    timeout=30)
+    jumps = [x for x in steps.splitlines() if "->" in x]
+    out.append(row("machine", "Backward clock steps in the power log", str(len(jumps)),
+                   WARN if jumps else OK,
+                   "pmset -g log, scanned for a timestamp older than the one before it",
+                   ("Most recent: " + jumps[-1] + ". The log is written by the OS and is "
+                    "append-only, so a timestamp older than the one above it is proof the "
+                    "clock moved backward, and says when and by how much."
+                    ) if jumps else
+                   "The power log covers about seven days and its timestamps only go forward."))
+    return out
+
+
+CHECKS.append(c_clock)
+
 # ---------------------------------------------------------------- render
 
 SEV_LABEL = {CRIT: "CRITICAL", WARN: "WARN", UNK: "UNKNOWN", OK: "CLEAN"}
