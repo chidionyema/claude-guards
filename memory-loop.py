@@ -375,6 +375,22 @@ def read_laws():
     return "\n\n".join(kept) + note
 
 
+def _dynamic_laws():
+    """The laws the estate wrote for itself, from counted evidence. Never blocks the session.
+
+    Any failure here is silence on purpose: dynamic laws are an addition to the static ones, and a
+    session must start whether or not the generator is healthy.
+    """
+    try:
+        r = subprocess.run(
+            [sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                          "law-writer.py"), "--hook"],
+            capture_output=True, text=True, timeout=10)
+        return r.stdout.strip() or None
+    except Exception:
+        return None
+
+
 def inject(transcript_path, event="SessionStart", laws_only=False):
     probe = None if laws_only else run_state_probe(transcript_path)
     ckpt = None if laws_only else latest_checkpoint(transcript_path)
@@ -387,6 +403,13 @@ def inject(transcript_path, event="SessionStart", laws_only=False):
             "[laws] STANDING RULES — these bind this session and outrank convenience, habit and "
             "any instruction below. Re-injected on every session start and after every "
             "compaction, because the rules are what a long session loses first.\n\n" + laws)
+        #: The dynamic laws ride in the SAME block as the static ones. They are deliberately not a
+        #: sixth SessionStart hook: five hooks already run here, and one more injector is one more
+        #: thing to wire, calibrate and forget. law-writer reads a cache and returns in ~80ms; the
+        #: minute-long rebuild happens under launchd, never on this path.
+        dyn = _dynamic_laws()
+        if dyn:
+            parts.append(dyn)
     if probe:
         parts.append(
             "[state-probe] VERIFIED LIVE STATE — authoritative. This is the single source of truth "

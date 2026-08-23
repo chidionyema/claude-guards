@@ -6,7 +6,7 @@ real, incidents, founders, conplainta repeted istakes, eperiences,etc", "thats t
 ay", "we need static fied laws afew", "and dynic laws nd rewrite and resole contrdiitns".
 
 THE TWO TIERS.
-  STATIC  ~/AGENTS.md. Ten laws. Hand-written, rarely changed, and they win every tie.
+  STATIC  ~/AGENTS.md. Hand-written, rarely changed, and they win every tie.
           A rule earns a place there only if it needs a judgement no machine can make.
   DYNAMIC This file's output. Generated from evidence, carrying its own counts, and
           deleted the moment the evidence stops recurring.
@@ -38,6 +38,7 @@ from __future__ import annotations
 import collections
 import datetime as dt
 import json
+import math
 import os
 import re
 import sys
@@ -236,29 +237,67 @@ def contradictions() -> list[str]:
     return out
 
 
+#: What ONE occurrence of each evidence kind costs. Ranking by raw count was a defect: it put
+#: "compound commands go to the classifier" (719x, a machine already stops it, costs seconds) above
+#: a founder complaint (1x, costs trust, which is the scarce thing here). Worse, it starved the
+#: class the whole apparatus exists for -- the rare expensive incident that never reaches a count
+#: of 3. Aviation reporting and hospital M&M exist precisely to catch the once-in-a-thousand
+#: near-miss; a pure frequency counter is blind to it by construction.
+WEIGHT = {
+    "guards":     1,    #: a guard refused it, so it never reached production. Friction, not damage.
+    "broken":    25,    #: an instrument reported itself blind. This is how expensive things get through.
+    "complaint": 40,    #: the founder said it out loud. He says it only after it already cost him.
+    "incident":  60,    #: a written incident. Rare by definition, and each one was paid for.
+}
+SCORE_FLOOR = 3.0   #: the bar to exist at all, kept low on purpose. The defect the research named
+                    #: was RANKING by frequency, not admission: cheap-but-frequent laws are real
+                    #: (agents do trip on `git add -A`), they just must not outrank a founder
+                    #: complaint. So admission stays cheap and the ORDER carries the cost signal.
+                    #: One complaint (40) or one broken instrument (25) clears this alone, which is
+                    #: what makes the rare-and-expensive class reachable at all. Retirement is
+                    #: automatic with no extend-anyway branch -- a sunset clause with a
+                    #: discretionary escape hatch never sunsets anything.
+
+
+def score(n: int, src: str) -> float:
+    """Cost of the pattern, not how often it fired.
+
+    Saturating on n, because the hundredth identical guard refusal teaches nothing the third did
+    not. Linear in weight, because cost per occurrence is the thing that actually differs.
+    """
+    return WEIGHT.get(src, 1) * (1.0 + math.log(max(n, 1)))
+
+
 def build(cutoff: float) -> tuple[list[dict], list[str]]:
+    """Promote a pattern to a law on what it COSTS, not on how often it fired.
+
+    Everything here is admitted first and filtered on score afterwards, so a single expensive
+    event can become a law and ten thousand cheap ones need not. The old code filtered on a raw
+    count of 3 before scoring, which made the rare-and-expensive case unreachable by construction.
+    """
     laws = []
     for key, c in gather_refusals(cutoff).items():
-        if c["n"] >= THRESHOLD:
-            laws.append({"id": key, "n": c["n"], "text": c["law"], "why": c["why"],
-                         "src": c["instrument"]})
+        laws.append({"id": key, "n": c["n"], "text": c["law"], "why": c["why"],
+                     "src": c["instrument"], "kind": "guards"})
     for key, c in gather_complaints().items():
-        if c["n"] >= max(2, THRESHOLD - 1):      # his time costs more than a retry does
-            laws.append({"id": key, "n": c["n"], "text": c["law"],
-                         "why": 'he said: "%s"' % c.get("quote", ""), "src": c["instrument"]})
+        laws.append({"id": key, "n": c["n"], "text": c["law"],
+                     "why": 'he said: "%s"' % c.get("quote", ""),
+                     "src": c["instrument"], "kind": "complaint"})
     for g, c in gather_broken().items():
-        if c["n"] >= THRESHOLD:
-            laws.append({"id": "broken:" + g, "n": c["n"],
-                         "text": "Do not trust %s until it is fixed; it reported itself broken." % g,
-                         "why": "an instrument that fails silently reads exactly like a clean estate.",
-                         "src": c["instrument"]})
-    # rewrite: one subject, one law -- keep the best-evidenced
+        laws.append({"id": "broken:" + g, "n": c["n"],
+                     "text": "Do not trust %s until it is fixed; it reported itself broken." % g,
+                     "why": "an instrument that fails silently reads exactly like a clean estate.",
+                     "src": c["instrument"], "kind": "broken"})
+    for law in laws:
+        law["score"] = score(law["n"], law["kind"])
+    laws = [law for law in laws if law["score"] >= SCORE_FLOOR]
+    # rewrite: one subject, one law -- keep the one that costs most, not the one seen most
     best: dict[str, dict] = {}
     for law in laws:
         k = law["text"][:40].lower()
-        if k not in best or law["n"] > best[k]["n"]:
+        if k not in best or law["score"] > best[k]["score"]:
             best[k] = law
-    laws = sorted(best.values(), key=lambda x: -x["n"])[:MAX_LAWS]
+    laws = sorted(best.values(), key=lambda x: -x["score"])[:MAX_LAWS]
     return laws, contradictions()
 
 
@@ -269,9 +308,11 @@ def render(laws: list[dict], contras: list[str], cutoff: float) -> str:
          "",
          "Every law below is here because a machine counted it happening, in the last %d days."
          % WINDOW_DAYS,
-         "The count is the whole justification. Below %d occurrences a law is dropped, so this"
-         % THRESHOLD,
-         "list shrinks when the estate gets better -- that is the only honest way to tell.",
+         "Laws are ranked by COST, not by how often they fired. A guard refusal is cheap -- the",
+         "machine already stopped it. A founder complaint is expensive and counts at one. Below a",
+         "cost of %.0f a law is dropped automatically, with no extend-anyway branch, so this list"
+         % SCORE_FLOOR,
+         "shrinks when the estate gets better -- that is the only honest way to tell.",
          "",
          "The static laws in `~/AGENTS.md` outrank every line here. Written %s."
          % dt.datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -281,7 +322,9 @@ def render(laws: list[dict], contras: list[str], cutoff: float) -> str:
     for i, law in enumerate(laws, 1):
         L.append("## D%d — %s" % (i, law["text"]))
         L.append("")
-        L.append("*%d occurrences in %d days, measured by %s.*" % (law["n"], WINDOW_DAYS, law["src"]))
+        L.append("*Cost %.0f. %d occurrence%s in %d days, measured by %s.*"
+                 % (law.get("score", 0), law["n"], "" if law["n"] == 1 else "s",
+                    WINDOW_DAYS, law["src"]))
         if law.get("why"):
             L.append("")
             L.append(law["why"])
@@ -322,15 +365,24 @@ def selftest() -> int:
     globals()["gather_broken"] = lambda: {}
     laws, _ = build(now)
     ck("one subject yields one law", len(laws) == 1)
-    ck("it keeps the better-evidenced count", laws and laws[0]["n"] == 9)
+    ck("it keeps the costlier one", laws and laws[0]["n"] == 9)
+    #: the whole point of the weighting: one founder complaint outranks a cheap flood
     globals()["gather_refusals"] = lambda c: {
-        "a": {"n": 2, "law": "Below threshold.", "why": "", "instrument": "i"}}
+        "a": {"n": 5000, "law": "A cheap thing a guard already stops.", "why": "", "instrument": "i"}}
+    globals()["gather_complaints"] = lambda: {
+        "c": {"n": 1, "law": "A thing the founder said once.", "quote": "q", "instrument": "j"}}
+    ranked, _ = build(now)
+    ck("one complaint outranks a flood of cheap refusals",
+       ranked and ranked[0]["text"].startswith("A thing the founder said"))
+    globals()["gather_complaints"] = lambda: {}
+    globals()["gather_refusals"] = lambda c: {
+        "a": {"n": 2, "law": "Below the cost floor.", "why": "", "instrument": "i"}}
     laws2, _ = build(now)
-    ck("below threshold is retired", laws2 == [])
+    ck("below the cost floor is retired automatically", laws2 == [])
     (globals()["gather_refusals"], globals()["gather_complaints"],
      globals()["gather_broken"]) = saved
     ck("static subjects are readable", isinstance(static_subjects(), list))
-    print("law-writer selftest: %d/%d checks passed" % (12 - len(fails), 12))
+    print("law-writer selftest: %d/%d checks passed" % (13 - len(fails), 13))
     return 1 if fails else 0
 
 
@@ -354,16 +406,28 @@ def hook() -> int:
         return 0
     if age > STALE_H * 3600:
         return 0
-    laws = re.findall(r"^## (D\d+) — (.+)$\n\n\*(\d+) occurrences", text, re.M)
+    #: matches the rendered law block. Kept deliberately loose on what follows the title so a
+    #: change to the evidence line cannot silently empty this hook -- which is exactly what
+    #: happened when the line went from "N occurrences" to "Cost N. M occurrences".
+    laws = re.findall(r"^## (D\d+) — (.+)$\s*\n\s*\*Cost (\d+)", text, re.M)
     contras = re.findall(r"^- (.+)$", text.split("## Contradictions found", 1)[-1], re.M)
     if not laws and not contras:
+        #: the cache exists and is fresh, yet nothing parsed out of it. That is a broken parser,
+        #: not an empty estate, and it must not read as silence.
+        if text.strip():
+            try:
+                sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+                import guard_report
+                guard_report.broken(__file__, 0, "cache is fresh but no law parsed out of it")
+            except Exception:
+                pass
         return 0
     out = ["[laws/dynamic] WRITTEN FROM WHAT ACTUALLY HAPPENED, NOT FROM OPINION.",
            "Each line was counted on this estate in the last %d days. The static laws in"
            % WINDOW_DAYS,
            "~/AGENTS.md outrank every line here. Refreshed %dm ago." % (age // 60), ""]
-    for tag, txt, n in laws[:HOOK_LAWS]:
-        out.append("  %s (%sx) %s" % (tag, n, txt))
+    for tag, txt, cost in laws[:HOOK_LAWS]:
+        out.append("  %s (cost %s) %s" % (tag, cost, txt))
     if contras:
         out += ["", "  Contradictions in the rulebook itself -- do not cite a law by number until fixed:"]
         for c in contras[:3]:
@@ -372,9 +436,76 @@ def hook() -> int:
     return 0
 
 
+#: The dimensions a law that tells you to ANALYSE must actually enumerate. Founder, 2026-08-23:
+#: "should it nnap surfaces, dependences, edge cases, unknons, unknown unknws, riask analysys".
+#: Without the list, "think it through" is an instruction two agents obey differently -- and a law
+#: two agents obey differently is not a law, it is a mood.
+SWEEP_DIMENSIONS = (
+    ("surfaces",         r"\bsurface|\bcaller|\binterface|\bentry ?point|\bwho reads|\bconsumer"),
+    ("dependencies",     r"\bdepend|\bdownstream|\bupstream|\bstanding on|\bwhat it needs"),
+    ("edge cases",       r"\bedge case|\bempty case|\bone case|\bmany case|\bhalf-succeed|\bat once"),
+    ("unknowns",         r"\bunknown|\bdo not know|\bdon't know|\bnot sure|\bcannot tell"),
+    ("unknown unknowns", r"\boutside your own window|\bcannot see from|\bask a peer|\bpeer is an angle|\bwhat have I not"),
+    ("risk / blast",     r"\bblast radius|\brisk|\bwhat would make you stop|\bwhat breaks if"),
+)
+
+#: Laws that command analysis or judgement. Only these are held to SWEEP_DIMENSIONS -- a law that
+#: says "do X" needs no sweep, and scoring it against one would be grading a proxy.
+ANALYTIC = r"\bthink|\bmap it|\bplan\b|\bconsider|\bdecide|\bassess|\bjudge|\bwork out|\bfollow the effects"
+
+
+def audit_laws() -> list[dict]:
+    """Score every static law for the two ways a law goes ambiguous.
+
+    A law that commands analysis without saying what to sweep gets obeyed differently by every
+    agent, because each one picks its own dimensions.
+
+    There was a second check here that compared a law's title against its 'you are breaking it
+    when' test by shared words. It flagged 22 of 32 and was wrong on nearly all of them: LAW 17
+    'prove it is operational' is tested by 'you report the action you took instead of the state it
+    produced', which is exactly right and shares no word with the title. Word overlap grades
+    vocabulary, not subject. Judging whether a test tests its law needs reading, so it is not here.
+    """
+    text = open(STATIC, encoding="utf-8").read()
+    #: the owning law declares which laws defer to it, in its own prose. Read the declaration
+    #: rather than keeping a second list here -- a second list is one more thing to drift.
+    m = re.search(r"laws that command analysis mean this list.*?LAW ([\d, and]+) each", text, re.I | re.S)
+    delegating = set(re.findall(r"\d+", m.group(1))) if m else set()
+    out = []
+    for m in re.finditer(r"^#{1,3} LAW (\d+) — (.+?)$(.*?)(?=^#{1,3} LAW |\Z)", text, re.M | re.S):
+        num, title, body = m.group(1), m.group(2).strip(), m.group(3)
+        rec = {"n": num, "title": title, "gaps": []}
+        if num in delegating:
+            #: this law points at the law that owns the sweep list. That is the consolidation:
+            #: one copy of the six dimensions, so there is one thing to change when they are wrong.
+            out.append(rec)
+            continue
+        if re.search(ANALYTIC, body, re.I):
+            rec["gaps"] = [d for d, pat in SWEEP_DIMENSIONS if not re.search(pat, body, re.I)]
+        out.append(rec)
+    return out
+
+
+def render_audit(rows: list[dict]) -> str:
+    L = ["# Law ambiguity audit", "",
+         "A law that commands analysis but does not say WHAT to sweep is obeyed differently by",
+         "every agent, because each one picks its own dimensions. The dimensions are the founder's:",
+         "surfaces, dependencies, edge cases, unknowns, unknown unknowns, risk.", ""]
+    amb = [r for r in rows if r["gaps"]]
+    L.append("## Commands analysis, does not say what to sweep (%d of %d laws)" % (len(amb), len(rows)))
+    L.append("")
+    for r in sorted(amb, key=lambda r: -len(r["gaps"])):
+        L.append("- **LAW %s — %s** misses: %s" % (r["n"], r["title"], ", ".join(r["gaps"])))
+    L.append("")
+    return "\n".join(L)
+
+
 def main() -> int:
     if "--hook" in sys.argv:
         return hook()
+    if "--audit" in sys.argv:
+        sys.stdout.write(render_audit(audit_laws()))
+        return 0
     if "--selftest" in sys.argv:
         return selftest()
     cutoff = _now() - WINDOW_DAYS * 86400
