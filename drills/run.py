@@ -167,6 +167,19 @@ def main():
         return 0 if rec["status"] == "PASS" else 1
 
     if a.all:
+        # The register answers "does this recovery path work". The audit answers the
+        # question one step earlier: "is there a recovery path for this dependency at
+        # all". A green register with an unclassified vendor in the tree is the more
+        # dangerous of the two states, because it reads as covered.
+        audit = subprocess.run(
+            [sys.executable, os.path.join(HERE, "audit.py"), "--ci"],
+            capture_output=True, text=True)
+        print(audit.stdout.rstrip())
+        if audit.returncode != 0:
+            post("dependency-unclassified",
+                 "A dependency in the tree is neither drilled nor dismissed: "
+                 + " ".join(audit.stdout.split())[-400:])
+
         results = [run_one(d) for d in reg["drills"] if d.get("cmd")]
         unwritten = [d["id"] for d in reg["drills"] if not d.get("cmd")]
         failed = [r for r in results if r["status"] == "FAIL"]

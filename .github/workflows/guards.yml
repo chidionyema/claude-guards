@@ -64,3 +64,17 @@ jobs:
       # removed, kept=10 holes=1 exit 1; with a value in the example file, kept=10 holes=1 exit 1.
       - name: nothing load-bearing is missing from the repository
         run: python3 estate/in-git.py --ci
+
+      # LAW 19, made mechanical. A vendor arrives in this estate the moment somebody writes a
+      # URL or an environment variable name, and until 2026-08-23 nothing anywhere listed them:
+      # 33 hosts and 19 credential names were in the tree and in no document. This refuses a
+      # pull request that adds another one without saying, in drills/dependencies.json, either
+      # which drill proves we survive losing it or why it cannot stop us.
+      #
+      # Tree only -- no network, no credentials -- so it runs on a bare runner.
+      #
+      # Negative-tested before this step was added: a file containing one unknown host and one
+      # unknown credential name -> exit 1 naming both; a covered_by pointing at a drill that is
+      # not on the register -> exit 1; clean tree -> exit 0.
+      - name: every dependency is drilled or dismissed
+        run: python3 drills/audit.py --ci
