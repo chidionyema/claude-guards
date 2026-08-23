@@ -37,6 +37,7 @@ HANDLED = {
     "label", "Program", "ProgramArguments", "WorkingDirectory",
     "StartInterval", "StartCalendarInterval", "RunAtLoad", "KeepAlive",
     "StandardOutPath", "StandardErrorPath", "EnvironmentVariables",
+    "Nice", "ProcessType", "LowPriorityIO", "ThrottleInterval",
 }
 
 # Keys with no Task Scheduler equivalent at all. Named so the report says what
@@ -44,11 +45,6 @@ HANDLED = {
 NO_EQUIVALENT = {
     "WatchPaths": "Task Scheduler has no file-watch trigger. This job fires on a "
                   "path changing and cannot on Windows without a helper process.",
-    "ThrottleInterval": "no minimum respawn gap; RestartInterval is the nearest "
-                        "and applies only after a failure.",
-    "Nice": "no process nice level.",
-    "LowPriorityIO": "no per-task IO priority.",
-    "ProcessType": "no scheduler class hint.",
     "SoftResourceLimits": "no per-task rlimits.",
     "ExitTimeOut": "no configurable SIGTERM-to-SIGKILL gap.",
     "LimitLoadToSessionType": "no Aqua/Background session distinction.",
@@ -56,9 +52,26 @@ NO_EQUIVALENT = {
 }
 
 
+VENV_BIN = re.compile(r"((?:^|/)\.?[\w.-]*venv)/bin/([\w.-]+)", re.I)
+
+
+def venv_fix(s):
+    """A virtualenv is bin/python on POSIX and Scripts\\python.exe on Windows.
+
+    Not a guess about Windows: it is what `python -m venv` creates there. Doing
+    the rewrite is a faithful translation. NOT doing it produced a path that
+    looked right, did not exist, and sat inside the cmd.exe wrapper where the
+    interpreter check could not see it, so twelve jobs reported clean and could
+    not have run."""
+    def one(m):
+        exe = m.group(2)
+        return f"{m.group(1)}/Scripts/{exe}" + ("" if "." in exe else ".exe")
+    return VENV_BIN.sub(one, s)
+
+
 def win_path(s):
     """{HOME} is %USERPROFILE% and POSIX separators are backslashes."""
-    return s.replace("{HOME}", "%USERPROFILE%").replace("/", "\\")
+    return venv_fix(s).replace("{HOME}", "%USERPROFILE%").replace("/", "\\")
 
 
 def posix_only(cmd):
@@ -132,6 +145,18 @@ def build_command(job):
                       f"on Windows, so this task is generated but cannot run until "
                       f"the interpreter is named portably")
 
+    # A virtualenv puts its interpreter in bin/ on POSIX and in Scripts\ on
+    # Windows. Turning the slashes round produces a path that looks fine and
+    # does not exist, and because the real program sits inside the cmd.exe
+    # wrapper the argv[0] check above never sees it. Reporting such a job clean
+    # is exactly the confidently-wrong number this renderer is meant not to
+    # produce, so it is named here.
+    n = len(VENV_BIN.findall(json.dumps(job)))
+    if n:
+        trans.append(f"{n} virtualenv path(s) move from bin/ to Scripts\\ and the "
+                     f"interpreter gains its .exe, which is where python -m venv "
+                     f"puts them on Windows")
+
     env = dict(job.get("EnvironmentVariables") or {})
     out, err = job.get("StandardOutPath"), job.get("StandardErrorPath")
 
@@ -156,6 +181,33 @@ def build_command(job):
     trans.append("environment and log redirection go through a cmd.exe wrapper; "
                  "Task Scheduler has neither natively")
     return "cmd.exe", '/c "' + "".join(parts) + inner + '"', losses, trans
+
+
+def win_priority(job):
+    """(priority, why). launchd says "run this low" three different ways.
+
+    Nice, ProcessType: Background and LowPriorityIO are three controls for one
+    intent, and Task Scheduler expresses that intent with <Priority>, where 0 is
+    highest and 10 is lowest and 7 is the default. Carrying the intent is a
+    translation. Insisting on three separate knobs Windows does not have would
+    report three losses for a job that in fact schedules correctly."""
+    said = []
+    prio = 7
+    nice = job.get("Nice")
+    if nice is not None:
+        prio = 10 if nice >= 10 else 8 if nice > 0 else 4 if nice < 0 else 7
+        said.append(f"Nice {nice}")
+    if job.get("ProcessType") == "Background":
+        prio = max(prio, 10)
+        said.append("ProcessType Background")
+    if job.get("LowPriorityIO"):
+        prio = max(prio, 10)
+        said.append("LowPriorityIO")
+    if not said:
+        return 7, []
+    return prio, [f"{' and '.join(said)} become Priority {prio} (0 is highest, "
+                  f"10 is lowest, 7 is the default). Windows has one scheduling "
+                  f"control where launchd has three"]
 
 
 def triggers(job, root_triggers):
@@ -185,9 +237,15 @@ def triggers(job, root_triggers):
             ET.SubElement(t, "StartBoundary").text = f"2026-01-01T{hour:02d}:{minute:02d}:00"
             ET.SubElement(t, "Enabled").text = "true"
             if "Weekday" in entry:
-                notes.append("StartCalendarInterval Weekday rendered as a daily "
-                             "trigger; weekday filtering is not carried")
-            ET.SubElement(ET.SubElement(t, "ScheduleByDay"), "DaysInterval").text = "1"
+                # launchd counts Sunday as 0 or 7. Task Scheduler names the day.
+                names = ["Sunday", "Monday", "Tuesday", "Wednesday",
+                         "Thursday", "Friday", "Saturday"]
+                w = ET.SubElement(t, "ScheduleByWeek")
+                ET.SubElement(w, "WeeksInterval").text = "1"
+                d = ET.SubElement(w, "DaysOfWeek")
+                ET.SubElement(d, names[int(entry["Weekday"]) % 7])
+            else:
+                ET.SubElement(ET.SubElement(t, "ScheduleByDay"), "DaysInterval").text = "1"
 
     if not len(root_triggers):
         notes.append("no trigger: the job has neither RunAtLoad, StartInterval "
@@ -203,7 +261,7 @@ def _enabled():
 
 def render(label, job):
     """(xml_string, losses, translations), each a list of plain sentences."""
-    losses = []
+    losses, translations_keepalive = [], []
     ET.register_namespace("", NS)
     task = ET.Element(f"{{{NS}}}Task", {"version": "1.2"})
 
@@ -217,19 +275,46 @@ def render(label, job):
     ET.SubElement(prin, "LogonType").text = "InteractiveToken"
     ET.SubElement(prin, "RunLevel").text = "LeastPrivilege"
 
+    # Task Scheduler validates <Settings> as an ordered sequence, so the order
+    # below is not cosmetic. It is the order Task Scheduler itself uses when it
+    # exports a task: the policy keys, then ExecutionTimeLimit, then Priority,
+    # then RestartOnFailure last. Nothing here has been imported on Windows yet,
+    # so this ordering is the part of the renderer the windows-rebuild drill
+    # exists to check.
     st = ET.SubElement(task, "Settings")
     ET.SubElement(st, "MultipleInstancesPolicy").text = "IgnoreNew"
     ET.SubElement(st, "StartWhenAvailable").text = "true"
     ET.SubElement(st, "ExecutionTimeLimit").text = "PT0S"
+    prio, why = win_priority(job)
+    if why:
+        ET.SubElement(st, "Priority").text = str(prio)
     if job.get("KeepAlive"):
-        ET.SubElement(st, "RestartOnFailure")
-        rof = st.find("RestartOnFailure")
+        rof = ET.SubElement(st, "RestartOnFailure")
         ET.SubElement(rof, "Interval").text = "PT1M"
         ET.SubElement(rof, "Count").text = "999"
-        losses.append("KeepAlive is a supervisor that restarts on ANY exit; "
-                      "RestartOnFailure only restarts on a non-zero exit")
+        # RestartOnFailure alone only fires on a non-zero exit, and KeepAlive
+        # restarts on ANY exit. The rest of the supervisor is the trigger:
+        # every task here sets MultipleInstancesPolicy=IgnoreNew, so a trigger
+        # that re-fires on a gap starts the job when it has stopped and is
+        # ignored while it is still running. That IS KeepAlive, with the gap as
+        # its latency, and the gap is where ThrottleInterval lands too.
+        gap = max(60, int(job.get("ThrottleInterval") or 0))
+        for t in task.find("Triggers"):
+            if t.find("Repetition") is None:
+                rep = ET.SubElement(t, "Repetition")
+                ET.SubElement(rep, "Interval").text = f"PT{gap}S"
+                ET.SubElement(rep, "StopAtDurationEnd").text = "false"
+        declared = job.get("ThrottleInterval")
+        translations_keepalive.append(
+            f"KeepAlive becomes IgnoreNew plus a trigger that re-fires every "
+            f"{gap}s, so a job that has stopped is restarted within {gap}s "
+            f"whatever its exit code" + (
+                f". ThrottleInterval is {declared}s and Task Scheduler's "
+                f"repetition floor is 60s, so the respawn gap is {gap}s"
+                if declared and declared < 60 else ""))
 
     cmd, args, cmd_losses, translations = build_command(job)
+    translations += translations_keepalive + why
     losses += cmd_losses
     if cmd is None:
         return None, losses, translations

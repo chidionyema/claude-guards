@@ -72,14 +72,15 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.estate.tracked-guard.
 changes nothing until the job is booted out and back in. A job can report exit 0
 for weeks while running code that has moved.
 
-**A Windows rendering is not a working Windows machine.** `render_windows.py`
-produces XML that Task Scheduler will accept, and every job still loses
-something on the way: nine lose a process priority, six use `KeepAlive` as a
-supervisor that restarts on any exit where Task Scheduler only restarts on
-failure, and one uses a file-watch trigger Windows has no equivalent for. Until
-one of those tasks has actually been imported and run on Windows, this is a file
-format exercise, which is what the `windows-rebuild` entry in `drills/run.py
---list` says.
+**A Windows rendering is not a working Windows machine.** 26 of the 29 jobs now
+cross intact and three still lose something: two `PATH` entries name macOS-only
+directories, two jobs want a configurable SIGTERM-to-SIGKILL gap, two want
+per-task resource limits, and one wants a file-watch trigger. None of those can
+be closed from this machine. More to the point, no rendered task has ever been
+imported on Windows and run. The XML parses and its element order matches what
+Task Scheduler itself exports, which is not the same as Windows accepting it.
+Until one of them has run there, this is a file format exercise, which is what
+the `windows-rebuild` entry in `drills/run.py --list` says.
 
 **Five installed jobs are not in the manifest and that is expected.** They are
 vendor jobs, or jobs another agent installed. `render.py --check` lists them
