@@ -25,7 +25,14 @@ STEPS=0
 say "1/4  the configuration repository"
 if [ -d "$TARGET/.claude/.git" ]; then
   echo "already cloned; fetching"
+  # Fetching alone left the working tree pinned at whatever commit the sandbox
+  # was first cloned at, so a re-used sandbox tested a frozen estate forever and
+  # the drill's verdict aged out silently. Fast-forward, never reset: this same
+  # script runs against a real home on a new machine, where a hard reset would
+  # destroy work. --ff-only refuses instead, and the refusal is printed.
   git -C "$TARGET/.claude" fetch --quiet origin && \
+  { git -C "$TARGET/.claude" merge --ff-only --quiet origin/main 2>/dev/null || \
+    echo "    NOT fast-forwarded: the clone has local commits or a dirty tree"; }
   git -C "$TARGET/.claude" submodule update --init --recursive --quiet
 else
   mkdir -p "$TARGET"
