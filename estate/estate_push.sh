@@ -49,7 +49,11 @@ log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*"; }
 die() {
   log "PUSH RED: $*"
   python3 -c "
-import sys,os; sys.path.insert(0,os.path.expanduser('~/.hermes/scripts'))
+import sys,os
+# This script's own directory first. ~/.hermes is retired and symlinks into ~/Documents,
+# which macOS TCC hides from a bootstrapped LaunchAgent. estate_cost_sentinel had this
+# same line and silently ran the dead tree's copy of estate_alert.
+sys.path.insert(0,os.path.expanduser('~/.claude/scripts/estate'))
 import estate_alert
 estate_alert.send_operator_alert('estate_push RED: $* — the estate board is not leaving this Mac.',
                                  debounce_key='estate-push-red', debounce_s=3600)" 2>/dev/null || true
