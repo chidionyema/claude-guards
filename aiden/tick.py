@@ -36,6 +36,10 @@ RECEIPTS = os.path.join(HOME, ".claude", "state", "aiden-ticks.jsonl")
 #: file and the live board disagree, and not otherwise.
 TICKET_COUNTS = os.path.join(HOME, ".claude", "state", "aiden-ticket-counts.json")
 
+#: When the close sweep last ran, and what it did. Its mtime is the schedule and its contents are
+#: the receipt, so one file answers both "is it due" and "what happened last time".
+SWEEP_STAMP = os.path.join(HOME, ".claude", "state", "aiden-close-sweep.json")
+
 #: How long an alert stays "already said". Long enough that a slow-moving
 #: problem is not repeated every five minutes, short enough that one still
 #: unfixed tomorrow is raised again.
@@ -250,6 +254,31 @@ def main():
     with open(SENT, "w") as f:
         json.dump(seen, f)
     t = _stage("sent-file", t)
+
+    #: Close what is finished, before the counts below are read, so a close shows up on his phone
+    #: in the same tick that earned it rather than five minutes later.
+    #:
+    #: Founder, 2026-08-23, shown 27 open and 0 closed in 24h: "thos os the ot that atters". The
+    #: board only ever opened work. Nothing on this machine closed a crew issue -- the eight
+    #: closes on 08-22 were typed by hand.
+    #:
+    #: Every 30 minutes, not every tick. The sweep runs the acceptance commands an issue names,
+    #: and an issue whose criteria fail would otherwise re-run them 288 times a day; some of
+    #: those commands are test suites. Six times an hour buys nothing a person would notice and
+    #: costs six times the work.
+    try:
+        last_sweep = os.path.getmtime(SWEEP_STAMP)
+    except OSError:
+        last_sweep = 0
+    if time.time() - last_sweep > 1800:
+        try:
+            swept = gate.close_sweep()
+            open(SWEEP_STAMP, "w").write(json.dumps(swept))
+            if swept.get("closed"):
+                print("closed by acceptance criteria: %s" % swept["closed"], file=sys.stderr)
+        except Exception as exc:                  # noqa: BLE001 - never crash a tick
+            print("close sweep: %s: %s" % (type(exc).__name__, exc), file=sys.stderr)
+        t = _stage("close-sweep", t)
 
     #: Ticket movement, on its own trigger. Founder, 2026-08-23: "i should be seeing ticketss
     #: noving not asking what are you doing". It cannot ride only on the alert message, because
