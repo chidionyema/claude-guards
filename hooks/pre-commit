@@ -19,7 +19,14 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import tracked  # noqa: E402
 from tracked import SECRET  # noqa: E402
+
+# The file that defines the patterns contains the patterns, so the gate refuses
+# its own source. Skip exactly that one file, resolved from the module rather
+# than typed as a name, so renaming it cannot silently open a hole. Anything
+# else that wants an exemption goes in .gitignore, where it is visible.
+SELF = os.path.realpath(tracked.__file__)
 
 
 def staged_paths():
@@ -37,6 +44,8 @@ def staged_blob(path):
 def main():
     bad = []
     for path in staged_paths():
+        if os.path.realpath(path) == SELF:
+            continue
         blob = staged_blob(path)
         if b"\0" in blob:
             continue  # binary, not a config file

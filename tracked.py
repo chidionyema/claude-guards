@@ -42,8 +42,12 @@ SECRET = re.compile(
     r"(sk-ant-|sk-proj-|sk-[A-Za-z0-9]{20,}|ghp_|gho_|ghu_|ghs_|github_pat_"
     r"|xox[baprs]-|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----"
     r"|AIza[0-9A-Za-z_-]{30,}|\b\d{8,10}:[A-Za-z0-9_-]{35}\b"
-    r"|AGE-SECRET-KEY-1|<RSAKeyValue>|oauth_token"
-    r'''|["']?(api[_-]?key|secret|password|token)["']?\s*[:=]\s*["'][^"'\s]{16,}''' r")",
+    r"|AGE-SECRET-KEY-1|<RSAKeyValue>"
+    r'''|["']?(api[_-]?key|secret|password|token)["']?\s*[:=]\s*["'][^"'\s]{16,}'''
+    # A bare token NAME is not a token. `oauth_token` on its own matched every
+    # sentence that mentions the variable, which made the gate refuse prose and
+    # taught people to reach for --no-verify. Require an assignment and a value.
+    r'''|\b(oauth[_-]?token|refresh[_-]?token|access[_-]?token)\b\s*[:=]\s*\S{16,}''' r")",
     re.IGNORECASE)
 
 
