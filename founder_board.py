@@ -439,12 +439,29 @@ def collect_founder_decisions() -> list[Row]:
 
 
 
-def _gh_runs(workflow: str, limit: int = 8) -> list[dict] | None:
-    """The last runs of one workflow, or None when the question could not be asked."""
+def _gh_runs_cmd(workflow: str, limit: int) -> list[str]:
+    """The gh command _gh_runs will run. Split out so the selftest can grade the argv
+    without a network call — the defect this guards against was pure argument order and
+    was invisible to every check that only looked at the row's rendered text."""
     cmd = ["gh", "run", "list", "--repo", GH_REPO, "--limit", str(limit),
            "--json", "databaseId,status,conclusion,createdAt"]
     if workflow:
-        cmd[4:4] = ["--workflow", workflow]
+        # APPEND, never insert at a fixed index. `cmd[4:4]` put --workflow between --repo
+        # and its value, so gh saw `--repo --workflow` and exited "unknown command
+        # deploy-web.yml". Every workflow-filtered row on this board therefore read UNKNOWN,
+        # and the row still displayed a CORRECT command, because line 468 builds the shown
+        # string separately from the one that runs. A row that prints a command it did not
+        # run is worse than a blank row: paste it and it works, so the board looks wrong
+        # about itself. Measured 2026-08-23: broken form -> "unknown command"; correct form
+        # -> JSON for deploy-web.yml. gh takes flags in any order, so appending cannot drift
+        # again when the list above changes.
+        cmd += ["--workflow", workflow]
+    return cmd
+
+
+def _gh_runs(workflow: str, limit: int = 8) -> list[dict] | None:
+    """The last runs of one workflow, or None when the question could not be asked."""
+    cmd = _gh_runs_cmd(workflow, limit)
     rc, out, _ = sh(cmd, 45)
     if rc != 0:
         return None
@@ -1499,6 +1516,19 @@ def selftest() -> int:
     # read UNKNOWN on 2026-08-21: launchd's PATH has no /usr/local/bin, so `gh` was missing
     # for the only caller that matters. Mutating tool_path() back to os.environ["PATH"] makes
     # this fail.
+    # A FLAG MUST NEVER SEPARATE --repo FROM ITS VALUE. `cmd[4:4] = ["--workflow", w]` did
+    # exactly that, so gh read the flag as the repo name and exited "unknown command". Every
+    # workflow-filtered row read UNKNOWN for it, while still PRINTING a correct command,
+    # because the shown string is built separately from the one that runs. Graded on the argv
+    # because that is where the defect lived: no check on the rendered row could see it.
+    _c = _gh_runs_cmd("deploy-web.yml", 3)
+    check("--repo is followed by the repo, not a flag",
+          _c[_c.index("--repo") + 1] == GH_REPO)
+    check("the workflow filter is passed and keeps its value",
+          "--workflow" in _c and _c[_c.index("--workflow") + 1] == "deploy-web.yml")
+    check("no flag is left without a value",
+          all(_c[i + 1][:2] != "--" for i, a in enumerate(_c[:-1]) if a.startswith("--")))
+
     saved_path = os.environ.get("PATH", "")
     try:
         os.environ["PATH"] = "/usr/bin:/bin:/usr/sbin:/sbin"      # exactly what launchd gives
