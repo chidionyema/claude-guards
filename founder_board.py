@@ -1136,6 +1136,68 @@ def collect_backup() -> list[Row]:
 
 
 
+def collect_machine() -> list[Row]:
+    """Is the laptop itself able to do work right now.
+
+    Every other row on this page assumes the machine underneath is fine. On
+    2026-08-21 it was not: the data volume reached 100%, and the first thing
+    anybody noticed was this board truncating its own state file on write. The
+    disk had been the cause for hours and no row said so, so the failure
+    arrived wearing somebody else's name.
+
+    Three readings, because they fail differently and one is not a proxy for
+    the others. A full disk stops a write. Exhausted swap stops a process. A
+    load average far above the core count means work is queued rather than
+    running, which is what a person actually feels as "it has hung".
+
+    All three are cheap: df, sysctl and getloadavg. No directory is walked, so
+    this row cannot become the thing that makes a busy machine busier.
+    """
+    rows = []
+
+    rc, out, _ = sh(["df", "-k", "/System/Volumes/Data"], 15)
+    if rc != 0 or len(out.strip().splitlines()) < 2:
+        rows.append(_unknown("Free disk", f"df exited {rc}",
+                             "df -h /System/Volumes/Data"))
+    else:
+        f = out.strip().splitlines()[-1].split()
+        used_gb, free_gb = int(f[2]) / 1048576, int(f[3]) / 1048576
+        pct = f[4]
+        st = BAD if free_gb < 10 else (WARN if free_gb < 25 else GOOD)
+        note = "a build, an image pull or a corpus capture will fail" if st == BAD else ""
+        rows.append(Row(st, "Free disk", f"{free_gb:,.1f} GB free",
+                        f"{used_gb:,.0f} GB used, {pct} full"
+                        + (".  " + note if note else ""),
+                        "df -h /System/Volumes/Data"))
+
+    rc, out, _ = sh(["sysctl", "-n", "vm.swapusage"], 15)
+    m = re.search(r"used\s*=\s*([\d.]+)M.*free\s*=\s*([\d.]+)M", out or "")
+    if rc != 0 or not m:
+        rows.append(_unknown("Swap left", f"sysctl exited {rc}",
+                             "sysctl vm.swapusage"))
+    else:
+        used_mb, free_mb = float(m.group(1)), float(m.group(2))
+        st = BAD if free_mb < 500 else (WARN if free_mb < 1024 else GOOD)
+        note = ("out of swap means the next process to ask for memory is killed, "
+                "not slowed") if st == BAD else ""
+        rows.append(Row(st, "Swap left", f"{free_mb:,.0f} MB free",
+                        f"{used_mb:,.0f} MB in use" + (".  " + note if note else ""),
+                        "sysctl vm.swapusage"))
+
+    try:
+        one = os.getloadavg()[0]
+        cores = os.cpu_count() or 1
+        st = BAD if one > 4 * cores else (WARN if one > 2 * cores else GOOD)
+        note = "work is queued, not running" if st != GOOD else ""
+        rows.append(Row(st, "Load average", f"{one:,.0f} on {cores} cores",
+                        note or "the machine keeps up",
+                        "uptime"))
+    except OSError as e:
+        rows.append(_unknown("Load average", str(e), "uptime"))
+
+    return rows
+
+
 def collect_founder_requests() -> list[Row]:
     """LAW 18: every request the founder made, and whether a command closed it.
 
@@ -1216,6 +1278,7 @@ def collect_founder_requests() -> list[Row]:
 
 
 COLLECTORS = [
+    ("Is the machine able to work?", collect_machine),
     ("Money", collect_spend),
     ("Can we get the data back?", collect_backup),
     ("Your requests, closed with proof", collect_founder_requests),
