@@ -496,6 +496,86 @@ def _run_row(label: str, runs: list[dict] | None, workflow: str) -> Row:
                f"run {r.get('databaseId')}, {_age(r.get('createdAt', ''))}", cmd)
 
 
+def _fly_platform_rows() -> list[Row]:
+    """Is the engine actually running on Fly, and is the account able to deploy at all?
+
+    WHY THIS ROW EXISTS. On 2026-08-23 the engine deploy went red twice and the board said
+    only "gh run list ... failure". The cause was not in the code: `flyctl` got
+    "status 403: Your account has overdue invoices", the app `prospector-engine` was
+    SUSPENDED, and it had zero machines. The engine had not run since 2026-08-21 23:57.
+    The shop stayed up the whole time -- mumchimp.com answered 200 -- so every instrument
+    that watched the site said green while the thing that makes the product was off.
+
+    A red deploy row cannot tell those apart. A build that fails on a syntax error and a
+    build that is refused because the bill is unpaid look identical from GitHub, and only
+    one of them is fixed by an agent. So this asks Fly two questions the pipeline cannot
+    answer: can we deploy at all, and is anything running now.
+    """
+    rows: list[Row] = []
+
+    # 1. Can we deploy at all. Nothing else on this board can see a billing hold.
+    rc, out, _ = sh(["fly", "auth", "token"], 40)
+    token = out.strip() if rc == 0 else ""
+    if not token:
+        rows.append(_unknown("Fly account can deploy", "no fly token on this machine",
+                             "fly auth token"))
+    else:
+        # In-process, NOT curl. A token passed as a command-line argument is readable by
+        # anyone who can run `ps` for as long as the call lasts, and LAW 10 says a secret
+        # never appears anywhere it can be read again. urllib keeps it in this process.
+        import urllib.error
+        import urllib.request
+        q = json.dumps({"query": "query { organizations { nodes { slug billingStatus "
+                                 "creditBalanceFormatted isCreditCardSaved } } }"}).encode()
+        req = urllib.request.Request("https://api.fly.io/graphql", data=q, method="POST")
+        req.add_header("Authorization", f"Bearer {token}")
+        req.add_header("Content-Type", "application/json")
+        node = None
+        try:
+            with urllib.request.urlopen(req, timeout=40) as resp:
+                nodes = ((json.loads(resp.read()).get("data") or {})
+                         .get("organizations") or {}).get("nodes")
+            node = (nodes or [None])[0]
+        except (urllib.error.URLError, OSError, ValueError, json.JSONDecodeError,
+                TypeError, AttributeError):
+            node = None
+        if node is None:
+            rows.append(_unknown("Fly account can deploy", "fly billing api gave no answer",
+                                 "fly auth token  # then POST api.fly.io/graphql"))
+        else:
+            status = str(node.get("billingStatus") or "?")
+            ok = status.upper() not in ("PAST_DUE", "DELINQUENT", "SUSPENDED")
+            detail = (f"credit {node.get('creditBalanceFormatted')}, "
+                      f"card on file: {node.get('isCreditCardSaved')}")
+            if not ok:
+                detail = ("Fly will not build or deploy anything until this is paid. "
+                          "The shop stays up; nothing new can ship. "
+                          "Pay at https://fly.io/dashboard/chidi-onyema/billing -- " + detail)
+            rows.append(Row(GOOD if ok else BAD, "Fly account can deploy", status, detail,
+                            "fly auth token  # then POST api.fly.io/graphql"))
+
+    # 2. Is the engine running. Zero machines is not slow, it is off.
+    cmd = ["fly", "machines", "list", "-a", "prospector-engine", "--json"]
+    rc, out, _ = sh(cmd, 90)
+    try:
+        machines = json.loads(out) if rc == 0 else None
+    except json.JSONDecodeError:
+        machines = None
+    if machines is None:
+        rows.append(_unknown("Engine machines running", "fly machines list gave no json",
+                             " ".join(cmd)))
+    else:
+        started = [m for m in machines if m.get("state") == "started"]
+        if not machines:
+            detail = ("the app has NO machines at all -- the engine that makes the product "
+                      "is not running anywhere")
+        else:
+            detail = "; ".join(f"{m.get('id')} {m.get('state')}" for m in machines[:4])
+        rows.append(Row(GOOD if started else BAD, "Engine machines running",
+                        f"{len(started)} of {len(machines)}", detail, " ".join(cmd)))
+    return rows
+
+
 def collect_shipped_to_live() -> list[Row]:
     """MERGED IS NOT OPERATIONAL, and nothing in this estate watched the difference.
 
@@ -505,7 +585,10 @@ def collect_shipped_to_live() -> list[Row]:
     session could truthfully say "merged" while the deploy failed, or the deploy could go green
     while the site served the wrong thing. These rows are that chain, one row per link.
     """
-    rows = [_run_row("Store deploy, last run", _gh_runs("deploy-web.yml"),
+    # Fly first. A red deploy row is a symptom; a billing hold is the cause, and only one
+    # of the two is something an agent can fix.
+    rows = _fly_platform_rows()
+    rows += [_run_row("Store deploy, last run", _gh_runs("deploy-web.yml"),
                      "deploy-web.yml"),
             _run_row("Engine deploy, last run", _gh_runs("deploy-engine.yml"),
                      "deploy-engine.yml")]
@@ -1518,6 +1601,20 @@ def selftest() -> int:
           "--workflow" in _c and _c[_c.index("--workflow") + 1] == "deploy-web.yml")
     check("no flag is left without a value",
           all(_c[i + 1][:2] != "--" for i, a in enumerate(_c[:-1]) if a.startswith("--")))
+
+    # THE FLY BILLING ROW MUST NEVER CARRY THE TOKEN IT USED. The row's `command` and `detail`
+    # are rendered onto a page and into the board's json, both of which are read again later,
+    # and LAW 10 says a secret never appears anywhere it can be read again. The call is made
+    # in-process with urllib for the same reason: a token in an argv is readable by anyone who
+    # can run `ps`. This grades the rendered row, because the page is where a leak would land.
+    _fly_rows = _fly_platform_rows()
+    _rc, _tok, _ = sh(["fly", "auth", "token"], 40)
+    _tok = _tok.strip()
+    check("the fly billing row never puts the token in a field that gets rendered",
+          not _tok or not any(_tok in (r.command or "") or _tok in (r.detail or "")
+                              or _tok in str(r.value) for r in _fly_rows))
+    check("the fly rows say whether the engine is running",
+          any(r.label == "Engine machines running" for r in _fly_rows))
 
     saved_path = os.environ.get("PATH", "")
     try:
