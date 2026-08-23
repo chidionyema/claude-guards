@@ -67,5 +67,16 @@
     "repo": "prospector-bin",
     "tree": true,
     "why": "the failover scripts the prospector engine runs from outside any checkout"
+  },
+  {
+    "live": "~/dev/migration",
+    "repo": "migration",
+    "tree": true,
+    "exclude": [
+      "deleted-plists*",
+      "*.pyc",
+      "__pycache__*"
+    ],
+    "why": "the move-to-dev plan, the job verdicts and the rebuild analysis; in no repository until now"
   }
 ]
