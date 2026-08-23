@@ -52,6 +52,14 @@ OURS = ("com.prospector", "com.estate", "com.founder", "com.chidionyema", "ai.")
 RETIRED = {
     "ai.hermes.gateway": "REQ-116: the old estate held the Telegram poll and made "
                          "The Architect deaf for 31.5 hours. One token, one poller.",
+    "com.chidionyema.graphify-sweep": "2026-08-24: it swept ~/Documents/code every "
+        "30 minutes, took 2m41s to 6m52s of CPU per run on a 12-core machine that "
+        "was already at load 128, and exited 1 on every completed run in gate.log. "
+        "Nothing consumed its output: graphify_session_hook.py is registered in no "
+        "hooks block, so settings.json holds a Read permission for graphify-out/** "
+        "and nothing that writes it. A job with no reader is not an instrument "
+        "(LAW 28). The plist stays on disk with its paths corrected; to bring it "
+        "back, register the session hook first, then bootstrap it.",
 }
 
 #: A gated job is graded stale after this many of its own intervals.
