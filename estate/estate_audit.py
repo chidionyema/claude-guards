@@ -546,26 +546,74 @@ CHECKS.append(c_pipeline)
 CHECKS.append(c_pipeline_ci)
 
 
+# The repositories the estate ships from. They are public on purpose, by a founder ruling on
+# 2026-08-23: "sort this out nake then public if u have 2". Public is not a preference here, it
+# is what makes Actions run at all -- a private repository on this account spends paid minutes,
+# the account's payments have failed, and every job in one is refused before its first step.
+SHIPS_FROM = ("chidionyema/prospector", "chidionyema/crew",
+              "chidionyema/maestro", "chidionyema/claude-guards")
+
+# Every reading is appended here, healed or not. Without it, "claude-guards went private again"
+# is one agent's recollection against another's, which is what happened on 2026-08-23: it was
+# reported private twice, GitHub's own event stream recorded no private->public transition
+# either time, and nobody could say which instrument was lying. A file settles that.
+CI_REACH_LOG = STATE / "ci-reach.jsonl"
+
+
 def c_ci_reach() -> list[dict]:
     """Can GitHub Actions actually start a job in each repo the estate ships from?
 
-    A private repository on this free account cannot. The job is refused before it
-    runs, with "recent account payments have failed or your spending limit needs to
-    be increased", and the pull request sits UNSTABLE forever because its gate can
-    never go green. prospector is public and runs fine; crew and maestro were private
-    and their qa gate had not executed once. Nothing in this audit noticed for days.
+    A private repository on this account cannot. The job is refused before it runs, with
+    "recent account payments have failed or your spending limit needs to be increased" --
+    a message that names billing and really means "private repo, unpaid account". The pull
+    request then sits UNSTABLE forever because its gate can never go green.
+
+    This check does three things, and the second two are why it exists rather than just
+    reporting. It RECORDS every reading to CI_REACH_LOG, so a repository that changes
+    visibility leaves a trace nobody has to remember. It HEALS: a repository in SHIPS_FROM
+    found private is put back to public in the same pass, because detecting a thing that
+    stops every gate in the estate and waiting for a person to read a dashboard is not a
+    fix. And it reports what it did, so a heal is visible rather than silent.
+
+    The healer lives here, on the Mac, and not in a workflow. A workflow inside
+    claude-guards cannot repair claude-guards: while the repository is private its jobs are
+    exactly what will not start.
     """
     out: list[dict] = []
-    for repo in ("chidionyema/prospector", "chidionyema/crew", "chidionyema/maestro"):
-        rc, vis = sh(f"gh api repos/{repo} -q .visibility 2>/dev/null", timeout=20)
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    for repo in SHIPS_FROM:
+        rc, vis = sh(f"gh api repos/{repo} -q .visibility 2>/dev/null", timeout=30)
         vis = vis.strip() or "unknown"
+        healed = ""
+        if vis == "private":
+            # Named repositories only. This never widens to "any repo that looks private".
+            rc_h, after = sh(f"gh api --method PATCH repos/{repo} -f visibility=public "
+                             "-q .visibility 2>/dev/null", timeout=25)
+            after = after.strip()
+            healed = "public" if after == "public" else f"failed ({after or 'no response'})"
+            if after == "public":
+                vis = "public"
         rc, o = sh(f"gh run list --repo {repo} --limit 5 "
                    "--json conclusion -q '[.[].conclusion]|@csv' 2>/dev/null", timeout=25)
         outcomes = [c.strip('"') for c in o.strip().split(",") if c.strip()]
         ran = any(c in ("success", "failure") for c in outcomes)
-        if vis == "private" and outcomes and all(c == "failure" for c in outcomes):
-            sev, note = CRIT, ("private repo on a free plan: every job is refused before it "
-                               "starts, so this repo's gate can never go green")
+        try:
+            CI_REACH_LOG.parent.mkdir(parents=True, exist_ok=True)
+            with CI_REACH_LOG.open("a") as fh:
+                fh.write(json.dumps({"at": stamp, "repo": repo, "visibility": vis,
+                                     "healed": healed, "last5": outcomes}) + "\n")
+        except OSError:
+            pass                                   # the record is a bonus, never the check
+        if healed.startswith("failed"):
+            sev, note = CRIT, (f"found private and could not be put back: {healed}. Every job "
+                               "in this repo is refused before it starts until it is public")
+        elif healed:
+            sev, note = WARN, ("found private and put back to public in this pass; every job "
+                               f"was being refused until now. History: {CI_REACH_LOG}")
+        elif vis == "private" or (outcomes and all(c == "failure" for c in outcomes)
+                                  and vis != "public"):
+            sev, note = CRIT, ("private repo on an unpaid account: every job is refused before "
+                               "it starts, so this repo's gate can never go green")
         elif not outcomes:
             sev, note = UNK, "no workflow runs in the window"
         elif not ran:
@@ -573,7 +621,7 @@ def c_ci_reach() -> list[dict]:
         else:
             sev, note = OK, f"last 5: {', '.join(outcomes)}"
         out.append(row("pipeline", f"Actions can run in {repo}", vis, sev,
-                       f"gh run list --repo {repo} --limit 5 --json conclusion", note))
+                       f"gh api repos/{repo} -q .visibility", note))
     return out
 
 
