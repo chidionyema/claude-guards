@@ -51,3 +51,16 @@ jobs:
             exit 1
           fi
           echo "clean"
+
+      # LAW 24, the half of it that travels with the repository. `in-git.py` runs six classes on a
+      # developer's Mac -- launchd jobs, live checkouts, the live env file, the bundle receipts --
+      # and five of those read this machine, so on a runner they would report every class as a hole
+      # and the step would be ignored within a week. `--ci` runs only the two classes that are
+      # answerable from the tree itself: a `tracked.json` mirror entry naming a copy nobody
+      # committed, and a committed example file carrying a value rather than only a key name.
+      #
+      # It reads the tree it is sitting in, not `~/.claude/scripts`. Negative-tested in a clone
+      # before this step was added: clean clone kept=11 holes=0 exit 0; with `launchagents/`
+      # removed, kept=10 holes=1 exit 1; with a value in the example file, kept=10 holes=1 exit 1.
+      - name: nothing load-bearing is missing from the repository
+        run: python3 estate/in-git.py --ci
