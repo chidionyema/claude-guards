@@ -252,29 +252,32 @@ rm -f /tmp/.ea_lc.$$
     return out
 
 
+#: The four endpoints this audit used to curl every hour. Three of them sit on Fly
+#: machines with auto_start=True, which means the probe itself started the machine
+#: it was measuring: 24 wakeups a day, each indistinguishable from a real visitor.
+#: Founder, 2026-08-23: "turn off all fly machines", "we need to come off fly
+#: totally", "just stop the machines, no wake up". A health check that boots the
+#: thing it checks is not an instrument, it is a load generator.
+STOPPED_ENDPOINTS = ["prospector-store-web.fly.dev/api/health",
+                     "prospector-store-api.fly.dev/catalog",
+                     "tie-web.fly.dev/",
+                     "tie-api.fly.dev/health/ready"]
+
+
 def c_endpoints() -> list[dict]:
-    # Probe the path each app's own Fly health check uses, not bare "/".
-    # An API that serves /catalog and nothing at the root is not down; probing
-    # "/" reported prospector-store-api as a critical for days while Fly's own
-    # check on /catalog passed the whole time.
-    urls = ["https://prospector-store-web.fly.dev/api/health",
-            "https://prospector-store-api.fly.dev/catalog",
-            "https://tie-web.fly.dev/",
-            "https://tie-api.fly.dev/health/ready"]
+    """Report the endpoints as deliberately unprobed, never as healthy.
 
-    def one(u: str) -> dict:
-        rc, o = sh(f"curl -s -o /dev/null -w '%{{http_code}} %{{time_total}}' --max-time 10 {u}", timeout=14)
-        parts = o.split()
-        code = parts[0] if parts else "000"
-        t = parts[1] if len(parts) > 1 else "?"
-        sev = OK if code.startswith("2") else (UNK if code == "000" else CRIT)
-        note = "serving" if sev == OK else ("no response inside 10s -- hard down" if code == "000"
-                                            else f"answers but returns {code}")
-        return row("platform", u.replace("https://", ""), f"{code} in {t}s", sev,
-                   "curl -s -o /dev/null -w '%{http_code} %{time_total}' --max-time 10", note)
-
-    with futures.ThreadPoolExecutor(max_workers=4) as ex:
-        return list(ex.map(one, urls))
+    Deleting the check outright would leave a board with nothing where the
+    platform row used to be, and a missing row reads as "fine" to the next person
+    who scans it. NOT PROBED and PASS have to look different (LAW 28), so each
+    endpoint keeps its line and states why nobody is measuring it.
+    """
+    return [row("platform", u, "NOT PROBED", UNK, "(no command -- deliberately not run)",
+                "on a stopped Fly machine with auto_start; curling it would restart the "
+                "machine and bill for it. Fly is being exited, so this endpoint is not "
+                "expected to serve. Restore this probe only when the service has a home "
+                "that a health check does not switch on.")
+            for u in STOPPED_ENDPOINTS]
 
 
 def c_fly() -> list[dict]:
