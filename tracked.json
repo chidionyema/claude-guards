@@ -1,10 +1,71 @@
 [
-  {"live": "~/Library/LaunchAgents", "repo": "launchagents", "glob": "*.plist",
-   "why": "every scheduled job on this Mac"},
-  {"live": "~/AGENTS.md", "repo": "laws/AGENTS.md",
-   "why": "the laws themselves, read by every agent tool through a symlink"},
-  {"live": "~/.claude/LAWS-INCIDENTS.md", "repo": "laws/LAWS-INCIDENTS.md",
-   "why": "what each law cost, and why it says what it says"},
-  {"live": "~/.claude/settings.json", "repo": "settings/settings.json",
-   "why": "hooks, model routing and permissions for every session"}
+  {
+    "live": "~/Library/LaunchAgents",
+    "repo": "launchagents",
+    "glob": "*.plist",
+    "why": "every scheduled job on this Mac"
+  },
+  {
+    "live": "~/AGENTS.md",
+    "repo": "laws/AGENTS.md",
+    "why": "the laws themselves, read by every agent tool through a symlink"
+  },
+  {
+    "live": "~/.claude/LAWS-INCIDENTS.md",
+    "repo": "laws/LAWS-INCIDENTS.md",
+    "why": "what each law cost, and why it says what it says"
+  },
+  {
+    "live": "~/.claude/settings.json",
+    "repo": "settings/settings.json",
+    "why": "hooks, model routing and permissions for every session"
+  },
+  {
+    "live": "~/.zshrc",
+    "repo": "shell/zshrc",
+    "why": "the PATH, aliases and environment every interactive session starts from"
+  },
+  {
+    "live": "~/.gitconfig",
+    "repo": "shell/gitconfig",
+    "why": "identity, signing and merge behaviour for every commit made on this machine"
+  },
+  {
+    "live": "~/.npmrc",
+    "repo": "shell/npmrc",
+    "why": "which registry node packages come from"
+  },
+  {
+    "live": "~/.config",
+    "repo": "config",
+    "tree": true,
+    "exclude": [
+      "Wondershare*",
+      "Microsoft*",
+      "NuGet*",
+      "configstore*",
+      "*.bak-*",
+      "*secrets.sh",
+      "estate/estate.env",
+      "*.log",
+      "*.sqlite*",
+      "*.apk",
+      ".mono*",
+      "*/age-key.txt",
+      "gh/hosts.yml",
+      "wave/state.json",
+      "pi/config.json",
+      "xbuild*",
+      "uv/uv-receipt.json",
+      "browser-harness/version-cache.json",
+      "*.example"
+    ],
+    "why": "per-tool configuration: gh, git, rclone, uv, fish, and this estate's own tools"
+  },
+  {
+    "live": "~/.prospector/bin",
+    "repo": "prospector-bin",
+    "tree": true,
+    "why": "the failover scripts the prospector engine runs from outside any checkout"
+  }
 ]

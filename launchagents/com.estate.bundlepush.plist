@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Gets every commit that exists only on this Mac off this Mac, as git bundles in R2.
+
+       Hourly, not daily. The exposure this closes is measured in commits, and an agent
+       writes commits all day; a daily job leaves a whole working day on one disk.
+
+       No double hyphen anywhere in this comment. XML forbids it inside a comment,
+       plutil tolerates it and launchd loads the job fine, so the file reads as healthy
+       while every Python tool that opens it throws ExpatError and skips the job.
+       ai.estate.kimi-bridge.plist was invisible to the whole fleet that way. -->
+  <key>Label</key><string>com.estate.bundlepush</string>
+  <key>ProgramArguments</key>
+  <array>
+    <!-- NOT /bin/bash. Measured 2026-08-23, same launchd domain, same script, only the
+         executable differs: /bin/bash gets "Operation not permitted" on ~/Documents and
+         sees 0 repos; this ad hoc signed copy of the same shell reads it and sees 45.
+         TCC decides per executable identity, and /bin/bash is denied on this machine.
+         estate-runner is a copy of /bin/bash, signed by scripts/estate/make-runner.sh. -->
+    <string>/Users/chidionyema/.claude/bin/estate-runner</string>
+    <string>/Users/chidionyema/.claude/scripts/estate/estate_bundle_push.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/chidionyema/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartInterval</key><integer>3600</integer>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>/Users/chidionyema/.claude/state/logs/estate-bundlepush.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/chidionyema/.claude/state/logs/estate-bundlepush.err.log</string>
+  <key>ProcessType</key><string>Background</string>
+  <key>LowPriorityIO</key><true/>
+</dict>
+</plist>

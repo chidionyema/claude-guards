@@ -13,8 +13,14 @@ fails when the copy and the live file drift apart.
 
 A stale copy is worse than none, because it reads as a record. That is what
 --check is for.
+
+LAW 21 outranks this and is enforced here rather than trusted. Every file is
+scanned before it is copied in, and one that looks like it holds a credential is
+refused, named, and left out. Directories that exist only to hold keys are not
+listed at all -- they are in rebuild/PREREQUISITES.md, which records that they
+must exist and what for, and never what is in them.
 """
-import argparse, filecmp, json, os, shutil, sys
+import argparse, filecmp, fnmatch, json, os, re, shutil, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MANIFEST = os.path.join(HERE, "tracked.json")
@@ -27,6 +33,30 @@ def entries():
         yield e
 
 
+# Enough to catch a key pasted into a config file. It does not have to be
+# clever, only refuse rather than pass when it is unsure.
+SECRET = re.compile(
+    r"(sk-ant-|sk-proj-|sk-[A-Za-z0-9]{20,}|ghp_|gho_|ghu_|ghs_|github_pat_"
+    r"|xox[baprs]-|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----"
+    r"|AIza[0-9A-Za-z_-]{30,}|\b\d{8,10}:[A-Za-z0-9_-]{35}\b"
+    r"|AGE-SECRET-KEY-1|<RSAKeyValue>|oauth_token"
+    r'''|["']?(api[_-]?key|secret|password|token)["']?\s*[:=]\s*["'][^"'\s]{16,}''' r")",
+    re.IGNORECASE)
+
+
+def looks_secret(path):
+    """The reason the file is refused, or None."""
+    try:
+        with open(path, "rb") as fh:
+            blob = fh.read(262144)
+    except OSError as e:
+        return f"unreadable: {e}"
+    if b"\0" in blob:
+        return None  # binary. Not a config file, so not tracked either way.
+    m = SECRET.search(blob.decode("utf-8", "replace"))
+    return f"looks like a credential ({m.group(0)[:6]}...)" if m else None
+
+
 def names(d, pattern):
     if not os.path.isdir(d):
         return set()
@@ -34,8 +64,30 @@ def names(d, pattern):
     return {f for f in os.listdir(d) if fnmatch.fnmatch(f, pattern)}
 
 
+def walk(root, exclude):
+    out = set()
+    for dirpath, dirnames, filenames in os.walk(root):
+        rel_dir = os.path.relpath(dirpath, root)
+        dirnames[:] = [d for d in dirnames if d != ".git" and not any(
+            fnmatch.fnmatch(os.path.normpath(os.path.join(rel_dir, d)), x) for x in exclude)]
+        for f in filenames:
+            rel = os.path.normpath(os.path.join(rel_dir, f))
+            if any(fnmatch.fnmatch(rel, x) for x in exclude):
+                continue
+            out.add(rel)
+    return out
+
+
 def diff_one(e):
     """Returns (missing_in_repo, gone_from_live, changed) as lists of labels."""
+    if e.get("tree"):
+        ex = e.get("exclude", [])
+        live = walk(e["live"], ex) if os.path.isdir(e["live"]) else set()
+        repo = walk(e["repo_abs"], ex) if os.path.isdir(e["repo_abs"]) else set()
+        changed = [f for f in sorted(live & repo)
+                   if not filecmp.cmp(os.path.join(e["live"], f),
+                                      os.path.join(e["repo_abs"], f), shallow=False)]
+        return sorted(live - repo), sorted(repo - live), changed
     if "glob" in e:
         live, repo = names(e["live"], e["glob"]), names(e["repo_abs"], e["glob"])
         changed = [f for f in sorted(live & repo)
@@ -54,18 +106,37 @@ def diff_one(e):
     return [], [], []
 
 
+REFUSED = []
+
+
+def _copy(src, dst):
+    """Copy unless the file looks like it holds a secret. LAW 21 outranks LAW 24."""
+    why = looks_secret(src)
+    if why:
+        REFUSED.append((src, why))
+        return False
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    shutil.copy2(src, dst)
+    return True
+
+
 def pull_one(e):
     a, b, c = diff_one(e)
+    if e.get("tree"):
+        for f in a + c:
+            _copy(os.path.join(e["live"], f), os.path.join(e["repo_abs"], f))
+        for f in b:
+            os.remove(os.path.join(e["repo_abs"], f))
+        return len(a), len(b), len(c)
     if "glob" in e:
         os.makedirs(e["repo_abs"], exist_ok=True)
         for f in a + c:
-            shutil.copy2(os.path.join(e["live"], f), os.path.join(e["repo_abs"], f))
+            _copy(os.path.join(e["live"], f), os.path.join(e["repo_abs"], f))
         for f in b:
             os.remove(os.path.join(e["repo_abs"], f))
     else:
-        os.makedirs(os.path.dirname(e["repo_abs"]), exist_ok=True)
         if a or c:
-            shutil.copy2(e["live"], e["repo_abs"])
+            _copy(e["live"], e["repo_abs"])
         elif b:
             os.remove(e["repo_abs"])
     return len(a), len(b), len(c)
@@ -96,6 +167,11 @@ def main():
             print(f"{e['repo']}: in step")
 
     if a.pull:
+        if REFUSED:
+            print(f"\nREFUSED {len(REFUSED)} file(s). LAW 21: a secret is never committed.")
+            for path, why in REFUSED:
+                print(f"    {path}\n        {why}")
+            print("    Record what these must contain in rebuild/PREREQUISITES.md, by name.")
         print("commit the result to record it")
         return 0
     if drift:

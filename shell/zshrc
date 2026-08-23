@@ -1,0 +1,74 @@
+
+
+
+export JAVA_HOME=$(/usr/libexec/java_home)
+export PATH=$JAVA_HOME/bin:$PATH
+# >>> conda initialize >>>
+# !! Contents within this block are managed by 'conda init' !!
+__conda_setup="$('/Users/chidionyema/anaconda3/bin/conda' 'shell.zsh' 'hook' 2> /dev/null)"
+if [ $? -eq 0 ]; then
+    eval "$__conda_setup"
+else
+    if [ -f "/Users/chidionyema/anaconda3/etc/profile.d/conda.sh" ]; then
+        . "/Users/chidionyema/anaconda3/etc/profile.d/conda.sh"
+    else
+        export PATH="/Users/chidionyema/anaconda3/bin:$PATH"
+    fi
+fi
+unset __conda_setup
+# <<< conda initialize <<<
+
+
+# Add RVM to PATH for scripting. Make sure this is the last PATH variable change.
+export PATH="$PATH:$HOME/.rvm/bin"
+alias bfg="java -jar /usr/local/bin/bfg.jar"
+export NVM_DIR="$HOME/.nvm"
+[ -s "/opt/homebrew/opt/nvm/nvm.sh" ] && \. "/opt/homebrew/opt/nvm/nvm.sh"
+export PATH="/usr/local/opt/node@20/bin:$PATH"
+
+
+export NVM_DIR="$HOME/.nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # Load nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # Load bash_completion
+
+
+export PATH=/usr/local/bin:$PATH
+alias claude-code="npx @anthropic-ai/claude-code"
+ulimit -n 65536
+ulimit -n 2147483646
+
+. "$HOME/.local/bin/env"
+
+# wave-router API keys
+[ -f ~/.config/wave/secrets.sh ] && . ~/.config/wave/secrets.sh
+
+# the-introduction-exchange test secrets (Stripe test-mode key, etc.)
+[ -f ~/.config/tie/secrets.sh ] && . ~/.config/tie/secrets.sh
+
+
+# Added by Antigravity CLI installer
+export PATH="/Users/chidionyema/.local/bin:$PATH"
+
+# LLM provider API keys (consolidated 2026-06-15) — single source of truth for
+# prospector, graphify, gemini CLI, mmx, aider, etc. Edit ~/.config/llm/secrets.sh.
+[ -f ~/.config/llm/secrets.sh ] && . ~/.config/llm/secrets.sh
+
+# agy — skip Bash permission prompts
+alias agy='agy --dangerously-skip-permissions'
+
+# kimi-code
+export PATH="/Users/chidionyema/.kimi-code/bin:$PATH"
+
+# xAI / Grok API key
+
+# Groq API key (used by pi-agent groq provider)
+export GROQ_API_KEY=$(cat ~/.pi/agent/.groq_key)
+
+# Standard Compute API key (used by pi-agent standard-compute provider)
+export STANDARD_COMPUTE_API_KEY=$(cat ~/.pi/agent/.stdcompute_key)
+
+
+# Let a pasted block keep its comments. Without this, zsh reads a leading # as a
+# glob and answers "zsh: bad pattern: #", so every commented command block pasted
+# into this shell errors on its first line. bash has this on by default.
+setopt interactivecomments

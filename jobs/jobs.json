@@ -1,0 +1,544 @@
+{
+  "ai.architect.gateway": {
+    "EnvironmentVariables": {
+      "HERMES_HOME": "{HOME}/dev/code/hermes-v2",
+      "PATH": "{HOME}/dev/code/hermes-v2/hermes-agent/venv/bin:/usr/local/bin:{HOME}/.kimi-code/bin:{HOME}/.local/bin:/usr/local/opt/node@20/bin:{HOME}/anaconda3/bin:{HOME}/anaconda3/condabin:/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/usr/local/share/dotnet:~/.dotnet/tools:/Library/Frameworks/Mono.framework/Versions/Current/Commands:{HOME}/.cargo/bin:{HOME}/.rvm/bin:{HOME}/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/1.2.3/bin",
+      "VIRTUAL_ENV": "{HOME}/dev/code/hermes-v2/.venv"
+    },
+    "ExitTimeOut": 25,
+    "KeepAlive": true,
+    "LimitLoadToSessionType": [
+      "Aqua",
+      "Background"
+    ],
+    "ProgramArguments": [
+      "{HOME}/dev/code/hermes-v2/.venv/bin/python",
+      "-m",
+      "hermes_cli.stderr_timestamp",
+      "--error-log",
+      "{HOME}/dev/code/hermes-v2/logs/gateway.error.log",
+      "--",
+      "{HOME}/dev/code/hermes-v2/.venv/bin/python",
+      "-m",
+      "hermes_cli.main",
+      "gateway",
+      "run",
+      "--replace",
+      "--external-supervisor"
+    ],
+    "RunAtLoad": true,
+    "SoftResourceLimits": {
+      "NumberOfFiles": 4096
+    },
+    "StandardErrorPath": "{HOME}/dev/code/hermes-v2/logs/gateway.error.log",
+    "StandardOutPath": "{HOME}/dev/code/hermes-v2/logs/gateway.log",
+    "ThrottleInterval": 30,
+    "WorkingDirectory": "{HOME}/dev/code/hermes-v2",
+    "label": "ai.architect.gateway"
+  },
+  "ai.estate.consultd": {
+    "EnvironmentVariables": {
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "KeepAlive": true,
+    "ProgramArguments": [
+      "/usr/bin/python3",
+      "{HOME}/.claude/scripts/consultd.py",
+      "serve"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.claude/logs/consultd.log",
+    "StandardOutPath": "{HOME}/.claude/logs/consultd.log",
+    "ThrottleInterval": 10,
+    "WorkingDirectory": "{HOME}/.claude",
+    "label": "ai.estate.consultd"
+  },
+  "ai.estate.deepseek-bridge": {
+    "EnvironmentVariables": {
+      "BRIDGE_CAPTURE_URL": "chat/completion",
+      "BRIDGE_FRESH_CHAT": "false",
+      "BRIDGE_HEADLESS": "true",
+      "BRIDGE_HOME": "{HOME}/.deepseek-bridge",
+      "BRIDGE_INIT_JS": "try{localStorage.setItem('searchEnabled', JSON.stringify({value:false,__version:\"0\"}));}catch(e){}",
+      "BRIDGE_PORT": "8767",
+      "BRIDGE_READY_MARKERS": "new chat,deepthink",
+      "BRIDGE_SEARCH_OFF": "true",
+      "BRIDGE_SIGNIN_MARKERS": "",
+      "BRIDGE_URL": "https://chat.deepseek.com/",
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "KeepAlive": true,
+    "ProgramArguments": [
+      "{HOME}/.kimi-bridge/venv/bin/python",
+      "{HOME}/.claude/scripts/kimi_bridge.py",
+      "--daemon"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.deepseek-bridge/logs/daemon.log",
+    "StandardOutPath": "{HOME}/.deepseek-bridge/logs/daemon.log",
+    "ThrottleInterval": 10,
+    "WorkingDirectory": "{HOME}/.deepseek-bridge",
+    "label": "ai.estate.deepseek-bridge"
+  },
+  "ai.estate.kimi-bridge": {
+    "EnvironmentVariables": {
+      "KIMI_BRIDGE_HEADLESS": "true",
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "KeepAlive": true,
+    "ProgramArguments": [
+      "{HOME}/.kimi-bridge/venv/bin/python",
+      "{HOME}/.claude/scripts/kimi_bridge.py",
+      "--daemon"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.kimi-bridge/logs/daemon.log",
+    "StandardOutPath": "{HOME}/.kimi-bridge/logs/daemon.log",
+    "ThrottleInterval": 10,
+    "WorkingDirectory": "{HOME}/.kimi-bridge",
+    "label": "ai.estate.kimi-bridge"
+  },
+  "ai.hermes.gateway": {
+    "EnvironmentVariables": {
+      "HERMES_HOME": "{HOME}/dev/code/hermes-v2",
+      "PATH": "{HOME}/dev/code/hermes-v2/hermes-agent/venv/bin:/usr/local/bin:{HOME}/.kimi-code/bin:{HOME}/.local/bin:/usr/local/opt/node@20/bin:{HOME}/anaconda3/bin:{HOME}/anaconda3/condabin:/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/usr/local/share/dotnet:~/.dotnet/tools:/Library/Frameworks/Mono.framework/Versions/Current/Commands:{HOME}/.cargo/bin:{HOME}/.rvm/bin:{HOME}/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/1.2.3/bin",
+      "VIRTUAL_ENV": "{HOME}/dev/code/hermes-v2/.venv"
+    },
+    "ExitTimeOut": 25,
+    "KeepAlive": true,
+    "LimitLoadToSessionType": [
+      "Aqua",
+      "Background"
+    ],
+    "ProgramArguments": [
+      "{HOME}/dev/code/hermes-v2/.venv/bin/python",
+      "-m",
+      "hermes_cli.stderr_timestamp",
+      "--error-log",
+      "{HOME}/dev/code/hermes-v2/logs/gateway.error.log",
+      "--",
+      "{HOME}/dev/code/hermes-v2/.venv/bin/python",
+      "-m",
+      "hermes_cli.main",
+      "gateway",
+      "run",
+      "--replace",
+      "--external-supervisor"
+    ],
+    "RunAtLoad": true,
+    "SoftResourceLimits": {
+      "NumberOfFiles": 4096
+    },
+    "StandardErrorPath": "{HOME}/dev/code/hermes-v2/logs/gateway.error.log",
+    "StandardOutPath": "{HOME}/dev/code/hermes-v2/logs/gateway.log",
+    "ThrottleInterval": 30,
+    "WorkingDirectory": "{HOME}/dev/code/hermes-v2",
+    "label": "ai.hermes.gateway"
+  },
+  "ai.hermes.runaway-reaper": {
+    "EnvironmentVariables": {
+      "HERMES_HOME": "{HOME}/.hermes",
+      "HOME": "{HOME}",
+      "PATH": "/usr/local/bin:/usr/bin:/bin:{HOME}/.local/bin"
+    },
+    "ProgramArguments": [
+      "/usr/local/bin/python3",
+      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "--label",
+      "ai.hermes.runaway-reaper",
+      "--",
+      "/bin/bash",
+      "{HOME}/.hermes/scripts/runaway-reaper.sh"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.hermes/logs/runaway-reaper.err.log",
+    "StandardOutPath": "{HOME}/.hermes/logs/runaway-reaper.out.log",
+    "StartInterval": 300,
+    "WorkingDirectory": "{HOME}/.hermes",
+    "label": "ai.hermes.runaway-reaper"
+  },
+  "com.chidionyema.graphify-sweep": {
+    "EnvironmentVariables": {
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "Nice": 5,
+    "ProgramArguments": [
+      "{HOME}/Documents/code/prospector/.venv/bin/python",
+      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "--label",
+      "com.chidionyema.graphify-sweep",
+      "--",
+      "{HOME}/Documents/code/prospector/.venv/bin/python",
+      "{HOME}/Documents/code/prospector/scripts/graphify_sweep.py",
+      "--fix"
+    ],
+    "RunAtLoad": false,
+    "StandardErrorPath": "{HOME}/.claude/graphify-refresh.log",
+    "StandardOutPath": "{HOME}/.claude/graphify-refresh.log",
+    "StartInterval": 1800,
+    "label": "com.chidionyema.graphify-sweep"
+  },
+  "com.chidionyema.guard-selftest": {
+    "EnvironmentVariables": {
+      "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "ProgramArguments": [
+      "/usr/local/bin/python3",
+      "{HOME}/.claude/scripts/estate-selftest.py",
+      "--quiet",
+      "--alert"
+    ],
+    "StandardErrorPath": "{HOME}/.claude/logs/guard-selftest.err",
+    "StandardOutPath": "{HOME}/.claude/logs/guard-selftest.out",
+    "StartCalendarInterval": [
+      {
+        "Hour": 7,
+        "Minute": 15
+      },
+      {
+        "Hour": 19,
+        "Minute": 15
+      }
+    ],
+    "WorkingDirectory": "{HOME}/.claude/scripts",
+    "label": "com.chidionyema.guard-selftest"
+  },
+  "com.chidionyema.reflect": {
+    "EnvironmentVariables": {
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "Nice": 5,
+    "ProgramArguments": [
+      "{HOME}/Documents/code/prospector/.venv/bin/python",
+      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "--label",
+      "com.chidionyema.reflect",
+      "--",
+      "{HOME}/Documents/code/prospector/.venv/bin/python",
+      "{HOME}/.claude/scripts/reflect.py",
+      "--json"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.claude/reflect.log",
+    "StandardOutPath": "{HOME}/.claude/reflect.log",
+    "StartInterval": 14400,
+    "label": "com.chidionyema.reflect"
+  },
+  "com.estate.bundlepush": {
+    "EnvironmentVariables": {
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "LowPriorityIO": true,
+    "ProcessType": "Background",
+    "ProgramArguments": [
+      "{HOME}/.claude/bin/estate-runner",
+      "{HOME}/.claude/scripts/estate/estate_bundle_push.sh"
+    ],
+    "RunAtLoad": false,
+    "StandardErrorPath": "{HOME}/.claude/state/logs/estate-bundlepush.err.log",
+    "StandardOutPath": "{HOME}/.claude/state/logs/estate-bundlepush.out.log",
+    "StartInterval": 3600,
+    "label": "com.estate.bundlepush"
+  },
+  "com.estate.costsentinel": {
+    "EnvironmentVariables": {
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "Nice": 5,
+    "ProgramArguments": [
+      "/usr/local/bin/python3",
+      "{HOME}/.claude/scripts/estate/estate_cost_sentinel.py",
+      "--digest"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.claude/logs/cost-sentinel.err.log",
+    "StandardOutPath": "{HOME}/.claude/logs/cost-sentinel.log",
+    "StartInterval": 900,
+    "label": "com.estate.costsentinel"
+  },
+  "com.estate.downshift": {
+    "EnvironmentVariables": {
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "Nice": 5,
+    "ProgramArguments": [
+      "/usr/local/bin/python3",
+      "{HOME}/.claude/scripts/estate/estate_downshift.py"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.claude/logs/downshift.err.log",
+    "StandardOutPath": "{HOME}/.claude/logs/downshift.log",
+    "StartInterval": 900,
+    "label": "com.estate.downshift"
+  },
+  "com.founder.board": {
+    "Nice": 10,
+    "ProcessType": "Background",
+    "ProgramArguments": [
+      "/usr/local/bin/python3",
+      "{HOME}/.claude/scripts/founder_board.py",
+      "--html",
+      "{HOME}/.claude/state/founder-board.html"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.claude/state/logs/founder-board.err",
+    "StandardOutPath": "{HOME}/.claude/state/logs/founder-board.out",
+    "StartInterval": 3600,
+    "WorkingDirectory": "{HOME}",
+    "label": "com.founder.board"
+  },
+  "com.founder.boardserve": {
+    "KeepAlive": true,
+    "ProgramArguments": [
+      "/usr/local/bin/python3",
+      "{HOME}/.claude/scripts/board_serve.py"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.claude/state/logs/board-serve.err",
+    "StandardOutPath": "{HOME}/.claude/state/logs/board-serve.out",
+    "WorkingDirectory": "{HOME}",
+    "label": "com.founder.boardserve"
+  },
+  "com.founder.estateaudit": {
+    "EnvironmentVariables": {
+      "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:{HOME}/.local/bin"
+    },
+    "ProgramArguments": [
+      "/usr/bin/python3",
+      "{HOME}/.claude/scripts/estate/estate_audit.py",
+      "--html",
+      "--state"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.claude/state/logs/estate-audit.err.log",
+    "StandardOutPath": "{HOME}/.claude/state/logs/estate-audit.out.log",
+    "StartInterval": 3600,
+    "label": "com.founder.estateaudit"
+  },
+  "com.founder.estatepush": {
+    "EnvironmentVariables": {
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "Nice": 5,
+    "ProgramArguments": [
+      "/bin/bash",
+      "{HOME}/.claude/scripts/estate/estate_push.sh"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.claude/state/logs/estate-push.err.log",
+    "StandardOutPath": "{HOME}/.claude/state/logs/estate-push.out.log",
+    "StartInterval": 3600,
+    "label": "com.founder.estatepush"
+  },
+  "com.founder.estatewatch": {
+    "ProgramArguments": [
+      "/usr/bin/python3",
+      "{HOME}/.claude/scripts/estate/estate_watch.py"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.claude/state/logs/estate-watch.err.log",
+    "StandardOutPath": "{HOME}/.claude/state/logs/estate-watch.out.log",
+    "StartInterval": 1800,
+    "label": "com.founder.estatewatch"
+  },
+  "com.founder.stuckdetector": {
+    "Nice": 10,
+    "ProcessType": "Background",
+    "ProgramArguments": [
+      "/bin/sh",
+      "{HOME}/.claude/scripts/stuck_detector_tick.sh"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.claude/state/logs/stuck-detector.err",
+    "StandardOutPath": "{HOME}/.claude/state/logs/stuck-detector.jsonl",
+    "StartInterval": 300,
+    "WorkingDirectory": "{HOME}",
+    "label": "com.founder.stuckdetector"
+  },
+  "com.prospector-control.failover-watch": {
+    "EnvironmentVariables": {
+      "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "ProgramArguments": [
+      "{HOME}/.prospector/bin/failover",
+      "check"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.prospector/logs/com.prospector-control.failover-watch.log",
+    "StandardOutPath": "{HOME}/.prospector/logs/com.prospector-control.failover-watch.log",
+    "StartInterval": 60,
+    "label": "com.prospector-control.failover-watch"
+  },
+  "com.prospector-control.receipt-bridge": {
+    "EnvironmentVariables": {
+      "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "ProgramArguments": [
+      "/usr/local/bin/python3",
+      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "--label",
+      "com.prospector-control.receipt-bridge",
+      "--script",
+      "engine_failover.py",
+      "--",
+      "{HOME}/.prospector/bin/failover",
+      "receipts"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/.prospector/logs/com.prospector-control.receipt-bridge.log",
+    "StandardOutPath": "{HOME}/.prospector/logs/com.prospector-control.receipt-bridge.log",
+    "StartInterval": 900,
+    "label": "com.prospector-control.receipt-bridge"
+  },
+  "com.prospector.backup": {
+    "EnvironmentVariables": {
+      "HOME": "{HOME}",
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "PROSPECTOR_STORE_DIR": "{HOME}/Documents/code/prospector/store"
+    },
+    "ProgramArguments": [
+      "{HOME}/Documents/code/prospector-live/.venv/bin/python",
+      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "--label",
+      "com.prospector.backup",
+      "--",
+      "{HOME}/Documents/code/prospector-live/.venv/bin/python",
+      "{HOME}/Documents/code/prospector-live/scripts/backup_store.py",
+      "--mirror-only"
+    ],
+    "StandardErrorPath": "{HOME}/Documents/code/prospector/store/backup.log",
+    "StandardOutPath": "{HOME}/Documents/code/prospector/store/backup.log",
+    "StartCalendarInterval": {
+      "Hour": 3,
+      "Minute": 40
+    },
+    "WorkingDirectory": "{HOME}/Documents/code/prospector-live",
+    "label": "com.prospector.backup"
+  },
+  "com.prospector.estate-inventory": {
+    "EnvironmentVariables": {
+      "HOME": "{HOME}",
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    },
+    "ProgramArguments": [
+      "{HOME}/Documents/code/prospector-live/.venv/bin/python",
+      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "--label",
+      "com.prospector.estate-inventory",
+      "--",
+      "{HOME}/Documents/code/prospector-live/.venv/bin/python",
+      "{HOME}/Documents/code/prospector-live/scripts/estate_inventory.py",
+      "--out",
+      "{HOME}/Documents/code/prospector-live/store/estate_inventory.json"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/Documents/code/prospector-live/store/estate_inventory.log",
+    "StandardOutPath": "{HOME}/Documents/code/prospector-live/store/estate_inventory.log",
+    "StartInterval": 86400,
+    "WorkingDirectory": "{HOME}/Documents/code/prospector-live",
+    "label": "com.prospector.estate-inventory"
+  },
+  "com.prospector.launchd-held": {
+    "EnvironmentVariables": {
+      "HOME": "{HOME}",
+      "PATH": "/usr/local/bin:{HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "PROSPECTOR_STORE_DIR": "{HOME}/Documents/code/prospector/store"
+    },
+    "ProgramArguments": [
+      "{HOME}/Documents/code/prospector/.venv/bin/python",
+      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "--label",
+      "com.prospector.launchd-held",
+      "--",
+      "{HOME}/Documents/code/prospector/.venv/bin/python",
+      "{HOME}/Documents/code/prospector/scripts/launchd_plists.py",
+      "--assert-held"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/Documents/code/prospector/store/scheduler/launchd-held.log",
+    "StandardOutPath": "{HOME}/Documents/code/prospector/store/scheduler/launchd-held.log",
+    "StartInterval": 3600,
+    "WorkingDirectory": "/tmp",
+    "label": "com.prospector.launchd-held"
+  },
+  "com.prospector.log-rotation": {
+    "EnvironmentVariables": {
+      "HOME": "{HOME}",
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "PROSPECTOR_STORE_DIR": "{HOME}/Documents/code/prospector/store"
+    },
+    "ProgramArguments": [
+      "{HOME}/Documents/code/prospector-live/.venv/bin/python",
+      "-m",
+      "ops.automations.log_rotation",
+      "--fix"
+    ],
+    "RunAtLoad": true,
+    "StandardErrorPath": "{HOME}/Documents/code/prospector/store/log_rotation.log",
+    "StandardOutPath": "{HOME}/Documents/code/prospector/store/log_rotation.log",
+    "StartInterval": 21600,
+    "WorkingDirectory": "{HOME}/Documents/code/prospector-live",
+    "label": "com.prospector.log-rotation"
+  },
+  "com.prospector.offsite-backup": {
+    "EnvironmentVariables": {
+      "HOME": "{HOME}",
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "PROSPECTOR_STORE_DIR": "{HOME}/Documents/code/prospector/store"
+    },
+    "ProgramArguments": [
+      "{HOME}/Documents/code/prospector-live/.venv/bin/python",
+      "-m",
+      "ops.automations.offsite_backup",
+      "--fix"
+    ],
+    "StandardErrorPath": "{HOME}/Documents/code/prospector/store/offsite_backup.log",
+    "StandardOutPath": "{HOME}/Documents/code/prospector/store/offsite_backup.log",
+    "StartCalendarInterval": {
+      "Hour": 3,
+      "Minute": 50
+    },
+    "WorkingDirectory": "{HOME}/Documents/code/prospector-live",
+    "label": "com.prospector.offsite-backup"
+  },
+  "com.prospector.process-audit": {
+    "EnvironmentVariables": {
+      "HOME": "{HOME}",
+      "PATH": "/usr/local/bin:{HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "PROSPECTOR_STORE_DIR": "{HOME}/Documents/code/prospector/store"
+    },
+    "ProgramArguments": [
+      "{HOME}/Documents/code/prospector/.venv/bin/python",
+      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "--label",
+      "com.prospector.process-audit",
+      "--",
+      "{HOME}/Documents/code/prospector/.venv/bin/python",
+      "{HOME}/Documents/code/prospector/scripts/process_audit.py",
+      "--quiet",
+      "--alert"
+    ],
+    "RunAtLoad": false,
+    "StandardErrorPath": "{HOME}/Documents/code/prospector/store/scheduler/process-audit.err.log",
+    "StandardOutPath": "{HOME}/Documents/code/prospector/store/scheduler/process-audit.out.log",
+    "StartInterval": 3600,
+    "WorkingDirectory": "/tmp",
+    "label": "com.prospector.process-audit"
+  },
+  "com.valvesoftware.steamclean": {
+    "Program": "{HOME}/Library/Application Support/Steam/SteamApps/steamclean",
+    "ProgramArguments": [
+      "{HOME}/Library/Application Support/Steam/SteamApps/steamclean",
+      "Public"
+    ],
+    "RunAtLoad": true,
+    "SteamContentPaths": [
+      "{HOME}/Library/Application Support/Steam/SteamApps"
+    ],
+    "ThrottleInterval": 60,
+    "WatchPaths": [
+      "{HOME}/Library/Application Support/Steam/Steam.AppBundle/Steam"
+    ],
+    "label": "com.valvesoftware.steamclean"
+  }
+}
