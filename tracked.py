@@ -199,16 +199,19 @@ def restore_one(e, force):
 BOARD = os.path.expanduser("~/.claude/ESTATE_BOARD.jsonl")
 
 
-def board(kind, text):
+def board(kind, text, source="tracked.py"):
     """Every session is handed the board at startup. LAW 28: an instrument
-    nobody reads is not an instrument, and a log file is nobody."""
+    nobody reads is not an instrument, and a log file is nobody.
+
+    Other estate jobs post here too -- rebuild/drill.sh is the first -- so the
+    source is a parameter rather than a second copy of this function."""
     try:
         import datetime
         with open(BOARD, "a") as fh:
             fh.write(json.dumps({
                 "ts": datetime.datetime.now(datetime.timezone.utc)
                         .strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "from": "tracked.py", "kind": kind, "text": text}) + "\n")
+                "from": source, "kind": kind, "text": text}) + "\n")
     except OSError:
         pass
 

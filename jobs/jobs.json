@@ -558,5 +558,25 @@
       "{HOME}/Library/Application Support/Steam/Steam.AppBundle/Steam"
     ],
     "label": "com.valvesoftware.steamclean"
+  },
+  "ai.estate.rebuild-drill": {
+    "label": "ai.estate.rebuild-drill",
+    "ProgramArguments": [
+      "/bin/bash",
+      "{HOME}/.claude/scripts/rebuild/drill.sh"
+    ],
+    "StartCalendarInterval": {
+      "Weekday": 1,
+      "Hour": 4,
+      "Minute": 30
+    },
+    "WorkingDirectory": "{HOME}/.claude/scripts",
+    "StandardOutPath": "{HOME}/.claude/logs/rebuild-drill.log",
+    "StandardErrorPath": "{HOME}/.claude/logs/rebuild-drill.log",
+    "Nice": 10,
+    "LowPriorityIO": true,
+    "EnvironmentVariables": {
+      "PATH": "{HOME}/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    }
   }
 }

@@ -61,11 +61,27 @@ def main():
 
     if a.write:
         os.makedirs(a.into, exist_ok=True)
+        written, kept = 0, 0
         for label, job in sorted(jobs.items()):
             p = os.path.join(a.into, label + ".plist")
+            want = render(job, a.home)
+            # Only rewrite a plist whose CONTENT differs. plistlib drops XML
+            # comments, and 12 of these carry a note saying why the job is
+            # shaped the way it is. Rewriting a file that already says the right
+            # thing destroyed 9 of those notes once; skipping the no-op write
+            # is what stops it happening again.
+            if os.path.exists(p):
+                try:
+                    if plistlib.load(open(p, "rb")) == want:
+                        kept += 1
+                        continue
+                except Exception:
+                    pass
             with open(p, "wb") as fh:
-                plistlib.dump(render(job, a.home), fh)
-        print(f"wrote {len(jobs)} plists into {a.into} for home={a.home}")
+                plistlib.dump(want, fh)
+            written += 1
+        print(f"{written} plists written into {a.into} for home={a.home}, "
+              f"{kept} already correct and left alone with their comments")
         if a.into == LIVE:
             print("launchd still runs the OLD definitions. bootout and bootstrap each job.")
         return 0

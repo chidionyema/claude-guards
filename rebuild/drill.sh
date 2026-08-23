@@ -42,5 +42,17 @@ echo "  files rebuilt: $(find "$D" -type f -not -path '*/.git/*' | wc -l | tr -d
 echo "  THE SCORE:     ${SCORE:-unknown} manual steps"
 echo "  the target is the sign-ins only. Anything above that is the backlog."
 
-[ "$FAIL" = 0 ] || { echo; echo "DRILL FAILED"; exit 1; }
+# LAW 28: an instrument nobody reads is not an instrument. The board is handed
+# to every session at startup, so this reaches a reader without a new channel.
+board() {
+  python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import tracked; tracked.board(sys.argv[2], sys.argv[3], "rebuild-drill")' \
+    "$HERE/.." "$1" "$2" 2>/dev/null || true
+}
+
+if [ "$FAIL" != 0 ]; then
+  echo; echo "DRILL FAILED"
+  board drill-failed "The rebuild drill failed. The estate cannot currently be rebuilt from its own repositories. Run scripts/rebuild/drill.sh to see which assertion broke. LAW 19: the exit is the leverage, and it is down."
+  exit 1
+fi
 echo; echo "DRILL PASSED"
+board drill-passed "Rebuild drill passed: the estate rebuilt from its remotes into a throwaway home, ${SCORE:-?} manual steps remaining. PASS, not NOT-RUN."
