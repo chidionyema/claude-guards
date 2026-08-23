@@ -174,6 +174,34 @@
     "WorkingDirectory": "{HOME}/.claude/scripts",
     "label": "ai.estate.drills"
   },
+  "ai.estate.key-escrow": {
+    "EnvironmentVariables": {
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
+    },
+    "LowPriorityIO": true,
+    "Nice": 10,
+    "ProgramArguments": [
+      "{PYTHON3_SYSTEM}",
+      "{HOME}/.claude/scripts/estate/key_escrow.py",
+      "--seal"
+    ],
+    "StandardErrorPath": "{HOME}/.claude/logs/key-escrow.log",
+    "StandardOutPath": "{HOME}/.claude/logs/key-escrow.log",
+    "StartCalendarInterval": {
+      "Hour": 5,
+      "Minute": 10
+    },
+    "WorkingDirectory": "{HOME}/.claude/scripts",
+    "label": "ai.estate.key-escrow"
+  },
   "ai.estate.kimi-bridge": {
     "EnvironmentVariables": {
       "KIMI_BRIDGE_HEADLESS": "true",

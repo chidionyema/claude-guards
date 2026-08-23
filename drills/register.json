@@ -43,6 +43,16 @@
       "max_age_days": 3
     },
     {
+      "id": "key-escrow-restore",
+      "what_breaks": "This laptop dies and the two age keys die with it, so every encrypted bundle in the offsite bucket is permanently opaque.",
+      "why": "~/.config holds the only copy of both age private keys and of the R2 credentials the offsite backup itself uses, and every backup path deliberately excludes that directory. Measured 2026-08-23: no offsite copy of either key existed anywhere. The escrow splits recovery across two accounts the founder already owns -- ciphertext in R2, the key that opens it in iCloud Drive -- and this drill is the half that proves a new machine could actually use them.",
+      "cmd": [
+        "/usr/bin/python3",
+        "{HERE}/check_key_escrow.py"
+      ],
+      "max_age_days": 8
+    },
+    {
       "id": "secret-rotation",
       "what_breaks": "A credential leaks and has to be replaced before anyone can be told it leaked.",
       "why": "LAW 21: a rotation that has not been proved by a command reads as not done. Nothing here has ever rotated a live credential and then shown the old one failing.",

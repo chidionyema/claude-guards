@@ -7,17 +7,18 @@ proved it works. A backup nobody has restored is not a backup, and a rollback
 nobody has run is not a rollback. The register is what stops either from being
 believed on the strength of a green tick.
 
-`drills/register.json` holds ten entries. Three have a command and pass. Seven
-have no command yet, and each one carries the sentence describing what needs
-writing. The live answer is always `drills/run.py --list`; this table goes stale
-and the register does not.
+`drills/register.json` holds eleven entries. Five have a command. Six have no
+command yet, and each one carries the sentence describing what needs writing.
+The live answer is always `drills/run.py --list`; this table goes stale and the
+register does not.
 
 | drill | written | what breaks without it |
 |---|---|---|
 | no-anthropic | yes | Anthropic is unreachable and no agent can think |
 | rebuild | yes | this Mac dies and the estate has to come back on a new machine |
 | estate-bundle-restore | yes | a commit exists only on this Mac and the Mac dies |
-| offsite-backup-restore | no | the prospector data is gone and the offsite copy is all that is left |
+| offsite-backup-restore | yes | the prospector data is gone and the offsite copy is all that is left |
+| key-escrow-restore | yes | this Mac dies and nothing can decrypt the offsite copies |
 | secret-rotation | no | a credential leaks and has to be replaced |
 | telegram-delivery | no | something breaks at 03:00 and the message never arrives |
 | windows-rebuild | no | the rebuild has to happen on a machine that is not a Mac |
@@ -34,11 +35,13 @@ The launch agent `ai.estate.drills` fires Mondays at 04:30 and runs the whole
 register. Results go to `~/.claude/state/drills.jsonl`, one line per run, and a
 summary goes to `ESTATE_BOARD.jsonl`.
 
-**It has not fired yet.** `launchctl print gui/501/ai.estate.drills` reported
-`runs = 0` on 2026-08-23: the job is loaded and its definition is correct, and
-its first Monday has not come round. Every pass on the register so far was
-produced by an agent typing `--all` by hand. That is worth knowing, because a
-schedule nobody has watched fire is a schedule nobody has tested.
+**It has now fired once, and it was started deliberately rather than by the
+clock.** `launchctl print gui/501/ai.estate.drills` reported `runs = 0` for as
+long as the job existed, so on 2026-08-23 it was kicked by hand to find out
+whether the scheduled path worked at all. It did: four of the five written
+drills passed under launchd and `rebuild` failed for a real reason. The first
+run on the clock is Monday 2026-08-24 at 04:30, and until that one lands the
+schedule itself is still untested.
 
 Nothing needs to be typed for any of that. The commands below are here so an
 agent can use them and so you can see what the machine is doing, not because

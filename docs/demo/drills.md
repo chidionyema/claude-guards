@@ -7,10 +7,19 @@ checks it still goes anywhere. Then it writes one line on the board every
 session reads at startup, so a session that opens on Tuesday morning already
 knows.
 
-The weekly job has not fired yet. `launchctl print gui/501/ai.estate.drills`
-reported `runs = 0` on 2026-08-23. The job is loaded and its definition is
-correct, and its first Monday has not come round. Every run below was started by
-an agent typing the command, which is the thing the schedule exists to replace.
+The weekly job has fired once, on 2026-08-23, and it was kicked by hand rather
+than by the clock: `launchctl print gui/501/ai.estate.drills` had reported
+`runs = 0` since the job was created, so it was started deliberately to find out
+whether the scheduled path worked. It did. The first run on the clock is Monday
+2026-08-24 at 04:30. The runs below were started by an agent, which is the thing
+the schedule exists to replace.
+
+That launchd run is also the one that caught something an agent run could not.
+Four of the five written drills passed; `rebuild` failed with `every declared job
+rendered for this home: expected 31, got 30`, because a new launch agent had been
+declared in `jobs/jobs.json` on this laptop and not yet pushed. The rebuild drill
+builds the estate from a fresh clone, so a job that is not in the remote does not
+come back on a new machine. It was right to be red.
 
 ## The real run, 2026-08-23
 
