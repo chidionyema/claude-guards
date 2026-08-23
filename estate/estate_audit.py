@@ -813,6 +813,16 @@ CHECKS.append(c_backup)
 
 PROSPECTOR_CANDIDATES = (
     os.environ.get("PROSPECTOR_REPO", ""),
+    # A detached worktree pinned to origin/main, kept for this probe alone. The two working
+    # checkouts on this laptop are both months behind main and both are running jobs, so
+    # neither can be moved to get a script into place. `git worktree add --detach` costs a
+    # tree and no risk. Its `.env` is a symlink into prospector-live, because stack.sh reads
+    # the R2 credentials from the repo root and .env is not in git (LAW 21).
+    #   git -C ~/dev/code/prospector-main fetch origin main && \
+    #   git -C ~/dev/code/prospector-main checkout --detach origin/main
+    # is the refresh. This path is listed FIRST of the real checkouts on purpose: main is the
+    # only tree that is guaranteed to hold the current probe.
+    str(pathlib.Path.home() / "dev/code/prospector-main"),
     str(pathlib.Path.home() / "Documents/code/prospector"),
     str(pathlib.Path.home() / "dev/code/prospector"),
     str(pathlib.Path.home() / "code/prospector"),
@@ -854,22 +864,34 @@ def c_disaster_recovery() -> list[dict]:
                        + txt[:300]))
         return out
 
-    missing = [r["what"] for r in d["rows"] if r["age"] in ("MISSING", "UNKNOWN")]
+    # MISSING and UNKNOWN are different facts and this check used to conflate them, so a laptop
+    # that merely could not reach R2 was reported to the founder as an estate with no backups.
+    # A false red costs the same as a false green in the end: both teach him to stop reading.
+    missing = [r["what"] for r in d["rows"] if r["age"] == "MISSING"]
+    unknown = [r["what"] for r in d["rows"] if r["age"] == "UNKNOWN"]
     stale = d.get("stale", [])
     # A missing copy is worse than a stale one: stale means the job stopped recently, missing
-    # means there is nothing to restore from at all.
-    sev = CRIT if missing else (CRIT if stale else OK)
-    value = f"{len(d['rows']) - len(missing)}/{len(d['rows'])}"
+    # means there is nothing to restore from at all. Unknown is neither, and it is graded
+    # unknown rather than critical, which is what the row helper already does for sentinels.
+    if missing or stale:
+        sev = CRIT
+    elif unknown:
+        sev = UNK
+    else:
+        sev = OK
+    value = f"{len(d['rows']) - len(missing) - len(unknown)}/{len(d['rows'])}"
     detail = (
         "Every copy the estate has, with the command that restores it, is "
         "`deploy/stack.sh recover`. "
     )
     if missing:
         detail += "NOTHING TO RESTORE FROM for: " + ", ".join(missing) + ". "
+    if unknown:
+        detail += ("COULD NOT CHECK, so this is not a pass: " + ", ".join(unknown) + ". ")
     if stale:
         detail += (f"Older than {d['stale_after_hours']:.0f}h, so whatever writes them has "
                    "stopped: " + ", ".join(stale) + ". ")
-    if not missing and not stale:
+    if not missing and not stale and not unknown:
         ages = ", ".join(f"{r['what']} {r['age']}" for r in d["rows"] if r["where"].startswith("r2:"))
         detail += "All off-machine copies are current: " + ages + "."
     out.append(row("backup", "Copies of the money data that survive losing Fly", value, sev,
