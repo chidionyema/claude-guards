@@ -29,6 +29,8 @@
 		<integer>4</integer>
 		<key>Minute</key>
 		<integer>30</integer>
+		<key>Weekday</key>
+		<integer>1</integer>
 	</dict>
 	<key>WorkingDirectory</key>
 	<string>/Users/chidionyema/.claude/scripts</string>
