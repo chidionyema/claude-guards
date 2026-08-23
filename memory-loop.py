@@ -186,7 +186,14 @@ LAWS_FILE = os.path.join(os.path.expanduser("~"), ".claude", "CLAUDE.md")
 # founder turn on this same edit. The durable fix is to derive the cap from `_rules_only` output
 # rather than store it, or to drop the OLDEST law rather than the newest when something must go.
 # Both are a founder decision because they change what every session is billed for.
-LAWS_MAX_CHARS = 52000  # 2026-08-22: the 29-law block is 46,463 chars. At 37000 the
+LAWS_MAX_CHARS = 60000  # 2026-08-23: THIRD lag in three days. The 32-law block is 55,565
+# chars in rules-only form, so at 52000 LAW 31 and LAW 32 -- the two newest, the ones the
+# founder wrote most recently -- reached no session at all. Measured, not guessed:
+# read_laws() returned 51,769 chars and 30 laws with a truncation note naming both.
+# 60000 leaves 4,435 chars, about two laws of headroom. The cap still exists to refuse a
+# rewritten CLAUDE.md whose first section is not the laws; it was never meant to ration
+# the laws themselves.
+# It was 52000 until today, and 37000 before that. The rest of this note is that history:
                         # truncation path kept laws oldest-first and dropped 22 and 25-30.
 
 
