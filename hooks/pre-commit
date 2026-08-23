@@ -36,17 +36,48 @@ def staged_paths():
     return [p for p in out.split("\0") if p]
 
 
-def staged_blob(path):
-    r = subprocess.run(["git", "show", f":{path}"], capture_output=True)
-    return r.stdout if r.returncode == 0 else b""
+def staged_blobs(paths):
+    """{path: bytes} for every staged path, in ONE git process.
+
+    A `git show` per file costs a process per file. On the commit that first put
+    ~/.claude under version control that was 625 of them, and the hook was still
+    running two minutes later. A gate slow enough to be killed is a gate nobody
+    keeps (LAW 28). `cat-file --batch` reads every object over one pipe.
+    """
+    out = {}
+    if not paths:
+        return out
+    # cat-file --batch splits its input on newlines, so a path containing one
+    # cannot go through it. Those are read individually; there are none here.
+    batch = [p for p in paths if "\n" not in p]
+    for path in (p for p in paths if "\n" in p):
+        r = subprocess.run(["git", "show", f":{path}"], capture_output=True)
+        out[path] = r.stdout if r.returncode == 0 else b""
+
+    raw = subprocess.run(["git", "cat-file", "--batch"],
+                         input="".join(f":{p}\n" for p in batch).encode(),
+                         capture_output=True).stdout
+    pos = 0
+    for path in batch:
+        nl = raw.find(b"\n", pos)
+        if nl < 0:
+            break
+        header = raw[pos:nl].split(b" ")
+        if len(header) < 3:          # "<rev> missing" -- no blob, nothing to scan
+            pos = nl + 1
+            continue
+        size = int(header[2])
+        out[path] = raw[nl + 1:nl + 1 + size]
+        pos = nl + 1 + size + 1      # blob, then the newline git writes after it
+    return out
 
 
 def main():
     bad = []
-    for path in staged_paths():
-        if os.path.realpath(path) == SELF:
-            continue
-        blob = staged_blob(path)
+    paths = [p for p in staged_paths() if os.path.realpath(p) != SELF]
+    blobs = staged_blobs(paths)
+    for path in paths:
+        blob = blobs.get(path, b"")
         if b"\0" in blob:
             continue  # binary, not a config file
         text = blob.decode("utf-8", "replace")
