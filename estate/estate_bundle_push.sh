@@ -34,6 +34,12 @@
 # matching key material is REFUSED, loudly, rather than shipped.
 set -uo pipefail
 
+# launchd hands a job almost no environment, and the first run under it died on
+# "rclone is not installed" while the identical command passed by hand. The proven
+# com.founder.estatepush job sets this in its plist; this line means the script does
+# not depend on whoever calls it remembering to.
+export PATH="${PATH:-}:/Users/chidionyema/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
 STATE="$HOME/.claude/state"
 RECEIPTS="$STATE/estate-bundle-push.jsonl"
 WORK="${TMPDIR:-/tmp}/estate-bundles.$$"
@@ -94,6 +100,40 @@ DAY=$(date -u +%Y-%m-%d); STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 # Every wt-* directory under ~/Documents/code is a git WORKTREE of prospector and
 # reports prospector's own .git as its common dir. Bundling each one would upload the
 # same 495 commits thirty times.
+# --- every declared root must be READABLE, or this job is lying --------------
+# Measured 2026-08-23. By hand this found 19 repos; bootstrapped by launchd it found 10
+# and printed GREEN. The nine it lost were every repo under ~/Documents, which macOS TCC
+# hides from a bootstrapped LaunchAgent:
+#
+#     ls: /Users/chidionyema/Documents/code: Operation not permitted
+#
+# A backup that silently covers half of what it is asked to cover is worse than none,
+# because the receipt reads as complete. So a root that cannot be listed is RED.
+#
+# The test is a real listing, not `test -r`. Under that denial `test -d` answers yes and
+# `test -r` answers yes; only an actual read fails. A guard built on -r passes exactly
+# when it is needed.
+denied=""
+for root in "${ROOTS[@]}"; do
+  [ -d "$root" ] || continue                       # not on this machine, nothing to cover
+  ls "$root" >/dev/null 2>&1 || denied="$denied $root"
+done
+# A denied root is dropped from the search and the run ends RED. Aborting outright was
+# the first version and it was wrong: it left ~/.claude, which is readable and is the one
+# repo with no remote at all, with no hourly backup because a DIFFERENT root was blocked.
+# Cover what is reachable, and be loud about what is not.
+DENIED_ROOTS="$denied"
+if [ -n "$DENIED_ROOTS" ]; then
+  log "DENIED:$DENIED_ROOTS — not listable by this process, every repo under there is skipped"
+  keep=()
+  for root in "${ROOTS[@]}"; do
+    case " $DENIED_ROOTS " in *" $root "*) continue ;; esac
+    keep+=("$root")
+  done
+  ROOTS=("${keep[@]}")
+  [ "${#ROOTS[@]}" -gt 0 ] || die "every declared root is unreadable by this process"
+fi
+
 find "${ROOTS[@]}" -maxdepth 3 -name .git -print 2>/dev/null | sed 's|/\.git$||' | sort -u \
   > "$WORK/candidates.txt"
 
@@ -211,6 +251,11 @@ rm -rf "$WORK"
 if [ "$FAILED" -gt 0 ]; then
   log "BUNDLE PUSH RED  ok=$OK failed=$FAILED skipped=$SKIPPED"
   alert "estate_bundle_push: $FAILED repo(s) failed to reach R2. ok=$OK skipped=$SKIPPED. Commits with no other copy are still on one disk."
+  exit 1
+fi
+if [ -n "$DENIED_ROOTS" ]; then
+  log "BUNDLE PUSH RED  repos=$OK skipped=$SKIPPED  but$DENIED_ROOTS could not be listed, so every repo under there is UNCOVERED by this run"
+  alert "estate_bundle_push: covered $OK repo(s), but$DENIED_ROOTS is not readable by this job, so nothing under it is backed up. macOS TCC hides it from a bootstrapped LaunchAgent. One fix, once: grant Full Disk Access to /bin/bash in System Settings."
   exit 1
 fi
 log "BUNDLE PUSH GREEN  bucket=$R2_BUCKET  repos=$OK  skipped=$SKIPPED  key=bundles/<repo>/latest.bundle  restore=git clone <bundle>"
