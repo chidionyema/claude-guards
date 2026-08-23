@@ -38,6 +38,9 @@ TICKET_COUNTS = os.path.join(HOME, ".claude", "state", "aiden-ticket-counts.json
 
 #: When the close sweep last ran, and what it did. Its mtime is the schedule and its contents are
 #: the receipt, so one file answers both "is it due" and "what happened last time".
+#: Must match ticket-gate.SWEEP_STAMP. It is repeated rather than imported because the
+#: gate module is loaded further down this file, and importing it here to save one
+#: literal would run the import at module scope for a constant.
 SWEEP_STAMP = os.path.join(HOME, ".claude", "state", "aiden-close-sweep.json")
 
 #: How long an alert stays "already said". Long enough that a slow-moving

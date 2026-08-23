@@ -619,6 +619,40 @@ def issue_actuals(num: int) -> dict:
     return {"cost": cost, "turns": turns, "sessions": sessions} if sessions else {}
 
 
+SWEEP_STAMP = os.path.join(HOME, ".claude", "state", "aiden-close-sweep.json")
+
+
+def spend_summary() -> str:
+    """One line for the page: what the ticketed work has cost, and how much of it was budgeted.
+
+    Never raises. This runs inside the dashboard, and a page that fails to render because a cost
+    could not be worked out is worse than a page with one line missing.
+    """
+    try:
+        total, sessions = 0.0, 0
+        for name in os.listdir(TICKETS):
+            if not name.endswith(".json"):
+                continue
+            cost, turns = session_cost(name[:-5])
+            if turns:
+                total += cost
+                sessions += 1
+        line = "$%.0f of token value across %d ticketed session(s)" % (total, sessions)
+        try:
+            with open(SWEEP_STAMP, encoding="utf-8") as fh:
+                sw = json.load(fh)
+            unbudgeted = sw.get("no_budget")
+            if unbudgeted is not None:
+                line += " · %d open ticket(s) with no budget" % unbudgeted
+            if sw.get("error"):
+                line += " · last sweep failed"
+        except Exception:
+            line += " · no close sweep has run yet"
+        return line + " · list prices, not a bill"
+    except Exception as exc:                      # noqa: BLE001 - the page still renders
+        return "spend not measured: %s" % type(exc).__name__
+
+
 def budget_line(num: int, body: str) -> str:
     """One line comparing what an issue was budgeted against what it took. "" when neither is known.
 
@@ -798,6 +832,11 @@ a{color:inherit}.tk{font-weight:600}.none{color:var(--warn);font-weight:600}
                % (c["open"], c["moved_24h"], c["closed_24h"],
                   "none" if c["stuck"] else "sub", c["stuck"],
                   " &middot; numbers are stale" if data.get("stale") else ""))
+    #: What the open work has cost so far, and how much of it nobody budgeted. This is the line
+    #: the founder asked for: he does not run a script to find out what a piece of work is costing,
+    #: he reads it on a page that is already current. The unbudgeted count comes off the last close
+    #: sweep rather than being recomputed, because the sweep already read every open body.
+    out.append("<p class=sub>%s</p>" % esc(spend_summary()))
     out.append("<div class=wrap><table><tr><th>Moved</th><th>Ticket</th><th>State</th>"
                "<th>What it is</th></tr>")
     for i in items[:40]:
