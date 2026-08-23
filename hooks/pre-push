@@ -48,6 +48,10 @@ SOURCE = re.compile(r"\.(py|sh|js|ts|tsx|go|rs|rb|java|cs|swift|c|cc|cpp|h|mjs)$
 FEAT = re.compile(r"^feat(\([^)]*\))?\s*:\s*(?P<name>[\w.-]+)", re.I)
 #: A body this short is a placeholder, not a demo.
 MIN_BODY_CHARS = 200
+#: LAW 7's escape hatch, in the shape the estate's other fences already use.
+STALE_OK = re.compile(r"(?im)^\s*Stale-OK:\s*\S")
+#: Pushing these IS the integration; they cannot be stale against themselves.
+TRUNK = {"main", "master"}
 
 
 def git(*args):
@@ -116,8 +120,40 @@ def readable(local, path):
     return len(prose)
 
 
+def stale(local_ref, local_sha, shas):
+    """LAW 7: refuse a branch that has not been refreshed on main.
+
+    Founder's law, and the reason it is mechanical: a stale branch does not fail
+    honestly. It fails as somebody else's bug, naming files and tests the diff
+    never touched, and the author then debugs a fiction. The probe in
+    science/law_enforcement.py listed LAW 7 as mechanical-but-not-live; this is
+    the wire.
+
+    Asks the REMOTE, not the local ref. `git rev-list --count HEAD..origin/main`
+    answers 0 against an unfetched origin/main, which is exactly the branch this
+    check is about, so it fetches first.
+
+    Never fires on main itself: pushing trunk IS the integration.
+    """
+    branch = local_ref.rsplit("/", 1)[-1]
+    if branch in TRUNK:
+        return None
+    if any(STALE_OK.search(git("show", "-s", "--format=%B", c)) for c in shas):
+        return None
+    if subprocess.run(["git", "fetch", "origin", "main", "--quiet"],
+                      capture_output=True).returncode != 0:
+        return None                      # no main to be stale against; fail open
+    if not git("rev-parse", "--verify", "--quiet", "origin/main").strip():
+        return None
+    behind = git("rev-list", "--count", f"{local_sha}..origin/main").strip()
+    if behind.isdigit() and int(behind) > 0:
+        return (f"  {branch} is {behind} commit(s) behind origin/main")
+    return None
+
+
 def main():
     problems = []
+    stale_problems = []
     for line in sys.stdin:
         parts = line.split()
         if len(parts) < 4:
@@ -125,7 +161,11 @@ def main():
         _, local, _, remote = parts[:4]
         if set(local) == {"0"}:            # a branch deletion ships nothing
             continue
-        for name, why in features(local, commits(local, remote)).items():
+        shas = commits(local, remote)
+        behind = stale(parts[0], local, shas)
+        if behind:
+            stale_problems.append(behind)
+        for name, why in features(local, shas).items():
             for kind in ("demo", "onboarding"):
                 path = f"docs/{kind}/{name}.md"
                 n = readable(local, path)
@@ -134,6 +174,25 @@ def main():
                 elif n < MIN_BODY_CHARS:
                     problems.append(
                         f"  {path} is a stub, {n} characters of prose, {MIN_BODY_CHARS} is the floor")
+    if stale_problems:
+        sys.stderr.write(
+            "\npush refused: this branch has not been refreshed on main (LAW 7).\n\n"
+            + "\n".join(stale_problems) + """
+
+A stale branch does not fail honestly. It fails as somebody else's bug, naming
+files and tests your diff never touched, and you then spend an hour debugging a
+fiction. Refresh it before anyone reads it:
+
+  git fetch origin main && git merge origin/main --no-edit
+
+Merge, never rebase, and never force push -- the remote moves by itself here, so
+a force push destroys work you never saw arrive.
+
+If this genuinely must go stale, put one honest line in the commit message:
+
+  Stale-OK: <why>
+""")
+        return 1
     if not problems:
         return 0
     sys.stderr.write(
