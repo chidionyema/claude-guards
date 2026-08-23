@@ -253,8 +253,14 @@ rm -f /tmp/.ea_lc.$$
 
 
 def c_endpoints() -> list[dict]:
-    urls = ["https://prospector-store-web.fly.dev", "https://prospector-store-api.fly.dev",
-            "https://tie-web.fly.dev", "https://tie-api.fly.dev"]
+    # Probe the path each app's own Fly health check uses, not bare "/".
+    # An API that serves /catalog and nothing at the root is not down; probing
+    # "/" reported prospector-store-api as a critical for days while Fly's own
+    # check on /catalog passed the whole time.
+    urls = ["https://prospector-store-web.fly.dev/api/health",
+            "https://prospector-store-api.fly.dev/catalog",
+            "https://tie-web.fly.dev/",
+            "https://tie-api.fly.dev/health/ready"]
 
     def one(u: str) -> dict:
         rc, o = sh(f"curl -s -o /dev/null -w '%{{http_code}} %{{time_total}}' --max-time 10 {u}", timeout=14)
@@ -538,6 +544,40 @@ def c_pipeline_ci() -> list[dict]:
 
 CHECKS.append(c_pipeline)
 CHECKS.append(c_pipeline_ci)
+
+
+def c_ci_reach() -> list[dict]:
+    """Can GitHub Actions actually start a job in each repo the estate ships from?
+
+    A private repository on this free account cannot. The job is refused before it
+    runs, with "recent account payments have failed or your spending limit needs to
+    be increased", and the pull request sits UNSTABLE forever because its gate can
+    never go green. prospector is public and runs fine; crew and maestro were private
+    and their qa gate had not executed once. Nothing in this audit noticed for days.
+    """
+    out: list[dict] = []
+    for repo in ("chidionyema/prospector", "chidionyema/crew", "chidionyema/maestro"):
+        rc, vis = sh(f"gh api repos/{repo} -q .visibility 2>/dev/null", timeout=20)
+        vis = vis.strip() or "unknown"
+        rc, o = sh(f"gh run list --repo {repo} --limit 5 "
+                   "--json conclusion -q '[.[].conclusion]|@csv' 2>/dev/null", timeout=25)
+        outcomes = [c.strip('"') for c in o.strip().split(",") if c.strip()]
+        ran = any(c in ("success", "failure") for c in outcomes)
+        if vis == "private" and outcomes and all(c == "failure" for c in outcomes):
+            sev, note = CRIT, ("private repo on a free plan: every job is refused before it "
+                               "starts, so this repo's gate can never go green")
+        elif not outcomes:
+            sev, note = UNK, "no workflow runs in the window"
+        elif not ran:
+            sev, note = WARN, "runs exist but none completed in the window"
+        else:
+            sev, note = OK, f"last 5: {', '.join(outcomes)}"
+        out.append(row("pipeline", f"Actions can run in {repo}", vis, sev,
+                       f"gh run list --repo {repo} --limit 5 --json conclusion", note))
+    return out
+
+
+CHECKS.append(c_ci_reach)
 
 
 def c_envfiles() -> list[dict]:
