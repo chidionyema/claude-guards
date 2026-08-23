@@ -46,12 +46,14 @@
     {
       "path": "~/.claude",
       "why": "settings, skills, agent definitions",
-      "branch": "main"
+      "branch": "main",
+      "private": true
     },
     {
       "path": "~/.claude/scripts",
       "why": "the guards, the board, the mirror",
-      "branch": "main"
+      "branch": "main",
+      "private": true
     },
     {
       "path": "~/dev/code/hermes-v2",

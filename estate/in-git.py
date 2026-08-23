@@ -16,7 +16,7 @@ closed is how the last four holes survived:
 What it is NOT allowed to do is pass because it did not look. Every class that
 cannot run reports UNKNOWN and fails the sweep, never a quiet zero.
 """
-import glob, json, os, plistlib, subprocess, sys, time
+import glob, json, os, plistlib, re, subprocess, sys, time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from estate.ingit import covered, mirrors, HOME, REPO   # noqa: E402
@@ -145,6 +145,25 @@ def check_repos(d, _mm):
             holes.append(f"{e['path']}: branch has no upstream, nothing off this machine holds it")
         elif ahead not in ("0", "?"):
             holes.append(f"{e['path']}: {ahead} commit(s) never pushed")
+        # A repository holding transcripts and this machine's paths can be
+        # flipped to public in one click, and nothing on this machine notices.
+        # claude-guards was found public on 2026-08-23 with 48 files carrying
+        # the home path and six production hostnames.
+        if e.get("private"):
+            url = sh(["git", "-C", p, "remote", "get-url", "origin"])[1]
+            m = re.search(r"github\.com[:/](\S+?/\S+?)(?:\.git)?$", url)
+            if not m:
+                holes.append(f"{e['path']}: must be private, and its origin "
+                             f"is not a GitHub url this check can read")
+            else:
+                rcv, out, _ = sh(["gh", "repo", "view", m.group(1),
+                                  "--json", "isPrivate", "-q", ".isPrivate"], t=30)
+                if rcv != 0:
+                    holes.append(f"{e['path']}: could not read {m.group(1)} "
+                                 f"visibility, so it is unproven, not private")
+                elif out.strip() != "true":
+                    holes.append(f"{m.group(1)}: PUBLIC. It holds "
+                                 f"{e['why']} and anyone can read it")
         if not mod and rc == 0 and ahead == "0":
             ok += 1
     return ok, holes
@@ -216,12 +235,17 @@ def check_escrow(d, _mm):
             r = json.loads(line)
         except ValueError:
             continue
+        if r.get("event"):
+            # A run-level record: the pusher writing down that a whole run was
+            # skipped because the lock was held. It names no repo because it is
+            # not about one, and the pusher already goes red on a long skip
+            # streak, so reading it here would report the same fault twice.
+            continue
         key = r.get("slug") or r.get("repo")
         if not key:
-            # The pusher has written a record with every field null. It proves
-            # nothing, and sorting it against real slugs raised a TypeError that
-            # took the whole class down, so a bad line now costs one hole and
-            # not six classes of answer.
+            # Neither a repo receipt nor a run event. It proves nothing, and
+            # sorting it against real slugs raised a TypeError that took the
+            # whole class down and reported six classes as unknown.
             malformed += 1
             continue
         last[key] = r
@@ -245,7 +269,7 @@ def check_escrow(d, _mm):
         if not any(s and s.endswith(name) for s in last):
             holes.append("%s: has no offsite copy at all" % name)
     if malformed:
-        holes.append("%d bundle receipt(s) name no repo, so they prove nothing" % malformed)
+        holes.append("%d bundle receipt(s) are neither a repo nor a run event" % malformed)
     return ok, holes
 
 
