@@ -27,10 +27,22 @@ import sys
 import time
 
 HOME = os.path.expanduser("~")
-_spec = importlib.util.spec_from_file_location(
-    "observe", os.path.join(HOME, ".claude", "scripts", "aiden", "observe.py"))
-observe = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(observe)
+#: One instance of observe per process, shared through sys.modules.
+#:
+#: `module_from_spec` does not register anything, so every loader that reached for this file got a
+#: private copy with a private `_CACHE`, and the walk that copy exists to avoid ran again. Inside
+#: one tick that was two full passes of ~/.claude/projects: this module's, and the ticket gate's
+#: when it rebuilt the ops page. Measured 2026-08-23 under /usr/bin/python3: a cold
+#: `observe.sessions(3)` is 9.8s and the second call on the same instance is 0.0s, so the whole
+#: cost of the duplicate is the duplication itself.
+_OBS_KEY = "aiden_observe"
+observe = sys.modules.get(_OBS_KEY)
+if observe is None:
+    _spec = importlib.util.spec_from_file_location(
+        _OBS_KEY, os.path.join(HOME, ".claude", "scripts", "aiden", "observe.py"))
+    observe = importlib.util.module_from_spec(_spec)
+    sys.modules[_OBS_KEY] = observe
+    _spec.loader.exec_module(observe)
 
 #: A prefix cached at 1.25x and read at 0.1x breaks even at 12.5 reads. Below
 #: this the writes are not paying for themselves and something is restarting

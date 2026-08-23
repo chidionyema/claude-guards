@@ -71,5 +71,11 @@ only looked at files has not started work that could go missing.
 **Two agents in one session.** They share the issue, which is right, because you asked one tab for
 one thing.
 
+**The page goes stale.** Every page carries the time it was written, so a stale one is visible
+without anyone checking a log. Behind it, the five-minute job now records how long each of its
+steps took in `~/.claude/state/aiden-stages.log`, which means a job killed part way through still
+names the step it died in. That log exists because the old failure message named the disk, and the
+disk turned out to be innocent.
+
 **The gate itself breaks.** It exits 0 and the estate keeps working. A guard that wedges fifteen
 live sessions because of its own bug is worse than the problem it was written for.

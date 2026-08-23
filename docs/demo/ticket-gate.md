@@ -77,6 +77,48 @@ $ curl -s http://127.0.0.1:8787/ops | grep -o "[0-9]* open &middot; [0-9]* moved
 24 open &middot; 18 moved in 24h &middot; 0 closed in 24h
 ```
 
+## The page rebuilds itself, with nobody at the keyboard
+
+The five-minute job had been killing itself at its own 240s deadline and delivering nothing, so
+the page went stale and the phone stayed quiet. The receipt blamed the disk. It was wrong: the
+tick was doing the same walk twice, because the module that caches the walk was being loaded a
+second time and a second copy has a second empty cache.
+
+The tick now writes a line per stage as it goes, so a killed tick still says where it was:
+
+```
+$ cat ~/.claude/state/aiden-stages.log
+21:11:24Z pid=11983 start           0.0s
+21:11:24Z pid=11983 board          52.0s
+21:12:16Z pid=11983 alerts          0.0s
+21:12:16Z pid=11983 sent-file       0.0s
+21:12:17Z pid=11983 tickets         0.6s
+21:12:23Z pid=11983 ops-page        6.8s
+```
+
+One walk, 52s, and everything after it is under seven seconds. The receipt from that same run,
+written by the scheduled job and not by hand:
+
+```
+$ tail -1 ~/.claude/state/aiden-ticks.jsonl
+{"at": "2026-08-23T21:11:24Z", "alerts": 14, "sent": 0,
+ "delivery": {"ok": true, "message_id": 12970, "why": ""}, "took_s": 52.6}
+```
+
+And the page it left behind:
+
+```
+$ curl -s -o /dev/null -w "HTTP %{http_code}\n" http://127.0.0.1:8787/ops
+HTTP 200
+$ python3 -c "...getmtime(ops-dashboard.html)"
+page written 30s ago
+$ curl -s http://127.0.0.1:8787/ops | grep -oE "[0-9]+ open|[0-9]+ moved in 24h|..."
+27 open
+21 moved in 24h
+0 closed in 24h
+6 stuck
+```
+
 ## The refusal, when GitHub will not take the issue
 
 ```

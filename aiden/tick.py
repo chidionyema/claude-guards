@@ -113,6 +113,28 @@ DEADLINE_SECONDS = 240
 LOCK = os.path.join(HOME, ".claude", "state", "aiden-tick.lock")
 
 
+#: Where a tick spent its time, written as it goes rather than at the end.
+#:
+#: The receipt is written once, at the end, so a tick killed at its deadline reports nothing about
+#: itself except that it died. Its message said "gave up after 240s walking the disk", which was a
+#: sentence someone wrote, not a measurement: sampling pid 11523 on 2026-08-23 showed Python eval
+#: frames and no blocking syscall, so the disk was not where the time went. This file is the
+#: correction. Each stage appends its own line the moment it finishes, so the last line before a
+#: kill names the stage that was running.
+STAGES = os.path.join(HOME, ".claude", "state", "aiden-stages.log")
+
+
+def _stage(name, t0):
+    took = time.time() - t0
+    try:
+        with open(STAGES, "a") as f:
+            f.write("%s pid=%d %-12s %6.1fs\n" % (
+                time.strftime("%H:%M:%SZ", time.gmtime()), os.getpid(), name, took))
+    except OSError:
+        pass
+    return time.time()
+
+
 def _drop_lock():
     """Release the lock, and say so on the board if it cannot be released.
 
@@ -161,7 +183,7 @@ def _guard(started):
     def expired(_sig, _frm):
         _receipt({"at": started, "alerts": None, "sent": 0,
                   "delivery": {"ok": False,
-                               "why": f"gave up after {DEADLINE_SECONDS}s walking the disk"},
+                               "why": f"gave up after {DEADLINE_SECONDS}s; last stage in {STAGES}"},
                   "board": BOARD})
         # os._exit skips every cleanup path, so the lock this tick took would outlive it.
         # A stale lock only clears when the pid it names is dead AND unrecycled; until then
@@ -178,8 +200,11 @@ def main():
     started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now))
     if not _guard(started):
         return 1
+    t = _stage("start", now)
     aiden.html(BOARD, 24)
+    t = _stage("board", t)
     alerts = aiden.alerts(24)
+    t = _stage("alerts", t)
 
     seen = {k: v for k, v in load(SENT, {}).items() if now - v < QUIET_SECONDS}
     fresh, in_this_tick = [], set()
@@ -218,11 +243,13 @@ def main():
         except Exception:                         # noqa: BLE001 - alerts still go out
             head = ""
         result = deliver(head + "\n".join(a for _, a in going))
+        t = _stage("deliver", t)
         if result.get("ok"):
             for key, _ in going:
                 seen[key] = now
     with open(SENT, "w") as f:
         json.dump(seen, f)
+    t = _stage("sent-file", t)
 
     #: Ticket movement, on its own trigger. Founder, 2026-08-23: "i should be seeing ticketss
     #: noving not asking what are you doing". It cannot ride only on the alert message, because
@@ -249,6 +276,7 @@ def main():
                     json.dump(now_counts, f)
         except Exception as exc:                  # noqa: BLE001 - never crash a tick
             print("ticket counts: %s: %s" % (type(exc).__name__, exc), file=sys.stderr)
+        t = _stage("tickets", t)
 
     signal.alarm(0)
     _receipt({"at": started, "alerts": len(alerts), "sent": len(fresh),
@@ -268,6 +296,7 @@ def main():
         print("ops page not rebuilt: %s: %s" % (type(exc).__name__, exc), file=sys.stderr)
     finally:
         signal.alarm(0)
+        _stage("ops-page", t)
 
     _drop_lock()
     return 0 if result.get("ok") else 1

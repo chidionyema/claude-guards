@@ -232,12 +232,69 @@ def roster() -> int:
 DASHBOARD = os.path.join(HOME, ".claude", "state", "ops-dashboard.html")
 
 
+def _observe():
+    """Aiden's observe module, one instance per process.
+
+    sys.modules first, and that lookup is the point. Inside a tick, aiden has already walked
+    ~/.claude/projects and its rows are still in observe's own `_CACHE`; taking the same instance
+    turns the ops page's walk into a dictionary read. `module_from_spec` registers nothing, so a
+    second loader silently gets a second copy with a second empty cache and pays the full pass
+    again -- measured 2026-08-23 under /usr/bin/python3, 9.8s cold and 0.0s on the cached call.
+    That duplicate is what pushed the 20:40 and 20:52 ticks past their 240s deadline.
+    """
+    mod = sys.modules.get("aiden_observe")
+    if mod is None:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "aiden_observe", os.path.join(HOME, ".claude", "scripts", "aiden", "observe.py"))
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules["aiden_observe"] = mod
+        spec.loader.exec_module(mod)
+    return mod
+
+
 def live_rows() -> list[dict]:
     """Every session that moved in the last three hours, with its ticket and its own last words.
 
     Read straight off the transcripts, because that is the one record that cannot drift from what
     a session actually did.
+
+    The walk itself belongs to aiden's observe.py and is not repeated here. That module already
+    scans this tree with scandir and caches the result per process, and its own comment records
+    why: 81,377 transcripts across 16,631 directories, where listdir plus a stat each took a pass
+    from 27.9s to a fraction of it under the 3.9.6 that launchd actually uses. This function's
+    first version walked the same tree again with os.walk and getmtime, which is the exact shape
+    that comment was written about, and it cost the tick 16.6s it did not have.
+
+    The fallback below is not politeness. This file is a PreToolUse hook and must keep working if
+    aiden is moved, renamed or deleted, so it carries its own slow walk for that case only.
     """
+    try:
+        observe = _observe()
+        #: 24, then filter, and the 24 is not a change of window -- this page still shows three
+        #: hours. observe caches by the number of hours it was asked for, so sessions(3) and
+        #: sessions(24) are two separate entries and two separate passes of the tree. The tick has
+        #: already asked for 24 by the time the ops page is built, so asking for the same key makes
+        #: this a dictionary read; asking for 3 walked 16,631 directories a second time to look at
+        #: a subset of what was already in memory.
+        rows = []
+        for r in observe.sessions(24)[0]:
+            if r["idle"] > 3 * 3600:
+                continue
+            bind = read_bind(r["session"]) or {}
+            rows.append({
+                "idle_min": r["idle"] / 60,
+                "where": r["slug"],
+                "issue": bind.get("issue") or 0,
+                "error": bind.get("error", ""),
+                "asked": (bind.get("words") or bind.get("title") or "")[:150],
+                "said": " ".join((r.get("text") or "").split())[:150],
+                "session": r["session"],
+            })
+        rows.sort(key=lambda r: r["idle_min"])
+        return rows
+    except Exception:
+        pass
     proj = os.path.join(HOME, ".claude", "projects")
     now = time.time()
     rows = []
@@ -528,6 +585,27 @@ def selftest() -> int:
         check("unknown session has no bind", read_bind("s3"), None)
     finally:
         TICKETS = keep
+
+    #: One observe per process, asserted rather than remembered. This is the recurring one:
+    #: observe.py caches its walk so the tree is read once, and twice now a second loader has
+    #: quietly created a second instance with a second empty cache -- first inside tick.py in the
+    #: morning, then here when the ops page was added. Both times the symptom was a tick that ran
+    #: past its deadline and delivered nothing. `module_from_spec` registers nothing, so nothing
+    #: about the second copy is visible at the call site; this check is what makes it visible.
+    #: The skip is printed, never counted as a pass. A check that quietly succeeds when it could
+    #: not run is the shape that let ten criticals through this estate in 18 hours.
+    apath = os.path.join(HOME, ".claude", "scripts", "aiden", "aiden.py")
+    if not os.path.exists(apath):
+        print("  SKIP one-observe-per-process: %s is not installed" % apath)
+    else:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("aiden_check", apath)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        #: _observe(), not live_rows(). The invariant is which object the two files hold, and
+        #: asking that question must not cost a walk of the transcript tree -- the first version
+        #: of this check called live_rows() and took the selftest past two minutes.
+        check("aiden and the gate share one observe", mod.observe is _observe(), True)
 
     print("selftest: %d/%d passed" % (ok, ok + fail))
     return 1 if fail else 0
