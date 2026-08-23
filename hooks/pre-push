@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Refuse a push that ships a feature the founder cannot see or try.
+
+The founder's rule, in his words: "every new feature needs demo and onboarding
+for founder ... can this be enforced in git ?" This is the yes.
+
+A feature is not code. It is code plus the two things that make it reach a
+person: a demo that shows it working, and an onboarding note that says what he
+needs to know and how to stop it. Shipping the code alone leaves him to work it
+out, which LAW 20 already calls a defect with the same standing as a crash. The
+difference a hook makes is that the defect can no longer be pushed.
+
+WHAT COUNTS AS A FEATURE, mechanically, so nobody has to interpret it:
+
+  1. A commit subject starting `feat:` or `feat(scope):`. Explicit, and the way
+     to opt in deliberately.
+  2. A brand-new top-level directory that the push adds source files to. That is
+     what a new feature looks like in this estate when nobody remembered to
+     write `feat:` -- `aiden/` arrived exactly that way.
+
+WHAT IT DEMANDS. For a feature named X, both files present in the pushed tree:
+
+     docs/demo/X.md         what a person sees when it runs, and what it did
+     docs/onboarding/X.md   what he needs to know, and the one command to stop it
+
+Both must be non-trivial. A file with a heading and nothing under it is a way of
+satisfying a gate without satisfying the founder, so an empty stub is refused
+with the same message as a missing file.
+
+WHAT IT DOES NOT DO. It does not fire on a docs-only push, a fix, a refactor, or
+a new file in a directory that already exists. A gate that fires on everything
+gets `--no-verify`d, and a bypassed gate protects nothing.
+
+Installed per repository with:  git config core.hooksPath scripts/hooks
+"""
+import os
+import re
+import subprocess
+import sys
+
+#: Directories that are not features no matter what lands in them.
+IGNORED_TOP = {
+    "docs", "test", "tests", "spec", ".github", ".git", "vendor", "node_modules",
+    "dist", "build", "assets", "static", "fixtures", "examples", "scripts",
+    "checkpoints", "state", "evidence", "__pycache__", ".venv",
+}
+SOURCE = re.compile(r"\.(py|sh|js|ts|tsx|go|rs|rb|java|cs|swift|c|cc|cpp|h|mjs)$")
+FEAT = re.compile(r"^feat(\([^)]*\))?\s*:\s*(?P<name>[\w.-]+)", re.I)
+#: A body this short is a placeholder, not a demo.
+MIN_BODY_CHARS = 200
+
+
+def git(*args):
+    return subprocess.run(["git", *args], capture_output=True, text=True).stdout
+
+
+def commits(local, remote):
+    """The commits this push would add. An all-zero remote means a new branch."""
+    if remote and set(remote) != {"0"}:
+        rng = f"{remote}..{local}"
+    else:
+        #: A new branch on the remote. Everything not already on some other
+        #: remote branch is new, which is the honest reading of "this push adds".
+        rng = local
+        others = git("rev-list", "--max-count=1", "--all", "--remotes").strip()
+        if others:
+            rng = f"--not --remotes {local}"
+            return [c for c in git("rev-list", local, "--not", "--remotes").split() if c]
+    return [c for c in git("rev-list", rng).split() if c]
+
+
+def features(local, shas):
+    """Every feature name this push introduces, with why it counts.
+
+    Judged against the tip, not against each commit on the way to it. A push
+    that creates a directory in one commit and deletes it in the next ships no
+    feature, and demanding docs for it is the gate asking for a page about
+    something that will not exist. The first version did exactly that and
+    refused its own cleanup commit.
+    """
+    found = {}
+    for sha in shas:
+        subject = git("log", "-1", "--format=%s", sha).strip()
+        m = FEAT.match(subject)
+        if m:
+            found.setdefault(m.group("name"), f"commit {sha[:8]} says `{subject[:60]}`")
+        #: Files this commit ADDED, against its first parent. A new top-level
+        #: directory shows up here as the first source file inside it.
+        added = git("diff-tree", "--no-commit-id", "--name-only", "-r",
+                    "--diff-filter=A", sha).split("\n")
+        for path in added:
+            path = path.strip()
+            if "/" not in path or not SOURCE.search(path):
+                continue
+            top = path.split("/")[0]
+            if top in IGNORED_TOP or top.startswith("."):
+                continue
+            #: New only if the directory did not exist before this commit.
+            before = git("ls-tree", "--name-only", f"{sha}^", top).strip()
+            if before:
+                continue
+            #: And it has to survive to the tip. Gone by then, never shipped.
+            if not git("ls-tree", "--name-only", local, top).strip():
+                continue
+            found.setdefault(top, f"commit {sha[:8]} creates {top}/ with {path}")
+    return found
+
+
+def readable(local, path):
+    body = git("show", f"{local}:{path}")
+    if not body.strip():
+        return None
+    #: Strip headings and blank lines. What is left is what a person would read.
+    prose = "\n".join(l for l in body.splitlines()
+                      if l.strip() and not l.lstrip().startswith("#"))
+    return len(prose)
+
+
+def main():
+    problems = []
+    for line in sys.stdin:
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        _, local, _, remote = parts[:4]
+        if set(local) == {"0"}:            # a branch deletion ships nothing
+            continue
+        for name, why in features(local, commits(local, remote)).items():
+            for kind in ("demo", "onboarding"):
+                path = f"docs/{kind}/{name}.md"
+                n = readable(local, path)
+                if n is None:
+                    problems.append(f"  {path} is missing        ({why})")
+                elif n < MIN_BODY_CHARS:
+                    problems.append(
+                        f"  {path} is a stub, {n} characters of prose, {MIN_BODY_CHARS} is the floor")
+    if not problems:
+        return 0
+    sys.stderr.write(
+        "\npush refused: a feature is shipping without a way for the founder to see it.\n\n"
+        + "\n".join(problems) + """
+
+The rule, and why it is a rule: shipping code that works and leaving a person to
+work out how to use it is shipping a defect. Two files fix it.
+
+  docs/demo/<name>.md         what he sees when it runs, and what it just did
+  docs/onboarding/<name>.md   what he needs to know, and how to turn it off
+
+Write them, amend or add a commit, and push again.
+""")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
