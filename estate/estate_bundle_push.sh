@@ -209,6 +209,42 @@ gplan() {
 find "${ROOTS[@]}" -maxdepth 3 -name .git -print 2>/dev/null | sed 's|/\.git$||' | sort -u \
   > "$WORK/candidates.txt"
 
+#: A repo inside the iCloud container is enumerated and then NOT planned, and the
+#: reason is disk rather than time. iCloud keeps objects dataless, so any command
+#: that walks a repo's history materialises every object it touches onto the local
+#: disk before it can read it. Measured 2026-08-23: `git log --all --name-only` on
+#: the CloudDocs copy of the-introduction-exchange ran 37 minutes and free space on
+#: /System/Volumes/Data fell 6.3G -> 1.9G -> 0.42G while macOS evicted as fast as git
+#: downloaded, with fileproviderd at 39% CPU. Two sessions measured that independently
+#: and agreed. The 25s stall timeout above does not help: each individual call returns,
+#: and the disk fills anyway.
+#:
+#: So these are named, counted and reported UNCOVERED rather than attempted. A silent
+#: drop is the exact lie this script exists to stop, and an attempt that fills the disk
+#: takes the whole machine down with it.
+#:
+#: THE FIX IS THE FOUNDER'S AND IT IS ONE TOGGLE: turn iCloud Drive off for that folder
+#: with "Keep a Copy", which writes the container out as a plain local directory. After
+#: that these repos are ordinary repos and this filter stops matching anything.
+ICLOUD="$HOME/Library/Mobile Documents"
+: > "$WORK/uncovered.txt"
+if [ -s "$WORK/candidates.txt" ]; then
+  grep -F "$ICLOUD" "$WORK/candidates.txt" > "$WORK/uncovered.txt" 2>/dev/null || true
+  grep -vF "$ICLOUD" "$WORK/candidates.txt" > "$WORK/candidates.local" 2>/dev/null || true
+  mv "$WORK/candidates.local" "$WORK/candidates.txt"
+fi
+UNCOVERED_N=$(wc -l < "$WORK/uncovered.txt" | tr -d ' ')
+if [ "${UNCOVERED_N:-0}" -gt 0 ]; then
+  log "UNCOVERED BY DESIGN: $UNCOVERED_N repo(s) live inside the iCloud container and are not bundled."
+  while read -r u; do log "  uncovered: $u"; done < "$WORK/uncovered.txt"
+  log "  reason: walking a dataless repo materialises every object and fills the local disk."
+  log "  fix: iCloud Drive off for that folder with Keep a Copy, then they become ordinary repos."
+  #: Deliberately no alert() here. alert() debounces on one key per script, so an hourly
+  #: informational alert would swallow a genuine RED raised in the same hour. This is a
+  #: standing condition with a one-toggle fix that only the founder can make, so it goes
+  #: in the log and in the summary line, where it is read without masking anything.
+fi
+
 : > "$WORK/plan.tsv"
 seen_common=""
 while read -r d; do
@@ -273,7 +309,7 @@ if [ "$PLANNED" -eq 0 ]; then
     alert "estate_bundle_push: $STALLED_N repo(s) hung git and are NOT backed up:$STALLED_LIST"
     rm -rf "$WORK"; exit 1
   fi
-  log "BUNDLE PUSH GREEN  nothing at risk"; rm -rf "$WORK"; exit 0
+  log "BUNDLE PUSH GREEN  nothing at risk  uncovered_icloud=${UNCOVERED_N:-0}"; rm -rf "$WORK"; exit 0
 fi
 
 if [ "$DRY" = 1 ]; then
@@ -378,6 +414,6 @@ if [ -n "$DENIED_ROOTS" ]; then
   alert "estate_bundle_push: covered $OK repo(s), but$DENIED_ROOTS is not readable by this job, so nothing under it is backed up. macOS TCC hides it from a bootstrapped LaunchAgent. One fix, once: grant Full Disk Access to /bin/bash in System Settings."
   exit 1
 fi
-log "BUNDLE PUSH GREEN  bucket=$R2_BUCKET  repos=$OK  skipped=$SKIPPED  key=bundles/<repo>/latest.bundle  restore=git clone <bundle>"
+log "BUNDLE PUSH GREEN  bucket=$R2_BUCKET  repos=$OK  skipped=$SKIPPED  uncovered_icloud=${UNCOVERED_N:-0}  key=bundles/<repo>/latest.bundle  restore=git clone <bundle>"
 [ "$SKIPPED" -gt 0 ] && exit 2
 exit 0
