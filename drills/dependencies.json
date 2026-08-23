@@ -218,6 +218,18 @@
     "CONSULT_TOKEN": {
       "is": "auth between two local processes on this Mac",
       "dismissed": "local, and it dies with the machine the rebuild drill already covers"
+    },
+    "BLOB_KEY": {
+      "is": "the path of the escrow object inside the R2 bucket, not a credential",
+      "covered_by": "key-escrow-restore"
+    },
+    "ICLOUD_KEY": {
+      "is": "the path of the recovery private key in iCloud Drive; the key it names is what opens the escrow",
+      "covered_by": "key-escrow-restore"
+    },
+    "LOCAL_KEY": {
+      "is": "the path of the same recovery key at ~/.config/estate, the copy a scheduled job can read",
+      "covered_by": "key-escrow-restore"
     }
   }
 }
