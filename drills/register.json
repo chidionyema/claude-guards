@@ -1,110 +1,120 @@
 {
-  "max_age_days_default": 8,
-  "drills": [
-    {
-      "id": "no-anthropic",
-      "what_breaks": "Anthropic goes down, suspends the account, or prices us out, and every agent on this estate stops at once.",
-      "why": "LAW 19: portability outranks everything. The founder called this the single biggest risk to the company's existence on 2026-08-23. The laws were already symlinked into ~/.codex, ~/.gemini and ~/.cursor, so the groundwork for an exit was in place and the exit itself had never once been taken. The drill strips every Anthropic credential from the environment and checks two layers: a model answering at all, and something that can actually edit a file. A chat completion is not a replacement for an agentic coder, so a pass needs one of each.",
-      "cmd": [
-        "/usr/bin/python3",
-        "{HERE}/no_anthropic.py"
-      ],
-      "max_age_days": 2
-    },
-    {
-      "id": "rebuild",
-      "what_breaks": "This Mac dies and the estate has to come back on a new machine.",
-      "why": "LAW 19: a dependency whose exit has never been drilled is not portable, it is a hope.",
-      "cmd": [
-        "/bin/bash",
-        "{HERE}/../rebuild/drill.sh"
-      ],
-      "max_age_days": 8
-    },
-    {
-      "id": "estate-bundle-restore",
-      "what_breaks": "A commit exists only on this Mac and the Mac dies.",
-      "why": "estate_bundle_push.sh already clones each bundle back after uploading it. The drill is that the newest receipt says so and is recent, because a push script that stopped running still leaves yesterday's green receipt behind.",
-      "cmd": [
-        "/usr/bin/python3",
-        "{HERE}/check_bundle_restore.py"
-      ],
-      "max_age_days": 2
-    },
-    {
-      "id": "offsite-backup-restore",
-      "what_breaks": "The prospector data is gone and the offsite copy is the only one left.",
-      "why": "com.prospector.offsite-backup writes to an S3-compatible bucket and exits 0. Nothing had ever read an object back out. LAW 28: clean receipts from a backup that never copied a byte is a lie with a cron schedule. The first run of this drill, 2026-08-23, found that every repository bundle taken since 2026-08-18 was unrestorable: the source checkout had become a shallow clone and `git bundle verify` cannot see that.",
-      "cmd": [
-        "/bin/bash",
-        "-lc",
-        "cd {HOME}/Documents/code/prospector-live && exec .venv/bin/python -m ops.automations.offsite_restore_drill"
-      ],
-      "max_age_days": 3
-    },
-    {
-      "id": "key-escrow-restore",
-      "what_breaks": "This laptop dies and the two age keys die with it, so every encrypted bundle in the offsite bucket is permanently opaque.",
-      "why": "~/.config holds the only copy of both age private keys and of the R2 credentials the offsite backup itself uses, and every backup path deliberately excludes that directory. Measured 2026-08-23: no offsite copy of either key existed anywhere. The escrow splits recovery across two accounts the founder already owns -- ciphertext in R2, the key that opens it in iCloud Drive -- and this drill is the half that proves a new machine could actually use them.",
-      "cmd": [
-        "/usr/bin/python3",
-        "{HERE}/check_key_escrow.py"
-      ],
-      "max_age_days": 8
-    },
-    {
-      "id": "secret-rotation",
-      "what_breaks": "A credential leaks and has to be replaced before anyone can be told it leaked.",
-      "why": "LAW 21: a rotation that has not been proved by a command reads as not done. Nothing here has ever rotated a live credential and then shown the old one failing.",
-      "cmd": null,
-      "todo": "Rotate one low-blast-radius credential end to end: mint, install, prove the new one works, prove the old one now returns 401."
-    },
-    {
-      "id": "telegram-delivery",
-      "what_breaks": "Something breaks at 03:00 and the message never arrives.",
-      "why": "LAW 28: prove the arrival, not the send. The old coordinator fired escalate 18 times and delivered 0 notifications, and nothing caught it for four days. The drill authenticates the bot (getMe) and proves the route to the founder's chat (sendChatAction), which fail differently: a revoked token kills the first, a wrong or blocked chat id kills the second. It deliberately does NOT read messages back: that needs getUpdates, and a second getUpdates consumer is the exact trap that made the gateway deaf for 31.5 hours on 2026-08-22 (one token, one poller).",
-      "cmd": [
-        "/usr/bin/python3",
-        "{HERE}/check_telegram_delivery.py"
-      ],
-      "max_age_days": 2
-    },
-    {
-      "id": "windows-rebuild",
-      "what_breaks": "The laptop dies and the replacement is a Windows machine.",
-      "why": "The rebuild drill restores this estate into a throwaway home on THIS operating system. It has never once been run on Windows, so the honest state of a Windows rebuild is unproven, not hard. jobs/render_windows.py turns all 29 jobs into Task Scheduler XML and every one of them loses something on the way.",
-      "cmd": null,
-      "todo": "Render every job to Task Scheduler XML, import it on a real Windows host or a Windows container, start one job, and read its output back. Until a job has actually run there, the renderer is a file format exercise."
-    },
-    {
-      "id": "github-gone",
-      "what_breaks": "GitHub suspends the account, goes down for a day, or the org is deleted.",
-      "why": "Every recovery path this estate has starts with `git clone` from github.com. The offsite bundles in R2 do not close that hole: estate_bundle_push.sh:25 says so itself -- for a repo that HAS a remote it uploads only `--all --not --remotes`, so restoring one of those bundles needs GitHub as well as the bundle. That is the right trade on cost and the wrong one to leave unmeasured, because the day it matters is the day GitHub is the thing that is gone. LAW 19: a dependency whose exit has never been drilled is not portable, it is a hope.",
-      "cmd": null,
-      "todo": "With github.com unreachable, rebuild claude-estate and claude-guards from the R2 bundles alone into a throwaway home, and run the existing rebuild assertions against the result. If that cannot pass, the fix is a full-history bundle for the repos that have a remote, not a bigger comment.",
-      "max_age_days": 30
-    },
-    {
-      "id": "cloudflare-gone",
-      "what_breaks": "Cloudflare suspends the account or the Workers platform goes away.",
-      "why": "survival-stack does not run ON Cloudflare, it IS a Cloudflare Workers application: the control plane is a Worker, its state is in R2 and KV, and its DNS is Cloudflare's. api.cloudflare.com, dash.cloudflare.com, the workers.dev hostnames and the r2.cloudflarestorage.com buckets are one vendor wearing four names. The estate's offsite backups are in the same account, so a suspension takes the product and the recovery path together. Nothing has ever been exported from it.",
-      "cmd": null,
-      "max_age_days": 30
-    },
-    {
-      "id": "stripe-gone",
-      "what_breaks": "Stripe freezes the account or terminates the relationship.",
-      "why": "api.stripe.com is the only route money takes into this company. A freeze does not degrade the product, it stops revenue while the product keeps serving, which is the failure that looks fine on every dashboard. The drill is whether a second processor can be switched on and whether the customer records needed to do it live anywhere but Stripe.",
-      "cmd": null,
-      "max_age_days": 90
-    }
-  ],
-  "retired": [
-    {
-      "id": "fly-rollback",
-      "retired_on": "2026-08-23",
-      "why": "Founder, 2026-08-23: the estate is moving off Fly, so a drill for rolling back a Fly deploy would be proving a recovery path we are leaving. Recorded here rather than only in git history so nobody adds it back from the same reasoning that added it the first time.",
-      "still_uncovered": "A bad deploy taking production down is still a real loss mode. It is not replaced by a vague entry, because a drill that names no platform cannot be run and would read as coverage. It goes back on this register the day the replacement platform is chosen, named for that platform."
-    }
-  ]
+ "max_age_days_default": 8,
+ "drills": [
+  {
+   "id": "no-anthropic",
+   "what_breaks": "Anthropic goes down, suspends the account, or prices us out, and every agent on this estate stops at once.",
+   "why": "LAW 19: portability outranks everything. The founder called this the single biggest risk to the company's existence on 2026-08-23. The laws were already symlinked into ~/.codex, ~/.gemini and ~/.cursor, so the groundwork for an exit was in place and the exit itself had never once been taken. The drill strips every Anthropic credential from the environment and checks two layers: a model answering at all, and something that can actually edit a file. A chat completion is not a replacement for an agentic coder, so a pass needs one of each.",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/no_anthropic.py"
+   ],
+   "max_age_days": 2
+  },
+  {
+   "id": "rebuild",
+   "what_breaks": "This Mac dies and the estate has to come back on a new machine.",
+   "why": "LAW 19: a dependency whose exit has never been drilled is not portable, it is a hope.",
+   "cmd": [
+    "/bin/bash",
+    "{HERE}/../rebuild/drill.sh"
+   ],
+   "max_age_days": 8
+  },
+  {
+   "id": "estate-bundle-restore",
+   "what_breaks": "A commit exists only on this Mac and the Mac dies.",
+   "why": "estate_bundle_push.sh already clones each bundle back after uploading it. The drill is that the newest receipt says so and is recent, because a push script that stopped running still leaves yesterday's green receipt behind.",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/check_bundle_restore.py"
+   ],
+   "max_age_days": 2
+  },
+  {
+   "id": "offsite-backup-restore",
+   "what_breaks": "The prospector data is gone and the offsite copy is the only one left.",
+   "why": "com.prospector.offsite-backup writes to an S3-compatible bucket and exits 0. Nothing had ever read an object back out. LAW 28: clean receipts from a backup that never copied a byte is a lie with a cron schedule. The first run of this drill, 2026-08-23, found that every repository bundle taken since 2026-08-18 was unrestorable: the source checkout had become a shallow clone and `git bundle verify` cannot see that.",
+   "cmd": [
+    "/bin/bash",
+    "-lc",
+    "cd {HOME}/Documents/code/prospector-live && exec .venv/bin/python -m ops.automations.offsite_restore_drill"
+   ],
+   "max_age_days": 3
+  },
+  {
+   "id": "key-escrow-restore",
+   "what_breaks": "This laptop dies and the two age keys die with it, so every encrypted bundle in the offsite bucket is permanently opaque.",
+   "why": "~/.config holds the only copy of both age private keys and of the R2 credentials the offsite backup itself uses, and every backup path deliberately excludes that directory. Measured 2026-08-23: no offsite copy of either key existed anywhere. The escrow splits recovery across two accounts the founder already owns -- ciphertext in R2, the key that opens it in iCloud Drive -- and this drill is the half that proves a new machine could actually use them.",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/check_key_escrow.py"
+   ],
+   "max_age_days": 8
+  },
+  {
+   "id": "secret-rotation",
+   "what_breaks": "A credential leaks and has to be replaced before anyone can be told it leaked.",
+   "why": "LAW 21: a rotation that has not been proved by a command reads as not done. Nothing here has ever rotated a live credential and then shown the old one failing.",
+   "cmd": null,
+   "todo": "Rotate one low-blast-radius credential end to end: mint, install, prove the new one works, prove the old one now returns 401."
+  },
+  {
+   "id": "telegram-delivery",
+   "what_breaks": "Something breaks at 03:00 and the message never arrives.",
+   "why": "LAW 28: prove the arrival, not the send. The old coordinator fired escalate 18 times and delivered 0 notifications, and nothing caught it for four days. The drill authenticates the bot (getMe) and proves the route to the founder's chat (sendChatAction), which fail differently: a revoked token kills the first, a wrong or blocked chat id kills the second. It deliberately does NOT read messages back: that needs getUpdates, and a second getUpdates consumer is the exact trap that made the gateway deaf for 31.5 hours on 2026-08-22 (one token, one poller).",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/check_telegram_delivery.py"
+   ],
+   "max_age_days": 2
+  },
+  {
+   "id": "windows-rebuild",
+   "what_breaks": "The laptop dies and the replacement is a Windows machine.",
+   "why": "The rebuild drill restores this estate into a throwaway home on THIS operating system. It has never once been run on Windows, so the honest state of a Windows rebuild is unproven, not hard. jobs/render_windows.py turns all 29 jobs into Task Scheduler XML and every one of them loses something on the way.",
+   "cmd": null,
+   "todo": "Render every job to Task Scheduler XML, import it on a real Windows host or a Windows container, start one job, and read its output back. Until a job has actually run there, the renderer is a file format exercise."
+  },
+  {
+   "id": "github-gone",
+   "what_breaks": "GitHub suspends the account, goes down for a day, or the org is deleted.",
+   "why": "Every recovery path this estate has starts with `git clone` from github.com. The offsite bundles in R2 do not close that hole: estate_bundle_push.sh:25 says so itself -- for a repo that HAS a remote it uploads only `--all --not --remotes`, so restoring one of those bundles needs GitHub as well as the bundle. That is the right trade on cost and the wrong one to leave unmeasured, because the day it matters is the day GitHub is the thing that is gone. LAW 19: a dependency whose exit has never been drilled is not portable, it is a hope.",
+   "cmd": null,
+   "todo": "With github.com unreachable, rebuild claude-estate and claude-guards from the R2 bundles alone into a throwaway home, and run the existing rebuild assertions against the result. If that cannot pass, the fix is a full-history bundle for the repos that have a remote, not a bigger comment.",
+   "max_age_days": 30
+  },
+  {
+   "id": "cloudflare-gone",
+   "what_breaks": "Cloudflare suspends the account or the Workers platform goes away.",
+   "why": "survival-stack does not run ON Cloudflare, it IS a Cloudflare Workers application: the control plane is a Worker, its state is in R2 and KV, and its DNS is Cloudflare's. api.cloudflare.com, dash.cloudflare.com, the workers.dev hostnames and the r2.cloudflarestorage.com buckets are one vendor wearing four names. The estate's offsite backups are in the same account, so a suspension takes the product and the recovery path together. Nothing has ever been exported from it.",
+   "cmd": null,
+   "max_age_days": 30
+  },
+  {
+   "id": "stripe-gone",
+   "what_breaks": "Stripe freezes the account or terminates the relationship.",
+   "why": "api.stripe.com is the only route money takes into this company. A freeze does not degrade the product, it stops revenue while the product keeps serving, which is the failure that looks fine on every dashboard. The drill is whether a second processor can be switched on and whether the customer records needed to do it live anywhere but Stripe.",
+   "cmd": null,
+   "max_age_days": 90
+  },
+  {
+   "id": "db-integrity",
+   "what_breaks": "A database quietly loses its indexes, every backup faithfully copies the damage, and the first person to find out is whoever runs the restore.",
+   "why": "Found on 2026-08-23: Documents/code/prospector/store/prospector.db was missing eight index entries across four indexes, rows 3604-3608 of 3608, and had been since at least the 21st. Nothing on this Mac would ever have said so. PRAGMA quick_check returns ok on that exact file, because it skips index content by design, so the cheap check passed while the real one failed. Missing index entries are recoverable from the table data, so this drill repairs those itself and says what it did; anything worse it refuses to touch and reports, because rebuilding indexes over a damaged page hides the damage.",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/check_db_integrity.py"
+   ],
+   "max_age_days": 1
+  }
+ ],
+ "retired": [
+  {
+   "id": "fly-rollback",
+   "retired_on": "2026-08-23",
+   "why": "Founder, 2026-08-23: the estate is moving off Fly, so a drill for rolling back a Fly deploy would be proving a recovery path we are leaving. Recorded here rather than only in git history so nobody adds it back from the same reasoning that added it the first time.",
+   "still_uncovered": "A bad deploy taking production down is still a real loss mode. It is not replaced by a vague entry, because a drill that names no platform cannot be run and would read as coverage. It goes back on this register the day the replacement platform is chosen, named for that platform."
+  }
+ ]
 }
