@@ -30,6 +30,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 REGISTER = os.path.join(HERE, "register.json")
 STATE = os.path.expanduser("~/.claude/state/drills.jsonl")
+LOGS = os.path.expanduser("~/.claude/state/drills")
 TIMEOUT = 900
 
 
@@ -109,6 +110,15 @@ def run_one(d):
            "iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
            "id": d["id"], "status": "PASS" if rc == 0 else "FAIL",
            "rc": rc, "seconds": round(time.time() - t0, 1), "note": note}
+    # A failure that keeps only its last line cannot be attributed to a step
+    # (LAW 29), so keep the whole run and point the record at it.
+    if rc != 0:
+        os.makedirs(LOGS, exist_ok=True)
+        log = os.path.join(LOGS, "%s-%s.log" % (d["id"], rec["iso"].replace(":", "")))
+        with open(log, "w") as fh:
+            fh.write("$ %s\nrc=%s  %ss\n\n%s\n" % (
+                " ".join(cmd), rc, rec["seconds"], "\n".join(tail)))
+        rec["log"] = log
     os.makedirs(os.path.dirname(STATE), exist_ok=True)
     with open(STATE, "a") as fh:
         fh.write(json.dumps(rec) + "\n")
@@ -152,6 +162,8 @@ def main():
             return 2
         rec = run_one(d)
         print(f"{rec['id']}  {rec['status']}  rc={rec['rc']}  {rec['seconds']}s  {rec['note']}")
+        if rec.get("log"):
+            print(f"  what actually happened: {rec['log']}")
         return 0 if rec["status"] == "PASS" else 1
 
     if a.all:
@@ -160,10 +172,13 @@ def main():
         failed = [r for r in results if r["status"] == "FAIL"]
         for r in results:
             print(f"  {r['id']:<22} {r['status']:<6} rc={r['rc']:<4} {r['seconds']}s  {r['note'][:80]}")
+            if r.get("log"):
+                print(f"  {'':22} {'':6} {r['log']}")
         if failed:
             post("drills-failed",
                  f"{len(failed)} of {len(results)} recovery drills failed: "
-                 + "; ".join(f"{r['id']} ({r['note'][:80]})" for r in failed)
+                 + "; ".join(f"{r['id']} ({r['note'][:80]}) -> {r.get('log','no log')}"
+                              for r in failed)
                  + f". {len(unwritten)} more recovery paths have no drill at all: "
                  + ", ".join(unwritten) + ".")
         else:
