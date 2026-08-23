@@ -29,6 +29,26 @@ from tracked import SECRET  # noqa: E402
 SELF = os.path.realpath(tracked.__file__)
 
 
+# A scanner's source contains the shapes it scans for. tracked.py was exempted by
+# path, which fixed that one file and left the class open: estate_audit.py carries
+# the same patterns and this gate refused it too. A match is a PATTERN, not a value,
+# when the line it sits on is regex source -- a character class, a quantifier, or an
+# re.compile call. No real credential contains "[A-Za-z" or "{20,}".
+#
+# LIMITATION, written down rather than discovered later: a real secret pasted onto a
+# line that also holds regex syntax would pass. That is a narrow hole and the trade is
+# deliberate -- a gate that refuses every scanner in the estate is a gate somebody
+# turns off with --no-verify, which opens the whole thing.
+PATTERN_MARKS = ("[A-Za-z", "[0-9", "[a-z", "re.compile", "\\b", "{20,", "{30,", "{34,", "{40,", "{50,")
+
+
+def is_pattern(text: str, m) -> bool:
+    start = text.rfind("\n", 0, m.start()) + 1
+    end = text.find("\n", m.end())
+    line = text[start:end if end >= 0 else len(text)]
+    return any(k in line for k in PATTERN_MARKS)
+
+
 def staged_paths():
     out = subprocess.run(
         ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM", "-z"],
@@ -81,7 +101,7 @@ def main():
         if b"\0" in blob:
             continue  # binary, not a config file
         text = blob.decode("utf-8", "replace")
-        m = SECRET.search(text)
+        m = next((x for x in SECRET.finditer(text) if not is_pattern(text, x)), None)
         if m:
             # Report WHERE, never WHAT. Any slice of the match is a slice of the
             # secret -- `sk-[A-Za-z0-9]{20,}` truncated to 8 chars is five real
