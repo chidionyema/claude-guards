@@ -664,3 +664,43 @@ correlation; and both can be true and leave no trace a later session can query. 
 
 Board: crew #13 (the four stopped services and the escalate evidence), crew #23 (the review, and
 the research syntheses in full).
+
+---
+
+# LAW 24 — IF IT IS LOAD-BEARING, IT IS IN GIT
+
+**2026-08-23.** Founder, on being told that a plist fix existed only in two agent transcripts:
+"this should never happen". Then: "veryting that needs to be in git needs to be in git LAW".
+
+The find was small and the hole it exposed was not. `ai.estate.kimi-bridge.plist` carried a double
+hyphen inside an XML comment, which XML forbids. `plutil -lint` called it healthy and launchd loaded
+the job, so nothing looked wrong. Every Python tool that opened it threw and skipped that job in
+silence. A peer session found it, fixed it in place, and the only record of the change was a chat
+transcript.
+
+Then the same question was asked of everything else. `~/Library/LaunchAgents` held 32 scheduled jobs
+and was in no repository. Neither was `~/.claude/settings.json`, which wires the hooks, the model
+routing and the permissions for every session. Neither was `~/AGENTS.md`, the laws themselves. The
+file that says how to work could be edited by any agent on this machine with nothing to review
+afterwards, and nobody would know what it said the day before.
+
+Measured before committing, because a directory nobody has reviewed is exactly where a credential
+sits unnoticed: 23 credential-shaped matches across the 32 plists, and all 23 were filesystem paths.
+Zero in the laws, zero in the incidents file, zero in settings.json.
+
+Five of the jobs were deleted the same turn, after being committed first. All five were already
+dead: two with empty logs untouched for 17 and 23 days, one repeating a clock error until it
+stopped, one that never had a log file at all, one stopped two days earlier on a missing database
+table. Committing them first is what made deleting them safe.
+
+**The class is: a file can be load-bearing and unreviewable at the same time, and nothing about it
+looks wrong.** The job still runs. The setting still applies. The laws still load. Nothing fails, so
+nothing prompts the question, and the absence is only ever noticed by someone going looking. Source
+code gets a repository because it is obviously code. A plist, a settings file and a rules document
+run this estate just as hard and got nothing.
+
+The guard is `~/.claude/scripts/tracked.py` against the manifest in `tracked.json`. It exits 1 when
+a tracked file and its committed copy differ. It replaced a single-directory version rather than
+sitting next to it, because two implementations of one check is the failure in LAW 3. Proved in both
+directions: it reported the five deletions before they were staged, and it reported a one-line change
+to the committed copy of the laws.
