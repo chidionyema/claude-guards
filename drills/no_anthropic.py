@@ -231,8 +231,13 @@ def agents():
                      "--message", TASK, "config.toml"],
                     {keyvar: key}))
     out.append(("cursor-agent", ["cursor-agent", "-p", "-f", TASK], None))
-    out.append(("gemini-cli", ["gemini", "-y", "-p", TASK],
-                {"GEMINI_CLI_TRUSTED_FOLDER": "true"}))
+    #: --skip-trust, and GEMINI_DEFAULT_AUTH_TYPE pushed onto the free OAuth
+    #: tier. The API key route is dead: Google says its prepayment credits are
+    #: depleted and the CLI answers 429. The first version of this drill passed
+    #: GEMINI_CLI_TRUSTED_FOLDER, which is not the name of anything, so it
+    #: reported a trust refusal as if it were the whole story.
+    out.append(("gemini-cli", ["gemini", "-y", "--skip-trust", "-p", TASK],
+                {"GEMINI_DEFAULT_AUTH_TYPE": "oauth-personal", "GEMINI_API_KEY": ""}))
     return out
 
 
