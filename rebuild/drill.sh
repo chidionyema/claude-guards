@@ -13,10 +13,12 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 D="$(mktemp -d "${TMPDIR:-/tmp}/estate-drill-XXXXXX")"
 trap 'rm -rf "$D"' EXIT
 FAIL=0
+FAILED=""
 
 check() {  # check <description> <expected> <actual>
   if [ "$2" = "$3" ]; then printf '  ok    %s (%s)\n' "$1" "$3"
-  else printf '  FAIL  %s: expected %s, got %s\n' "$1" "$2" "$3"; FAIL=1; fi
+  else printf '  FAIL  %s: expected %s, got %s\n' "$1" "$2" "$3"
+       FAILED="$FAILED; $1 (expected $2, got $3)"; FAIL=1; fi
 }
 
 OUT="$(bash "$HERE/bootstrap.sh" --into "$D" 2>&1)" || {
@@ -51,7 +53,9 @@ board() {
 
 if [ "$FAIL" != 0 ]; then
   echo; echo "DRILL FAILED"
-  board drill-failed "The rebuild drill failed. The estate cannot currently be rebuilt from its own repositories. Run scripts/rebuild/drill.sh to see which assertion broke. LAW 19: the exit is the leverage, and it is down."
+  # Name the broken assertion in the message. A board line that says "go and
+  # run the thing" makes the reader do the work the instrument was for.
+  board drill-failed "The estate cannot be rebuilt from its own repositories right now. What broke:${FAILED#; }. LAW 19: the exit is the leverage and it is down."
   exit 1
 fi
 echo; echo "DRILL PASSED"
