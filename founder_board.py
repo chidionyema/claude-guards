@@ -762,11 +762,30 @@ def _ago(epoch: float) -> str:
     return f"{m}m ago" if m < 90 else f"{m // 60}h ago"
 
 
-def _transcripts(max_age_s: float) -> list[tuple[str, float]]:
-    """Every session transcript touched inside the window, newest first."""
+#: Filled on the first walk and reused. The board is a single-shot generator, so
+#: a process-lifetime cache cannot go stale within one page.
+_TRANSCRIPTS: "list[tuple[str, float]] | None" = None
+
+
+def _walk_transcripts() -> list[tuple[str, float]]:
+    """Every session transcript on this machine, newest first, walked once.
+
+    Profiled at 385s for one page, 126s of it here: two callers each walked
+    ~/.claude/projects and this machine holds enough transcripts to make that
+    162,472 stat calls, 94 seconds of pure filesystem. Both callers want the
+    same list at different ages, so walk once and let them filter.
+
+    The subagent test also moved above the stat. It was rejecting the path after
+    paying for it, which is the cheapest kind of waste to find and fix.
+    """
+    global _TRANSCRIPTS
+    if _TRANSCRIPTS is not None:
+        return _TRANSCRIPTS
     root = os.path.join(HOME, ".claude", "projects")
-    now, out = time.time(), []
+    out = []
     for dirpath, _dirs, files in os.walk(root):
+        if "subagent" in dirpath:
+            continue              # an agent's brief to another agent is not the founder talking
         for f in files:
             if not f.endswith(".jsonl"):
                 continue
@@ -775,12 +794,16 @@ def _transcripts(max_age_s: float) -> list[tuple[str, float]]:
                 st = os.stat(path)
             except OSError:
                 continue
-            if "subagent" in dirpath:
-                continue          # an agent's brief to another agent is not the founder talking
-            if now - st.st_mtime <= max_age_s:
-                out.append((path, st.st_mtime))
+            out.append((path, st.st_mtime))
     out.sort(key=lambda t: -t[1])
+    _TRANSCRIPTS = out
     return out
+
+
+def _transcripts(max_age_s: float) -> list[tuple[str, float]]:
+    """Every session transcript touched inside the window, newest first."""
+    now = time.time()
+    return [t for t in _walk_transcripts() if now - t[1] <= max_age_s]
 
 
 def _founder_messages(path: str) -> list[tuple[float, str]]:
