@@ -128,6 +128,21 @@ def readable(local, path):
     return len(prose)
 
 
+def branch_of(local_ref):
+    """The branch name a local ref stands for.
+
+    `git push origin HEAD` hands the hook the literal string HEAD, not the ref
+    it points at. Splitting that on "/" yields "HEAD", so a push of main made
+    that way missed the TRUNK exemption below and LAW 22 went looking for a
+    pull request called HEAD. Ask git what HEAD is instead of guessing.
+    """
+    if local_ref == "HEAD":
+        return git("symbolic-ref", "--short", "-q", "HEAD").strip() or "HEAD"
+    #: Strip the refs/heads/ prefix only. Splitting on the last slash turned
+    #: feature/x into x, which named the wrong thing in the refusal message.
+    return local_ref[len("refs/heads/"):] if local_ref.startswith("refs/heads/") else local_ref
+
+
 def stale(local_ref, local_sha, shas):
     """LAW 7: refuse a branch that has not been refreshed on main.
 
@@ -143,7 +158,7 @@ def stale(local_ref, local_sha, shas):
 
     Never fires on main itself: pushing trunk IS the integration.
     """
-    branch = local_ref.rsplit("/", 1)[-1]
+    branch = branch_of(local_ref)
     if branch in TRUNK:
         return None
     if any(STALE_OK.search(git("show", "-s", "--format=%B", c)) for c in shas):
@@ -176,7 +191,7 @@ def evidence(local_ref, shas):
     checker missing. A gate that blocks a push because a network call failed has
     stopped the estate to enforce a screenshot.
     """
-    branch = local_ref.rsplit("/", 1)[-1]
+    branch = branch_of(local_ref)
     if branch in TRUNK:
         return None
     if any(EVIDENCE_OK.search(git("show", "-s", "--format=%B", c)) for c in shas):
