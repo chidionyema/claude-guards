@@ -34,6 +34,7 @@ from __future__ import annotations
 import argparse
 import collections
 import html
+import calendar
 import json
 import os
 import re
@@ -600,6 +601,50 @@ def _advertises_selftest(tree: "ast.AST") -> bool:
     return False
 
 
+def _laws_enforced() -> Row:
+    """How many of the laws a machine actually enforces (LAW 28).
+
+    The laws are prose, and prose stops nothing. Until this row existed the
+    answer to "is the estate following its own rules" was whatever the last
+    agent asserted. Now it is a number, and the number came out worse than
+    anyone claimed: of the 17 laws a machine can decide, 6 are enforced.
+
+    Reads what the scheduled probe wrote rather than running it here, for the
+    same reason as the in-git row: reading a file can tell PASS from NOT RUN,
+    and running a probe inside page generation cannot.
+    """
+    state = os.path.expanduser("~/.claude/state/law-enforcement.json")
+    label = "Laws a machine enforces"
+    cmd = "python3 ~/dev/code/crew/science/law_enforcement.py"
+    try:
+        with open(state) as f:
+            d = json.load(f)
+    except (OSError, ValueError) as e:
+        return _unknown(label, f"the probe has never written {state}: {e}", cmd)
+
+    try:
+        # calendar.timegm, not time.mktime + time.timezone: time.timezone is the
+        # standard-time offset and ignores DST, so under BST the age came out an
+        # hour too old and a fresh file could read as a stopped job.
+        age_h = (time.time() - calendar.timegm(time.strptime(
+            d["generated"], "%Y-%m-%dT%H:%M:%SZ"))) / 3600.0
+    except (KeyError, ValueError):
+        return _unknown(label, "the probe wrote no readable timestamp", cmd)
+    #: Six missed hourly runs. The number on screen describes a world that has
+    #: moved on, and a stale number reads as a current one.
+    if age_h > 6:
+        return _unknown(label, "last measured %.1fh ago, the hourly job has stopped" % age_h, cmd)
+
+    mech, gap = d.get("mechanical") or [], d.get("gap") or []
+    if not mech:
+        return _unknown(label, "the probe found no mechanical laws, which cannot be right", cmd)
+    enforced = len(mech) - len(gap)
+    detail = ("every law a machine can decide is enforced" if not gap else
+              "unenforced: " + ", ".join("LAW %s" % g["id"] for g in gap[:8]))
+    return Row(GOOD if not gap else BAD, label,
+               "%d of %d" % (enforced, len(mech)), detail, cmd)
+
+
 def collect_hooks_and_guards() -> list[Row]:
     """The guards are the estate's immune system, and NOTHING was watching them.
 
@@ -674,6 +719,7 @@ def collect_hooks_and_guards() -> list[Row]:
                     (f"{data_only} more name --selftest in data, not as an offer" if data_only
                      else ""),
                     f"rg -l -- --selftest {SCRIPTS}/*.py"))
+    rows.append(_laws_enforced())
     return rows
 
 
