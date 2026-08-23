@@ -27,6 +27,7 @@ dependency arrives and nobody notices at all, which is the gap that produced 33
 hosts and 19 credential names that had never once been listed in one place.
 """
 import argparse
+import fnmatch
 import json
 import os
 import re
@@ -34,38 +35,69 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.dirname(HERE)
+GUARDS = os.path.dirname(HERE)          # the claude-guards checkout this file lives in
+ROOT = GUARDS
 DEPS = os.path.join(HERE, "dependencies.json")
 REGISTER = os.path.join(HERE, "register.json")
 
 HOST = re.compile(rb"https?://([a-zA-Z0-9.-]+\.[a-z]{2,})")
 CRED = re.compile(rb"\b([A-Z][A-Z0-9]*_(?:API_KEY|TOKEN|SECRET|KEY|ACCOUNT_ID|PASSWORD))\b")
 SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv"}
-# This file names every host and credential in the estate by design, and
-# dependencies.json is the answer key. Reading either as evidence would make the
-# audit pass by quoting itself.
-SKIP_FILES = {"audit.py", "dependencies.json"}
+BINARY = (".pyc", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".gz",
+          ".zip", ".tar", ".woff", ".woff2", ".ttf", ".so", ".dylib")
 
 
-def discover():
-    hosts, creds = set(), set()
-    for dirpath, dirnames, filenames in os.walk(ROOT):
+def discover(root, deps_path, exclude):
+    """Every host and credential name in `root`, minus what cannot be evidence.
+
+    Three things are never read, and each for a different reason. The auditor's
+    own checkout, because a file whose job is to name every host names every
+    host. The answer key, because a check that reads its own answers passes by
+    quoting itself. And whatever the answer key's `scan.exclude` names, because
+    a repository can hold records as well as code -- claude-estate tracks 1586
+    conversation transcripts, and a URL somebody pasted into one is not a vendor
+    this company took on.
+
+    That last one is also the way this gate would be neutered: exclude the
+    directory the new vendor landed in and the check goes green. So the count it
+    removed is printed on every run, in the pull request, where a person reading
+    the check sees the number grow.
+    """
+    hosts, creds, skipped = set(), set(), 0
+    root = os.path.abspath(root)
+    deps_path = os.path.abspath(deps_path)
+    # When another repository is being audited, the auditor rides along as a
+    # checkout inside that repository's workspace. Its own tree is not that
+    # repository's dependencies. When claude-guards audits itself, root IS the
+    # guards checkout and there is nothing to subtract.
+    riding_along = GUARDS != root and GUARDS.startswith(root + os.sep)
+    for dirpath, dirnames, filenames in os.walk(root):
+        here = os.path.abspath(dirpath)
+        if riding_along and (here == GUARDS or here.startswith(GUARDS + os.sep)):
+            dirnames[:] = []
+            continue
         dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
         for fn in filenames:
-            if fn in SKIP_FILES or fn.endswith((".pyc", ".png", ".jpg", ".gz", ".zip")):
+            full = os.path.join(dirpath, fn)
+            rel = os.path.relpath(full, root)
+            if full == deps_path or fn == "audit.py" or fn.endswith(BINARY):
+                continue
+            if any(fnmatch.fnmatch(rel, pat) or rel.startswith(pat.rstrip("/") + "/")
+                   for pat in exclude):
+                skipped += 1
                 continue
             try:
-                with open(os.path.join(dirpath, fn), "rb") as fh:
+                with open(full, "rb") as fh:
                     blob = fh.read(2_000_000)
             except OSError:
                 continue
             hosts.update(m.decode() for m in HOST.findall(blob))
             creds.update(m.decode() for m in CRED.findall(blob))
-    return hosts, creds
+    return hosts, creds, skipped
 
 
-def drill_ids():
-    reg = json.load(open(REGISTER))
+def drill_ids(register):
+    reg = json.load(open(register))
     live = {d["id"] for d in reg["drills"]}
     return live, {d["id"]: bool(d.get("cmd")) for d in reg["drills"]}
 
@@ -89,44 +121,75 @@ def check(kind, found, table, live):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description="Every dependency is drilled or dismissed.")
     ap.add_argument("--ci", action="store_true",
                     help="tree only, no network, no board post; the pull request gate")
+    ap.add_argument("--root", default=ROOT,
+                    help="the tree to read (default: the claude-guards checkout this file lives in)")
+    ap.add_argument("--deps", default=DEPS,
+                    help="the answer key for that tree (default: drills/dependencies.json)")
+    ap.add_argument("--register", default=REGISTER,
+                    help="the drill register every covered_by must name (default: drills/register.json)")
+    ap.add_argument("--list", action="store_true",
+                    help="print what is in the tree and exit 0; for writing an answer key")
     a = ap.parse_args()
 
-    hosts, creds = discover()
-    table = json.load(open(DEPS))
-    live, written = drill_ids()
+    if not os.path.exists(a.deps):
+        # A missing answer key is the one failure that must not read as clean.
+        # The repository has dependencies whether or not anybody wrote them down.
+        if not a.list:
+            print(f"no answer key at {a.deps}", file=sys.stderr)
+            print("Every repository that runs this gate carries one. Write it with --list.",
+                  file=sys.stderr)
+            return 1
+        table = {"scan": {"exclude": []}, "hosts": {}, "credentials": {}}
+    else:
+        table = json.load(open(a.deps))
+    exclude = table.get("scan", {}).get("exclude", [])
 
+    hosts, creds, skipped = discover(a.root, a.deps, exclude)
+
+    if a.list:
+        for h in sorted(hosts):
+            print("host       " + h)
+        for c in sorted(creds):
+            print("credential " + c)
+        return 0
+
+    live, written = drill_ids(a.register)
     problems = ([("host " + n, w) for n, w in check("host", hosts, table["hosts"], live)]
                 + [("credential " + n, w) for n, w in check("credential", creds, table["credentials"], live)])
 
-    covered = [n for n, e in list(table["hosts"].items()) + list(table["credentials"].items())
-               if e.get("covered_by")]
+    entries = list(table["hosts"].items()) + list(table["credentials"].items())
+    covered = [n for n, e in entries if e.get("covered_by")]
     # A dependency pointing at a drill nobody has written is covered on paper only.
-    onpaper = sorted({e["covered_by"] for e in list(table["hosts"].values()) + list(table["credentials"].values())
+    onpaper = sorted({e["covered_by"] for _, e in entries
                       if e.get("covered_by") and not written.get(e["covered_by"], False)})
 
-    print(f"{len(hosts)} hosts and {len(creds)} credential names in the tree")
+    print(f"{os.path.basename(os.path.abspath(a.root))}: "
+          f"{len(hosts)} hosts and {len(creds)} credential names in the tree")
     print(f"{len(covered)} point at a drill, {len(hosts) + len(creds) - len(covered)} are dismissed with a reason")
+    if exclude:
+        # Printed every run, not only when it changes: this line is how a person
+        # reading the check sees the gate being narrowed.
+        print(f"{skipped} files not read, because the answer key excludes: {', '.join(exclude)}")
     if onpaper:
         print("\ncovered on paper only, because these drills are NOT WRITTEN:")
         for d in onpaper:
-            names = [n for n, e in list(table["hosts"].items()) + list(table["credentials"].items())
-                     if e.get("covered_by") == d]
+            names = [n for n, e in entries if e.get("covered_by") == d]
             print(f"  {d:<24} {len(names)} dependencies rest on it: {', '.join(names[:5])}")
 
     if problems:
         print(f"\n{len(problems)} unclassified:")
         for n, w in problems:
             print(f"  {n}: {w}")
-        print("\nAdd each to drills/dependencies.json with covered_by or dismissed.")
+        print(f"\nAdd each to {a.deps} with covered_by or dismissed.")
         return 1
 
     print("\nnothing unclassified")
     if not a.ci:
         try:
-            sys.path.insert(0, ROOT)
+            sys.path.insert(0, GUARDS)
             import tracked
             tracked.board("dependency-audit",
                           f"Dependency audit: {len(hosts)} hosts and {len(creds)} credential names, "
