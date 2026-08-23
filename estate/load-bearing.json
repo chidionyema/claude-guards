@@ -26,6 +26,10 @@
       "why": "the skills sessions invoke by name"
     },
     {
+      "path": "~/.claude/projects/-Users-chidionyema/memory",
+      "why": "what the estate has learned; injected into every session, so losing it costs every agent the same week twice (LAW 30)"
+    },
+    {
       "path": "~/.claude/scripts/tracked.json",
       "why": "the manifest this guard reads"
     },
