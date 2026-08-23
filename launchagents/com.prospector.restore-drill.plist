@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>/Users/chidionyema</string>
+		<key>PATH</key>
+		<string>/Users/chidionyema/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+		<key>PROSPECTOR_STORE_DIR</key>
+		<string>/Users/chidionyema/Documents/code/prospector/store</string>
+	</dict>
+	<key>Label</key>
+	<string>com.prospector.restore-drill</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/chidionyema/Documents/code/prospector-live/.venv/bin/python</string>
+		<string>/Users/chidionyema/.hermes/scripts/launchd_receipt.py</string>
+		<string>--label</string>
+		<string>com.prospector.restore-drill</string>
+		<string>--script</string>
+		<string>offsite_restore_drill</string>
+		<string>--</string>
+		<string>/usr/bin/python3</string>
+		<string>/Users/chidionyema/.claude/scripts/drills/run.py</string>
+		<string>--run</string>
+		<string>offsite-backup-restore</string>
+	</array>
+	<key>StandardErrorPath</key>
+	<string>/Users/chidionyema/Documents/code/prospector/store/restore_drill.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/chidionyema/Documents/code/prospector/store/restore_drill.log</string>
+	<key>StartInterval</key>
+	<integer>86400</integer>
+	<key>WorkingDirectory</key>
+	<string>/Users/chidionyema/Documents/code/prospector-live</string>
+</dict>
+</plist>
