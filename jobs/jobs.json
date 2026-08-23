@@ -559,11 +559,12 @@
     ],
     "label": "com.valvesoftware.steamclean"
   },
-  "ai.estate.rebuild-drill": {
-    "label": "ai.estate.rebuild-drill",
+  "ai.estate.drills": {
+    "label": "ai.estate.drills",
     "ProgramArguments": [
-      "/bin/bash",
-      "{HOME}/.claude/scripts/rebuild/drill.sh"
+      "/usr/bin/python3",
+      "{HOME}/.claude/scripts/drills/run.py",
+      "--all"
     ],
     "StartCalendarInterval": {
       "Weekday": 1,
@@ -571,8 +572,8 @@
       "Minute": 30
     },
     "WorkingDirectory": "{HOME}/.claude/scripts",
-    "StandardOutPath": "{HOME}/.claude/logs/rebuild-drill.log",
-    "StandardErrorPath": "{HOME}/.claude/logs/rebuild-drill.log",
+    "StandardOutPath": "{HOME}/.claude/logs/drills.log",
+    "StandardErrorPath": "{HOME}/.claude/logs/drills.log",
     "Nice": 10,
     "LowPriorityIO": true,
     "EnvironmentVariables": {
