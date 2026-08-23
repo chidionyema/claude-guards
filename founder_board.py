@@ -645,6 +645,42 @@ def _laws_enforced() -> Row:
                "%d of %d" % (enforced, len(mech)), detail, cmd)
 
 
+def _push_gate_reach() -> Row:
+    """How many repositories the push gate actually runs in.
+
+    "The gate exists" and "the gate is in the path" were treated as one fact for
+    days. They are two. A git hook only runs in a repository whose
+    core.hooksPath names it, so the LAW 7, LAW 22 and LAW 32 gates can be
+    written, tested and green while every repository that ships a feature pushes
+    straight past them.
+
+    Measured 2026-08-23: bound in 2 repositories, and both of them are the
+    directory that holds the hooks.
+    """
+    state = os.path.expanduser("~/.claude/state/law-enforcement.json")
+    label = "Repos the push gate runs in"
+    cmd = "git -C <repo> config core.hooksPath"
+    try:
+        with open(state) as f:
+            d = json.load(f)
+    except (OSError, ValueError) as e:
+        return _unknown(label, f"the probe has never written {state}: {e}", cmd)
+    reach = d.get("hook_reach") or {}
+    bound, total = reach.get("bound"), reach.get("repos")
+    if bound is None or not total:
+        return _unknown(label, "the probe wrote no reach figure", cmd)
+    binds = d.get("hook_binds") or []
+    #: Bound everywhere is not the bar. Bound only where the hooks live means
+    #: nothing that ships a feature is gated, which is the state this row exists
+    #: to make visible.
+    only_self = all("/.claude" in b for b in binds)
+    detail = ("bound only in the directory that holds the hooks, so nothing "
+              "that ships a feature is gated" if only_self and binds else
+              "; ".join(binds[:3]))
+    return Row(BAD if only_self or bound < 2 else WARN, label,
+               "%d of %d" % (bound, total), detail, cmd)
+
+
 def collect_hooks_and_guards() -> list[Row]:
     """The guards are the estate's immune system, and NOTHING was watching them.
 
@@ -720,6 +756,7 @@ def collect_hooks_and_guards() -> list[Row]:
                      else ""),
                     f"rg -l -- --selftest {SCRIPTS}/*.py"))
     rows.append(_laws_enforced())
+    rows.append(_push_gate_reach())
     return rows
 
 
