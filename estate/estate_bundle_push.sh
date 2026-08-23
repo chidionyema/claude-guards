@@ -150,6 +150,22 @@ while read -r d; do
   if [ -n "$remote" ]; then
     n=$(git -C "$d" rev-list --count --all --not --remotes 2>/dev/null || echo 0)
     mode=incremental
+    # A remote-tracking ref proves a remote answered ONCE, not that it answers now.
+    # Measured 2026-08-23: 13 repos under ~/code point at dev.azure.com/OSLSoftware,
+    # a former client's server. Every one reported 0 commits no remote has, so every
+    # one was skipped, and not one of them can be cloned back. The cached ref was
+    # reporting safety on behalf of a server that is gone.
+    #
+    # Only asked when the count is 0, which is exactly when the answer changes what
+    # happens, so the hourly job pays one ls-remote per otherwise-skipped repo.
+    if [ "${n:-0}" -eq 0 ]; then
+      if ! GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true \
+           timeout 15 git -C "$d" ls-remote --exit-code "$remote" HEAD >/dev/null 2>&1; then
+        n=$(git -C "$d" rev-list --count --all 2>/dev/null || echo 0)
+        mode=full-unreachable-remote
+        log "unreachable: $(basename "$d") points at $remote which does not answer, so its $n commit(s) exist only on this disk"
+      fi
+    fi
   else
     n=$(git -C "$d" rev-list --count --all 2>/dev/null || echo 0)
     mode=full
