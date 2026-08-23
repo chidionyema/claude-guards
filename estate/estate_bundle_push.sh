@@ -89,7 +89,10 @@ fi
 # registration pointed there: a whole second code tree lives inside iCloud Drive, and
 # its prospector checkout alone carried 84 commits no remote had. None of it was in
 # any earlier version of this list, so none of it was ever backed up.
-ROOTS=("$HOME/.claude" "$HOME/.maestro" "$HOME/Documents/code" "$HOME/dev/code" "$HOME/code" \
+#: ~/.estate first, because it is the estate's own directory and the guards every
+#: repository on this machine now inherits live in it. It was created 2026-08-23 and
+#: no earlier version of this list knew about it, so it was covered by nothing.
+ROOTS=("$HOME/.estate" "$HOME/.claude" "$HOME/.maestro" "$HOME/Documents/code" "$HOME/dev/code" "$HOME/code" \
        "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Documents/code")
 
 #: A bundle larger than this is reported and skipped rather than silently uploaded.
