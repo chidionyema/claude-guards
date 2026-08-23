@@ -836,10 +836,48 @@ def _prospector_repo() -> str | None:
     old commit for most of 2026-08-23, so a path test would have found a prospector with no
     stack.sh in it and this check would have graded the estate on a file it never ran.
     """
+    # Refresh BEFORE the file test, not after. The first version of this ran the refresh once a
+    # candidate had been accepted, which cannot work: the worktree is stale precisely when it is
+    # sitting at a commit with no deploy/stack.sh in it, so the loop rejected the path and the
+    # refresh that would have fixed it never ran.
+    _refresh_pinned_worktree(str(pathlib.Path.home() / "dev/code/prospector-main"))
     for c in PROSPECTOR_CANDIDATES:
         if c and (pathlib.Path(c) / "deploy/stack.sh").is_file():
             return c
     return None
+
+
+def _refresh_pinned_worktree(repo: str) -> None:
+    """Keep the probe's own checkout on main, and only that one.
+
+    ~/dev/code/prospector-main exists for this check and nothing else. Left alone it would sit
+    at whatever commit it was created at, and an hourly probe running last month's script is
+    the rot that makes a repository worse than no repository. A fetch and a detach cost one
+    network call an hour and remove the class.
+
+    Guarded three ways, because a probe that edits a working checkout is a much worse bug than
+    a stale probe. It runs only on that exact path, only when git reports the tree clean, and
+    it swallows every failure: a probe that cannot refresh still measures, and being unable to
+    reach GitHub must never stop the estate being graded.
+    """
+    if pathlib.Path(repo).name != "prospector-main" or not pathlib.Path(repo, ".git").exists():
+        return
+    try:
+        # --untracked-files=no on purpose. This worktree carries two untracked symlinks by
+        # design -- .env and .venv, pointing into the running checkout, because stack.sh reads
+        # the R2 credentials from the repo root and needs a python that has boto3. Counting
+        # those as "dirty" is what stopped the refresh running at all.
+        dirty = subprocess.run(["git", "-C", repo, "status", "--porcelain",
+                                "--untracked-files=no"],
+                               capture_output=True, text=True, timeout=15)
+        if dirty.returncode != 0 or dirty.stdout.strip():
+            return
+        subprocess.run(["git", "-C", repo, "fetch", "--quiet", "origin", "main"],
+                       capture_output=True, timeout=45)
+        subprocess.run(["git", "-C", repo, "checkout", "--quiet", "--detach", "origin/main"],
+                       capture_output=True, timeout=30)
+    except Exception:                                        # noqa: BLE001
+        return
 
 
 def c_disaster_recovery() -> list[dict]:
