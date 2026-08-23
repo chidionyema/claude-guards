@@ -40,6 +40,20 @@ page, by name, and the value belongs in the password manager.
 `~/.config/uv/uv-receipt.json`, `~/.config/browser-harness/version-cache.json`.
 LAW 24 excludes generated output. A rebuild recreates these by running.
 
+## Repository-local git config, which git itself never tracks
+
+`core.hooksPath` lives in a repository's `.git/config`. That file is inside the
+repository and is never a tracked object, so a hook can be committed and still
+be inert on a fresh clone. The hook is in git; the switch that turns it on is
+not. A rebuild has to throw the switch.
+
+| repository | command | what it turns on |
+|---|---|---|
+| `~/.claude/scripts` (github.com/chidionyema/claude-guards) | `git config core.hooksPath hooks` | `hooks/pre-commit`, which refuses any commit whose STAGED content matches `tracked.py`'s `SECRET` pattern |
+
+Check it with `git config --get core.hooksPath`. Empty output means the guard is
+present and doing nothing, which is the failure LAW 28 is about.
+
 ## The one step only a person can do
 
 Signing in to prove an identity, in a browser. That is the whole of it, and
