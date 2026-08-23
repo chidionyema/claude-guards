@@ -48,6 +48,7 @@ PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("GITHUB",      re.compile(r"\b(?:ghp_[A-Za-z0-9]{34,}|github_pat_[A-Za-z0-9_]{50,})\b")),
     ("AWS",         re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("SLACK",       re.compile(r"\bxox[abprs]-[A-Za-z0-9\-]{20,}\b")),
+    ("GOOGLE",      re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b")),
 ]
 
 # Files that agents and shells write. Globs are relative to $HOME.
@@ -175,6 +176,7 @@ def selftest() -> int:
         "GITHUB": "ghp_" + "f" * 36,
         "AWS": "AKIA" + "G" * 16,
         "SLACK": "xoxb-" + "1" * 30,
+        "GOOGLE": "AIza" + "S" * 35,
     }
     for kind, value in samples.items():
         got, counts = redact_text(f"export K={value}\n")
