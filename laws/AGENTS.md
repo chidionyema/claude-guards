@@ -6,7 +6,7 @@ through a symlink into its own directory — `~/.claude/AGENTS.md`, `~/.codex/AG
 belong to the estate, not to whichever vendor's CLI is open. Founder, 2026-08-22: "all agents
 regardless of provider must follow all laws."
 
-Thirty-four rules, in priority order, numbered to 34. LAW 24 stood empty until 2026-08-23 and now
+Thirty-five rules, in priority order, numbered to 35. LAW 24 stood empty until 2026-08-23 and now
 holds the rule about version control. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
@@ -27,6 +27,13 @@ one it hangs off and inherits its rank.
 HOW law and a WHAT law disagree, they are answering different questions and both apply.
 
     19a(34) · 19 · 20 · 20b(27) · 20c(31) · 20d(32) · 21
+
+**Effective order, how the estate IMPROVES.** A third axis, one law long, and it governs the other
+two: LAW 35 is the ethos the HOW and WHAT laws themselves evolve under. It never suspends LAW 1 —
+a fire is still put out first — and it spends nothing past LAW 14 or LAW 21. What it overrides is
+standing still.
+
+    35
 
 LAW 25 and LAW 30 both claimed the slot "16b" until 2026-08-23. LAW 25 holds it, because it is the
 narrower rule and the one that fires more often; LAW 30 is 16c.
@@ -72,6 +79,7 @@ keep.
 | 32 | A feature ships with a demo and an onboarding | before any new feature is pushed |
 | 33 | Define done before you start, in commands | before the first edit, and before any word of status |
 | 34 | Provider agnostic from day 0, Claude included | before the first line of anything new |
+| 35 | Get better at getting better | every improvement, and once a week on the loop itself |
 
 **19-21 are a different axis and do not compete for that tie-break.** Laws 1-18 say HOW to work.
 Laws 19-21 say WHAT to build, and they rank against each other in that order: portability first,
@@ -1154,6 +1162,48 @@ others are excluded, or it does not merge.
 
 **You are breaking it when** you can name the vendor whose disappearance would stop the estate, and
 the answer is not "none".
+
+---
+
+# LAW 35 — GET BETTER AT GETTING BETTER
+
+The founder's words, 2026-08-23, verbatim: "we need to get better at gettig better", "this is aan
+overriding ethos of ehtoses", "our golden sacred goal", "i need rucrsinve learing and inprovenent
+really", "i need to enforce ethos of reseravhin the web torougly for optinations, toolng, etc,
+latest updates tht cn inprove our platforn, i need evidence of reseach sources and netircs proving
+inprovenent in plstofrn capabilies and all round reselience".
+
+This is the one law on the third axis: how the estate improves. The HOW laws say how to do the
+work, the WHAT laws say what to build, and this one says both of those lists are themselves work in
+progress and improving them is a standing job, not a thing that happens when someone is in the
+mood. It never suspends LAW 1, and it spends nothing past LAW 14 or LAW 21. What it overrides is
+standing still.
+
+Three obligations, each of which a machine can check:
+
+1. **Research the world before building from memory.** Before any capability decision — a tool, a
+   pattern, an optimisation, a dependency — sweep the web for the current state of the art. Model
+   knowledge has a cutoff; the field does not. A design justified only by what an agent already
+   knew is a design justified by stale data, and this estate has caught real gaps that way
+   (upstream had already built a thing we were about to write twice).
+2. **Sources or it is opinion.** Research that leaves no trace of where it looked did not happen
+   (LAW 30). Every research pass lands in the estate's research ledger: the question, the sources
+   read (URLs), the findings, and the decision it fed. The second time a question is asked, the
+   ledger answers it for free.
+3. **A metric or it is not an improvement.** Every claimed improvement carries the number before
+   and the number after, or the falsifiable proxy that would show it failed (LAW 33). "Better",
+   "faster", "more resilient" with no measurement is decoration, and the laws already ban it in
+   replies; this law bans it in the work itself.
+
+**Recursive means the loop eats itself.** The learning mechanism is graded by the same standard it
+grades everything else: once a week, a receipt proves the estate handles today what it escalated
+last week — count, class, and cost of the repeat against the first occurrence. A week with no
+delta on any axis is a finding to investigate, not a silence to ignore (LAW 28). The lesson ladder
+is mechanical: an incident becomes a fingerprint, a fingerprint that recurs becomes an
+auto-applied fix, a fix that holds becomes a skill, and a class of fixes becomes a law here.
+
+**You are breaking it when** the second occurrence of anything — a question, an incident, a build
+decision — costs what the first one did.
 
 ---
 
