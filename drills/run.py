@@ -171,8 +171,12 @@ def main():
         # question one step earlier: "is there a recovery path for this dependency at
         # all". A green register with an unclassified vendor in the tree is the more
         # dangerous of the two states, because it reads as covered.
+        #
+        # --sweep, not --ci: this repository is one of six, and auditing only the
+        # one the auditor happens to live in is how the estate ended up with five
+        # repositories nobody had ever listed the vendors of.
         audit = subprocess.run(
-            [sys.executable, os.path.join(HERE, "audit.py"), "--ci"],
+            [sys.executable, os.path.join(HERE, "audit.py"), "--sweep", "--ci"],
             capture_output=True, text=True)
         print(audit.stdout.rstrip())
         if audit.returncode != 0:
