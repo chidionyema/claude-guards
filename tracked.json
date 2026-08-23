@@ -1,0 +1,10 @@
+[
+  {"live": "~/Library/LaunchAgents", "repo": "launchagents", "glob": "*.plist",
+   "why": "every scheduled job on this Mac"},
+  {"live": "~/AGENTS.md", "repo": "laws/AGENTS.md",
+   "why": "the laws themselves, read by every agent tool through a symlink"},
+  {"live": "~/.claude/LAWS-INCIDENTS.md", "repo": "laws/LAWS-INCIDENTS.md",
+   "why": "what each law cost, and why it says what it says"},
+  {"live": "~/.claude/settings.json", "repo": "settings/settings.json",
+   "why": "hooks, model routing and permissions for every session"}
+]

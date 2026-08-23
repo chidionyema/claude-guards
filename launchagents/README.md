@@ -1,24 +1,31 @@
-# ~/Library/LaunchAgents, under version control
+# Load-bearing files, under version control
 
-Every scheduled job on this Mac used to live in exactly one place: an unversioned
-directory. An agent could edit one and the only record was a chat transcript.
-That is what this directory fixes.
+LAW 24: if it is load-bearing, it is in git.
 
-These files are copies, not symlinks. `launchd` reads the originals in
-`~/Library/LaunchAgents`. This directory is the reviewable record of them.
+This directory holds a copy of every scheduled job on this Mac. Its siblings
+`laws/` and `settings/` hold the other files the estate depends on that no
+repository held. What is tracked is listed in `../tracked.json`, with the reason
+each one is there.
 
-Checked before the first commit, 2026-08-23: no plist carries a secret value.
-Every credential-shaped match was a filesystem path.
+These are copies, not symlinks. `launchd` reads the originals in
+`~/Library/LaunchAgents`. This is the reviewable record of them.
 
 ## Keeping the two in step
 
-    python3 launchagents/sync.py --check    # exits 1 if they differ
-    python3 launchagents/sync.py --pull     # copy the live files in here
+    python3 tracked.py --check    # exits 1 if any tracked file has drifted
+    python3 tracked.py --pull     # bring the live files in, then commit
 
-`--check` runs in CI. A job edited on the machine and not committed fails it.
+`--check` is the guard. Without it the copy rots the first time somebody edits a
+live file, and a stale record is worse than none because it still reads as one.
+
+## Before adding anything here
+
+Scan it for secrets and verify the matches rather than trusting the pattern.
+Checked 2026-08-23 across all 32 plists: every one of the 23 credential-shaped
+matches was a filesystem path.
 
 ## Remember what launchctl actually does
 
 `launchctl` runs the definition it loaded at bootstrap, NOT the file on disk.
-Editing a plist here or there changes nothing until the job is booted out and
+Editing a plist in either place changes nothing until the job is booted out and
 back in. A stale job reports exit 0 while running the old definition.
