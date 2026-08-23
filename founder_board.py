@@ -321,6 +321,48 @@ def collect_requirements() -> list[Row]:
     return rows
 
 
+CERT_STATUS = os.path.expanduser("~/.claude/agent-cert/status.json")
+CERT_STALE_S = 2 * 3600          # the job runs hourly; two misses is stale
+
+
+def collect_agent_certification() -> list[Row]:
+    """Every agent, graded against the capabilities its own spec claims."""
+    if not os.path.exists(CERT_STATUS):
+        return [_unknown("Agent certification", "never run: no status file yet",
+                         "agent_cert.py")]
+    try:
+        with open(CERT_STATUS) as f:
+            st = json.load(f)
+    except (OSError, ValueError) as e:
+        return [_unknown("Agent certification", f"unreadable: {e}", CERT_STATUS)]
+
+    age = time.time() - float(st.get("last_run_epoch") or 0)
+    rows = []
+    if age > CERT_STALE_S:
+        # A stale score is not a score. PASS and NOT RUN have to look different
+        # or a dead checker reads as a healthy estate.
+        rows.append(Row(BAD, "Certification is stale",
+                        f"last ran {int(age // 3600)}h ago",
+                        "com.founder.agentcert is not running",
+                        "launchctl print gui/$(id -u)/com.founder.agentcert"))
+
+    for name, a in sorted(st.get("agents", {}).items()):
+        if a.get("error"):
+            rows.append(Row(UNKNOWN, f"{name}", "CANNOT CERTIFY", a["error"],
+                            f"agent_cert.py --agent {name}"))
+            continue
+        passed, graded = a.get("passed", 0), a.get("graded", 0)
+        unproven = a.get("unproven") or []
+        state = GOOD if not unproven else WARN
+        detail = "; ".join(unproven[:3]) if unproven else "every claim it makes is proven"
+        if a.get("blocked"):
+            detail += f" | {a['blocked']} blocked on your decision"
+        rows.append(Row(state, f"{name} claims proven", f"{passed} of {graded}",
+                        detail, f"agent_cert.py --agent {name}"))
+    return rows or [_unknown("Agent certification", "no agents registered",
+                             "agents.json")]
+
+
 def collect_launchd() -> list[Row]:
     """Every job that is supposed to keep this estate running by itself."""
     rc, out, err = sh(["launchctl", "list"], 30)
@@ -1050,6 +1092,7 @@ COLLECTORS = [
     ("Time taken, and mistakes made", collect_time_and_mistakes),
     ("Deliverables", collect_action_items),
     ("What was asked for", collect_requirements),
+    ("Do the agents do what they claim?", collect_agent_certification),
     ("Waiting on you", collect_founder_decisions),
 ]
 
