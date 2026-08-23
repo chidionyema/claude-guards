@@ -364,6 +364,16 @@ def collect_agent_certification() -> list[Row]:
                              "agents.json")]
 
 
+#: Jobs whose non-zero exit means "I found something", not "I crashed".
+#: founder_board.py itself ends `return 1 if board["bad"] else 0` (main, near the
+#: bottom of this file), so every hour that the estate has a single red row this
+#: job stores exit 1 in launchd. Counting that as a failure made the board report
+#: itself broken for doing its job. Any job added here must be one whose exit code
+#: is a finding count; a job that is merely noisy does not belong on this list,
+#: because that is how a real crash gets hidden.
+FINDING_EXIT_JOBS = {"com.founder.board"}
+
+
 def collect_launchd() -> list[Row]:
     """Every job that is supposed to keep this estate running by itself."""
     rc, out, err = sh(["launchctl", "list"], 30)
@@ -375,8 +385,15 @@ def collect_launchd() -> list[Row]:
         if len(parts) != 3:
             continue
         pid, status, label = parts
-        if not (label.startswith("com.prospector") or label.startswith("com.estate")
-                or label.startswith("ai.hermes") or label.startswith("com.chidionyema")):
+        #: 2026-08-23: this allow-list named four prefixes and silently dropped
+        #: everything else, and everything else is where the founder's own jobs
+        #: live. com.founder.board sat at exit 256 and ai.architect.gateway at
+        #: exit 1 for hours while this row read green, because neither prefix was
+        #: on the list. An allow-list with a silent miss case is the same defect
+        #: this board exists to catch. Watch every estate job and name the owners
+        #: rather than guessing which ones matter.
+        if not label.startswith(("com.prospector", "com.estate", "com.founder",
+                                 "com.chidionyema", "ai.")):
             continue
         watched += 1
         try:
@@ -385,12 +402,65 @@ def collect_launchd() -> list[Row]:
             continue
         # A negative status is a signal, which for a periodic job usually means it is running
         # right now. Only a positive exit code is a job that ran and failed.
-        if code > 0:
+        #
+        #: The first column is the live pid, and a pid means the job is running at this
+        #: instant. The status column is then the exit code of the PREVIOUS run, which is
+        #: history and not a state. ai.architect.gateway was restarted at 23:0x and sat
+        #: here as "exit 1" with pid 91037 beside it: alive, and reported dead. Reporting
+        #: a stale exit as a current failure is the same defect as reporting a deferral as
+        #: a success, pointed the other way.
+        alive = pid.strip() not in ("", "-")
+        if code > 0 and not alive and label not in FINDING_EXIT_JOBS:
             dead.append(f"{label} (exit {code})")
     rows = [Row(GOOD if not dead else BAD, "Background jobs failing",
                 f"{len(dead)} of {watched}", "; ".join(dead[:6]), "launchctl list")]
+    rows.append(_jobs_not_running())
     rows.append(_runners_in_git())
     return rows
+
+
+def _jobs_not_running() -> Row:
+    """Jobs that are losing every turn, which an exit code cannot show.
+
+    estate-gate defers a job when the machine is loaded and returns exit 0,
+    because a deferral is not a failure. That is correct and it is also how the
+    estate went blind: 40 deferrals across 12 jobs in under four hours on
+    2026-08-23, every one reporting success while doing nothing, and the audit
+    behind the founder's own dashboard sat 183 minutes stale as a result.
+
+    PASS and NOT RUN are different states and this row is the one that can tell
+    them apart, because it reads when each job last actually ran rather than
+    what it last returned.
+    """
+    state = os.path.expanduser("~/.estate/state")
+    cmd = "ls ~/.estate/state/gate.defers.* ~/.estate/state/gate.lastrun.*"
+    if not os.path.isdir(state):
+        return _unknown("Jobs losing every turn", "no ~/.estate/state directory", cmd)
+
+    stuck = []
+    for name in sorted(os.listdir(state)):
+        if not name.startswith("gate.defers."):
+            continue
+        label = name[len("gate.defers."):]
+        try:
+            with open(os.path.join(state, name)) as fh:
+                n = int(fh.read().strip() or "0")
+        except (ValueError, OSError):
+            continue
+        if n < 2:
+            continue
+        last = os.path.join(state, f"gate.lastrun.{label}")
+        if os.path.exists(last):
+            age_h = (time.time() - os.stat(last).st_mtime) / 3600.0
+            stuck.append(f"{label} ({n} turns lost, last ran {age_h:.1f}h ago)")
+        else:
+            #: No lastrun file at all is the worst case: it has never once run
+            #: since the gate started recording, and nothing said so.
+            stuck.append(f"{label} ({n} turns lost, never observed running)")
+
+    if not stuck:
+        return Row(GOOD, "Jobs losing every turn", "0", "", cmd)
+    return Row(BAD, "Jobs losing every turn", str(len(stuck)), "; ".join(stuck[:6]), cmd)
 
 
 def _runners_in_git() -> Row:
