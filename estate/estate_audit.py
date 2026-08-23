@@ -994,6 +994,51 @@ def c_disaster_recovery() -> list[dict]:
 
 CHECKS.append(c_disaster_recovery)
 
+
+def c_founder_actions() -> list[dict]:
+    """What is waiting on the founder, on the page he already has open.
+
+    Authorisation used to be retail here. An agent stalled at a step only he could clear,
+    spent a reply telling him about that one step, and the next agent did the same for a
+    different one. Nothing counted them and nothing showed them side by side, so a single
+    visit could never clear more than whatever he happened to be reading about.
+
+    An item closes when a command says the world changed, so nobody has to remember to close
+    it. An item no command can settle reads UNKNOWN, never CLEAN, because the honest answer
+    to "did he back the key up" is that this machine cannot tell.
+    """
+    reg = subprocess.run([sys.executable, str(pathlib.Path.home() / ".claude/scripts/founder_actions.py"),
+                          "--json"], capture_output=True, text=True, timeout=45)
+    if reg.returncode != 0 and not reg.stdout.strip():
+        return [row("access", "Waiting on the founder", "UNKNOWN", UNK,
+                    "founder_actions.py --json",
+                    "cannot look: %s" % (reg.stderr.strip()[:200] or "no output"))]
+    try:
+        r = json.loads(reg.stdout)
+    except json.JSONDecodeError as exc:
+        return [row("access", "Waiting on the founder", "UNKNOWN", UNK,
+                    "founder_actions.py --json", "unreadable register: %s" % exc)]
+
+    out = []
+    for g in r.get("open", []) + r.get("unverifiable", []):
+        openish = g in r.get("open", [])
+        detail = "%s Only him because: %s" % (g["what"], g["why_founder"])
+        if g.get("unblocks"):
+            detail += " It releases: %s" % g["unblocks"]
+        detail += " Closes when: %s" % g["proof"]
+        out.append(row("access", "Founder must clear: %s" % g["id"],
+                       "WAITING" if openish else "CANNOT TELL",
+                       WARN if openish else UNK,
+                       g.get("source") or "founder_actions.py", detail))
+    if not out:
+        out.append(row("access", "Waiting on the founder", "0", OK,
+                       "founder_actions.py --json",
+                       "Nothing is blocked on an authorisation only he can give."))
+    return out
+
+
+CHECKS.append(c_founder_actions)
+
 # ---------------------------------------------------------------- render
 
 SEV_LABEL = {CRIT: "CRITICAL", WARN: "WARN", UNK: "UNKNOWN", OK: "CLEAN"}
