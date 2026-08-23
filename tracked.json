@@ -3,7 +3,8 @@
     "live": "~/Library/LaunchAgents",
     "repo": "launchagents",
     "glob": "*.plist",
-    "why": "every scheduled job on this Mac"
+    "why": "every scheduled job on this Mac Tracked so --check catches a plist edited by hand, but NEVER restored: a plist has the home directory baked into it, so restoring these onto a new machine installs 30 jobs pointing at the old one. Rendered instead.",
+    "generated": "jobs/render.py --write"
   },
   {
     "live": "~/AGENTS.md",

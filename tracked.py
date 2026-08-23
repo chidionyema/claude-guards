@@ -29,9 +29,21 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MANIFEST = os.path.join(HERE, "tracked.json")
 
 
-def entries():
+HOME = os.path.expanduser("~")
+
+
+def entries(into=None):
+    """into=DIR aims every live path at a throwaway home instead of this one.
+
+    That is what makes the rebuild drill runnable without an admin password and
+    without a second user account. A drill you cannot run is the reason this one
+    had never been run (LAW 19: an exit that has never been drilled is a hope)."""
     for e in json.load(open(MANIFEST)):
-        e["live"] = os.path.expanduser(e["live"])
+        live = os.path.expanduser(e["live"])
+        if into:
+            live = os.path.join(into, os.path.relpath(live, HOME)) \
+                if live.startswith(HOME + os.sep) else live
+        e["live"] = live
         e["repo_abs"] = os.path.join(HERE, e["repo"])
         yield e
 
@@ -149,6 +161,41 @@ def pull_one(e):
     return len(a), len(b), len(c)
 
 
+def restore_one(e, force):
+    """Copy the committed copy back onto the machine. The reverse of pull_one.
+
+    Refuses to overwrite a live file that differs unless --force. On a fresh
+    machine nothing exists so nothing is refused; on a machine that already has
+    an estate, silently overwriting is how a restore destroys the thing it was
+    run to protect.
+    """
+    written, skipped = 0, []
+    if e.get("tree") or "glob" in e:
+        ex = e.get("exclude", [])
+        repo = walk(e["repo_abs"], ex) if os.path.isdir(e["repo_abs"]) else set()
+        if "glob" in e and not e.get("tree"):
+            repo = names(e["repo_abs"], e["glob"])
+        for f in sorted(repo):
+            src, dst = os.path.join(e["repo_abs"], f), os.path.join(e["live"], f)
+            if os.path.exists(dst) and not force:
+                if not filecmp.cmp(src, dst, shallow=False):
+                    skipped.append(f)
+                continue
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(src, dst)
+            written += 1
+        return written, skipped
+    if not os.path.exists(e["repo_abs"]):
+        return 0, []
+    if os.path.exists(e["live"]) and not force:
+        if not filecmp.cmp(e["repo_abs"], e["live"], shallow=False):
+            skipped.append(os.path.basename(e["live"]))
+        return 0, skipped
+    os.makedirs(os.path.dirname(e["live"]), exist_ok=True)
+    shutil.copy2(e["repo_abs"], e["live"])
+    return 1, []
+
+
 BOARD = os.path.expanduser("~/.claude/ESTATE_BOARD.jsonl")
 
 
@@ -217,10 +264,43 @@ def main():
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--pull", action="store_true")
     ap.add_argument("--sync", action="store_true")
+    ap.add_argument("--restore", action="store_true",
+                    help="copy the committed files back onto the machine")
+    ap.add_argument("--into", default=None,
+                    help="treat DIR as the home directory. For the drill.")
+    ap.add_argument("--force", action="store_true",
+                    help="with --restore, overwrite live files that differ")
     a = ap.parse_args()
 
     if a.sync:
         return sync()
+
+    if a.restore:
+        total, blocked, generated = 0, [], []
+        for e in entries(a.into):
+            if e.get("generated"):
+                generated.append((e["repo"], e["generated"]))
+                continue
+            n, skipped = restore_one(e, a.force)
+            total += n
+            blocked += [f"{e['repo']}/{f}" for f in skipped]
+            if n:
+                print(f"{e['repo']}: restored {n} file(s) to {e['live']}")
+        print(f"\nrestored {total} file(s)"
+              + (f" into {a.into}" if a.into else " onto this machine"))
+        if blocked:
+            print(f"{len(blocked)} live file(s) differ and were left alone. "
+                  f"--force overwrites them:")
+            for f in blocked[:20]:
+                print(f"    {f}")
+        for repo, how in generated:
+            print(f"\n{repo}: NOT restored, it is generated. Run:  {how}")
+            print("    These files have the home directory baked into them. Copying "
+                  "them onto a\n    new machine installs jobs pointing at the old one.")
+        print("\nWhat is NOT restored, because it was never committed: every "
+              "credential.\nrebuild/PREREQUISITES.md lists each one by name and "
+              "how a new machine gets it.")
+        return 0
 
     drift = 0
     for e in entries():

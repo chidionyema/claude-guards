@@ -47,6 +47,25 @@ ENVFILE="$HOME/.config/estate/estate.env"
 [ -r "$ENVFILE" ] || ENVFILE="$HOME/.hermes/.env"
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
 
+#: One run at a time. launchd fires this every 3600s and a run over the iCloud tree
+#: can exceed that, because iCloud stores files dataless and every object read pulls
+#: them back over the network. Two overlapping runs would fight for the same $WORK
+#: parent, the same receipts file and the same R2 keys. mkdir is atomic on the local
+#: filesystem, so it is the lock. A holder whose pid is gone is a crash, not a run.
+LOCKDIR="$HOME/.claude/state/estate-bundle-push.lock"
+if ! mkdir "$LOCKDIR" 2>/dev/null; then
+  holder=$(cat "$LOCKDIR/pid" 2>/dev/null || echo "")
+  if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
+    printf '%s already running as pid %s, this run exits without doing anything\n' \
+      "$(date -u +%FT%TZ)" "$holder"
+    exit 0
+  fi
+  printf '%s stale lock from pid %s, taking it\n' "$(date -u +%FT%TZ)" "${holder:-unknown}"
+  rm -rf "$LOCKDIR"; mkdir "$LOCKDIR" || { echo "cannot take the lock"; exit 1; }
+fi
+echo $$ > "$LOCKDIR/pid"
+trap 'rm -rf "$LOCKDIR" "$WORK"' EXIT
+
 #: Roots to search. Three levels deep covers ~/Documents/code/<repo>/.git and no more.
 # The iCloud root is not decoration. Found 2026-08-23 while chasing a worktree whose
 # registration pointed there: a whole second code tree lives inside iCloud Drive, and
@@ -60,6 +79,10 @@ ROOTS=("$HOME/.claude" "$HOME/.maestro" "$HOME/Documents/code" "$HOME/dev/code" 
 MAX_MB=${ESTATE_BUNDLE_MAX_MB:-250}
 
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*"; }
+ask_remote() {
+  GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true \
+    timeout 15 git -C "$1" ls-remote --exit-code "$2" HEAD >/dev/null 2>&1
+}
 die() { log "BUNDLE PUSH RED: $*"; alert "estate_bundle_push RED: $* — commits that exist only on this Mac are still only on this Mac."; rm -rf "$WORK"; exit 1; }
 
 alert() {
@@ -163,12 +186,18 @@ while read -r d; do
     #
     # Only asked when the count is 0, which is exactly when the answer changes what
     # happens, so the hourly job pays one ls-remote per otherwise-skipped repo.
+    # Asked twice, because one failure does not mean the server is gone. Measured
+    # 2026-08-23: dev-code-hermes-v2 points at github.com and answers in under a
+    # second, but a single ls-remote failed right after a six-minute 114 MB upload
+    # and the job turned RED on a repo that was never at risk. One blip is a blip.
     if [ "${n:-0}" -eq 0 ]; then
-      if ! GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true \
-           timeout 15 git -C "$d" ls-remote --exit-code "$remote" HEAD >/dev/null 2>&1; then
-        n=$(git -C "$d" rev-list --count --all 2>/dev/null || echo 0)
-        mode=full-unreachable-remote
-        log "unreachable: $(basename "$d") points at $remote which does not answer, so its $n commit(s) exist only on this disk"
+      if ! ask_remote "$d" "$remote"; then
+        sleep 3
+        if ! ask_remote "$d" "$remote"; then
+          n=$(git -C "$d" rev-list --count --all 2>/dev/null || echo 0)
+          mode=full-unreachable-remote
+          log "unreachable: $(basename "$d") points at $remote which did not answer twice, so its $n commit(s) exist only on this disk"
+        fi
       fi
     fi
   else
@@ -208,7 +237,7 @@ while IFS=$'\t' read -r d mode n remote; do
     continue
   fi
 
-  if [ "$mode" = full ]; then
+  if case "$mode" in full*) true ;; *) false ;; esac; then
     git -C "$d" bundle create "$bundle" --all >/dev/null 2>&1
   else
     git -C "$d" bundle create "$bundle" --all --not --remotes >/dev/null 2>&1
@@ -245,7 +274,7 @@ while IFS=$'\t' read -r d mode n remote; do
   # incremental one cannot, by construction, so it is verified against this repo.
   tip=$(git -C "$d" rev-parse HEAD 2>/dev/null)
   drill=skipped
-  if [ "$mode" = full ]; then
+  if case "$mode" in full*) true ;; *) false ;; esac; then
     if git clone --quiet "$back" "$WORK/restore-$slug" >/dev/null 2>&1 \
        && [ "$(git -C "$WORK/restore-$slug" rev-parse HEAD 2>/dev/null)" = "$tip" ]; then
       drill=clone-ok
