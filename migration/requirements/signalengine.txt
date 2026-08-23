@@ -19,7 +19,7 @@ cffi==2.0.0
 charset-normalizer==3.4.7
 click==8.4.1
 coincurve==21.0.0
-cryptography==49.0.0
+cryptography==50.0.0
 curl-cffi==0.15.0
 distro==1.9.0
 docstring-parser==0.18.0
