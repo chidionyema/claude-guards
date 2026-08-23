@@ -61,12 +61,22 @@ file is named in an UNREAD alert. Repeated alerts are collapsed by a fingerprint
 that ignores digits, so "waiting 12 min" and "waiting 40 min" are one alert and
 not two, and nothing is resent inside a six hour quiet window.
 
-It sent nothing at all for over five hours on 2026-08-23, and the cause is worth
-knowing because it can come back. Delivery used to go through the Hermes command
-line tool, which reads its settings from `~/.hermes`. That path is a shortcut
-into `~/Documents`, and macOS hides `~/Documents` from a background job, so the
-tool could not read its own settings and every send failed. The cycle recorded
-each failure honestly, but it also marked those alerts as already said, so each
-failure silenced itself for six hours. Both halves are fixed: delivery now goes
-straight to Telegram using a credentials file outside `~/Documents`, and an
-alert counts as said only once Telegram has given back a message number.
+Almost nothing reached the founder for two hours on 2026-08-23, and two separate
+faults caused it. Counted across the 32 cycles logged that day: 12 cycles were
+killed at their four minute limit while reading the transcript files and never
+got as far as sending; 3 cycles tried to send and the send failed; 1 send got
+through, at 19:30; 13 cycles had nothing to say.
+
+The slow half was reading the same transcript tree twice per cycle, once for the
+board and once for the alerts. It now reads it once, and a cycle takes 14 to 16
+seconds instead of 66 to 168.
+
+The failing-send half was the delivery route. It used to go through the Hermes
+command line tool, which reads its settings from `~/.hermes`. That path is a
+shortcut into `~/Documents`, and macOS hides `~/Documents` from a background job,
+so the tool could not read its own settings. Delivery now goes straight to
+Telegram using a credentials file outside `~/Documents`.
+
+A third fault made both worse: a failed cycle marked its alerts as already said,
+so each failure silenced itself for six hours. An alert now counts as said only
+once Telegram has given back a message number.

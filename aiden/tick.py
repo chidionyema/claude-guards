@@ -57,9 +57,16 @@ def deliver(text):
     NOT the hermes CLI, and the reason is measured. `~/.hermes` is a symlink into
     `~/Documents`, which macOS TCC hides from a LaunchAgent, so under launchd that CLI
     could not read its own config, fell back to a credential-free default, and the send
-    genuinely failed -- exit 1, no message_id. Every tick from 17:58 on 2026-08-23
-    recorded a delivery that never happened, and the founder read a silent estate as a
-    quiet one. That is the exact failure LAW 28 is made of.
+    genuinely failed -- exit 1, no message_id.
+
+    Counted, not assumed. Of the 32 cycles logged on 2026-08-23, 3 reached this send
+    and it failed (17:58:29Z, 19:00:32Z, 19:50:33Z), and 1 reached it and succeeded
+    (19:30:05Z, message 12892). So the old path was intermittent, not dead. The larger
+    share of the founder's silence was a different fault in the same window: 12 cycles
+    were killed at 240s while walking the transcript tree, and never got as far as
+    sending. That one is fixed in observe.py, by walking once per process instead of
+    twice. Both were repaired in the same commit, which is exactly the shape LAW 29
+    warns about -- two faults in one window read as one cause unless you count them.
 
     The estate already left that path on 2026-08-22, for this same TCC denial, when
     com.founder.estatepush failed on schedule and passed by hand. `estate_alert` posts
