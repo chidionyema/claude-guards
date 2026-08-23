@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: read
+  security-events: read
 
 jobs:
   compile:
@@ -64,3 +65,31 @@ jobs:
       # removed, kept=10 holes=1 exit 1; with a value in the example file, kept=10 holes=1 exit 1.
       - name: nothing load-bearing is missing from the repository
         run: python3 estate/in-git.py --ci
+
+      # LAW 28. Dependabot was already an instrument and had no reader: 36 alerts (27 high,
+      # 9 moderate) sat open on this repository, every one of them five pins in one file,
+      # `migration/requirements/signalengine.txt`. Nothing failed while they sat there, so
+      # nothing said they were sitting there. The count went to 0 on 2026-08-23 by bumping the
+      # five, which is why this step can refuse rather than warn -- it starts from zero.
+      #
+      # It refuses on high and critical only. Moderate is reported and does not block, because a
+      # gate that turns red on a low-severity advisory in a reconstructed lockfile stops being
+      # read within a week, which is the failure this step exists to prevent.
+      - name: no high or critical dependency alert
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          set -euo pipefail
+          if ! gh api "/repos/${{ github.repository }}/dependabot/alerts?state=open&per_page=100" \
+                 -q '.[].security_advisory.severity' > /tmp/sev.txt 2>/tmp/err.txt; then
+            echo "::error::cannot read dependabot alerts, so this check cannot pass"
+            cat /tmp/err.txt
+            exit 1
+          fi
+          hi=$(grep -cE '^(high|critical)$' /tmp/sev.txt || true)
+          mod=$(grep -cE '^(moderate|low)$' /tmp/sev.txt || true)
+          echo "open dependabot alerts: $hi high or critical, $mod moderate or low"
+          if [ "$hi" -gt 0 ]; then
+            echo "::error::$hi high or critical dependency alerts are open"
+            exit 1
+          fi
+

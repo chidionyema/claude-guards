@@ -65,6 +65,14 @@
       "why": "The rebuild drill restores this estate into a throwaway home on THIS operating system. It has never once been run on Windows, so the honest state of a Windows rebuild is unproven, not hard. jobs/render_windows.py turns all 29 jobs into Task Scheduler XML and every one of them loses something on the way.",
       "cmd": null,
       "todo": "Render every job to Task Scheduler XML, import it on a real Windows host or a Windows container, start one job, and read its output back. Until a job has actually run there, the renderer is a file format exercise."
+    },
+    {
+      "id": "github-gone",
+      "what_breaks": "GitHub suspends the account, goes down for a day, or the org is deleted.",
+      "why": "Every recovery path this estate has starts with `git clone` from github.com. The offsite bundles in R2 do not close that hole: estate_bundle_push.sh:25 says so itself -- for a repo that HAS a remote it uploads only `--all --not --remotes`, so restoring one of those bundles needs GitHub as well as the bundle. That is the right trade on cost and the wrong one to leave unmeasured, because the day it matters is the day GitHub is the thing that is gone. LAW 19: a dependency whose exit has never been drilled is not portable, it is a hope.",
+      "cmd": null,
+      "todo": "With github.com unreachable, rebuild claude-estate and claude-guards from the R2 bundles alone into a throwaway home, and run the existing rebuild assertions against the result. If that cannot pass, the fix is a full-history bundle for the repos that have a remote, not a bigger comment.",
+      "max_age_days": 30
     }
   ]
 }
