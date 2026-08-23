@@ -613,6 +613,99 @@ def c_clock() -> list[dict]:
 
 CHECKS.append(c_clock)
 
+
+def c_backup() -> list[dict]:
+    """Is every commit on this Mac also somewhere else, and did anything check today?
+
+    Written 2026-08-23, the morning the founder's board said "39 commits on local Mac
+    only, no remote, one disk crash = gone". The estate already had a backup script,
+    scripts/backup_agent_estate.py in prospector. It is careful, well commented, and
+    covers no .git directory, uploads nowhere, runs on no schedule, and has never
+    written a receipt. Nobody noticed for months because nothing read it.
+
+    So this row does not run a backup and it does not trust one either. It reads the
+    receipt file the hourly job appends to, which is the only artefact that exists
+    because bytes actually moved. No receipt means no backup, whatever any script says.
+
+    It deliberately does NOT walk the repos itself. sh() runs /bin/bash, and /bin/bash
+    is denied ~/Documents on this machine, so a walk from here would find zero repos
+    under the tree that holds most of them and report that as safety.
+    """
+    out = []
+    rec = pathlib.Path.home() / ".claude/state/estate-bundle-push.jsonl"
+
+    if not rec.exists():
+        out.append(row("sched", "Off-machine backup of local-only commits", "NEVER RUN", CRIT,
+                       "~/.claude/state/estate-bundle-push.jsonl does not exist",
+                       "No bundle has ever been pushed. Every commit that is on this disk and "
+                       "on no remote dies with the disk."))
+        return out
+
+    lines = [l for l in rec.read_text().splitlines() if l.strip()]
+    try:
+        recs = [json.loads(l) for l in lines]
+    except Exception:                                        # noqa: BLE001
+        recs = []
+    recs = [r for r in recs if r.get("ts")]
+    if not recs:
+        out.append(row("sched", "Off-machine backup of local-only commits", "NO RECEIPTS", CRIT,
+                       "estate-bundle-push.jsonl exists but holds no parsable receipt",
+                       "The file is there and empty of proof, which reads as a working backup "
+                       "and is not one."))
+        return out
+
+    newest = max(r["ts"] for r in recs)
+    age_min = int((time.time() - newest) / 60)
+    # The job runs hourly. Two missed runs is a stopped backup, not a slow one.
+    sev = CRIT if age_min > 180 else (WARN if age_min > 90 else OK)
+    window = [r for r in recs if r["ts"] >= newest - 900]
+    covered = len({r.get("slug") for r in window if r.get("slug")})
+    kb = sum(int(r.get("bytes", 0)) for r in window) // 1024
+    drills = [r.get("restore") for r in window if r.get("restore")]
+    clones = sum(1 for d in drills if d == "clone-ok")
+
+    out.append(row("sched", "Age of the last off-machine backup", f"{age_min} min", sev,
+                   "newest ts in ~/.claude/state/estate-bundle-push.jsonl",
+                   f"Last run covered {covered} repo(s), {kb} KB, of which {clones} were proved "
+                   "by cloning the copy downloaded back out of R2. A receipt is written only "
+                   "after the bytes come back and match, so this number cannot be produced by "
+                   "a job that failed."
+                   + ("" if sev == OK else
+                      " The job is com.estate.bundlepush, StartInterval 3600. Its log is "
+                      "~/.claude/state/logs/estate-bundlepush.out.log.")))
+
+    out.append(row("sched", "Repos covered by the last backup run", str(covered),
+                   OK if covered else CRIT,
+                   "distinct slug in the last 15 minutes of estate-bundle-push.jsonl",
+                   "Covers ~/.claude, ~/.maestro, ~/Documents/code, ~/dev/code and ~/code. "
+                   "A repo appears here only when it carries a commit no reachable remote has."))
+
+    refused = [r for r in window if r.get("outcome") == "refused-key-material"]
+    if refused:
+        out.append(row("secrets", "Repos refused by the backup for key material in history",
+                       str(len(refused)), WARN,
+                       'outcome == "refused-key-material" in estate-bundle-push.jsonl',
+                       "Their history names a .env, a .pem or an ssh key by filename, so the "
+                       "bundle was not uploaded. They are therefore NOT backed up."))
+
+    sal = pathlib.Path.home() / ".claude/state/estate-worktree-cleanup.jsonl"
+    if sal.exists() and sal.read_text().strip():
+        try:
+            last = json.loads(sal.read_text().splitlines()[-1])
+            d = int((time.time() - last["ts"]) / 86400)
+            out.append(row("sched", "Merged worktrees still on disk after the last cleanup",
+                           str(last.get("kept", "?")), OK,
+                           "last line of ~/.claude/state/estate-worktree-cleanup.jsonl",
+                           f"{last.get('salvaged', '?')} merged worktree(s) were salvaged to "
+                           f"R2 and retired {d} day(s) ago; the ones counted here are kept "
+                           "because their branch is not in origin/main."))
+        except Exception:                                    # noqa: BLE001
+            pass
+    return out
+
+
+CHECKS.append(c_backup)
+
 # ---------------------------------------------------------------- render
 
 SEV_LABEL = {CRIT: "CRITICAL", WARN: "WARN", UNK: "UNKNOWN", OK: "CLEAN"}

@@ -48,7 +48,12 @@ ENVFILE="$HOME/.config/estate/estate.env"
 DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
 
 #: Roots to search. Three levels deep covers ~/Documents/code/<repo>/.git and no more.
-ROOTS=("$HOME/.claude" "$HOME/.maestro" "$HOME/Documents/code" "$HOME/dev/code" "$HOME/code")
+# The iCloud root is not decoration. Found 2026-08-23 while chasing a worktree whose
+# registration pointed there: a whole second code tree lives inside iCloud Drive, and
+# its prospector checkout alone carried 84 commits no remote had. None of it was in
+# any earlier version of this list, so none of it was ever backed up.
+ROOTS=("$HOME/.claude" "$HOME/.maestro" "$HOME/Documents/code" "$HOME/dev/code" "$HOME/code" \
+       "$HOME/Library/Mobile Documents/com~apple~CloudDocs/Documents/code")
 
 #: A bundle larger than this is reported and skipped rather than silently uploaded.
 #: No silent caps (LAW 28): a skip prints and lands in the receipt.
