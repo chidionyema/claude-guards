@@ -34,9 +34,13 @@
     {
       "id": "offsite-backup-restore",
       "what_breaks": "The prospector data is gone and the offsite copy is the only one left.",
-      "why": "com.prospector.offsite-backup writes to an S3-compatible bucket and exits 0. Nothing has ever read an object back out. LAW 28: clean receipts from a backup that never copied a byte is a lie with a cron schedule.",
-      "cmd": null,
-      "todo": "Pull the newest object from the bucket into a throwaway directory, open it, and assert it contains the table or file it claims to."
+      "why": "com.prospector.offsite-backup writes to an S3-compatible bucket and exits 0. Nothing had ever read an object back out. LAW 28: clean receipts from a backup that never copied a byte is a lie with a cron schedule. The first run of this drill, 2026-08-23, found that every repository bundle taken since 2026-08-18 was unrestorable: the source checkout had become a shallow clone and `git bundle verify` cannot see that.",
+      "cmd": [
+        "/bin/bash",
+        "-lc",
+        "cd {HOME}/Documents/code/prospector-live && exec .venv/bin/python -m ops.automations.offsite_restore_drill"
+      ],
+      "max_age_days": 3
     },
     {
       "id": "secret-rotation",
