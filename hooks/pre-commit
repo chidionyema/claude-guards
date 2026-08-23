@@ -161,6 +161,56 @@ def refuse_projects(paths):
     return [p for p in paths if p.startswith(FORBIDDEN)]
 
 
+def silent_handlers(paths, blobs):
+    """New places where a guard's side effect fails without saying so.
+
+    Same shape as the credential gate above and for the same reason: 24 of these
+    were found on 2026-08-23 and every one of them had passed review, because a
+    swallowed write reads as caution rather than as a guard going dark. Fixing
+    the 24 closed the instances. This closes the class.
+
+    Reads the STAGED blob, like everything else here, so staging a file and then
+    editing it cannot slip a handler past.
+    """
+    try:
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True).stdout.strip()
+    except Exception:
+        return []
+    #: Only this checkout. The gate is global now, and refusing a swallowed
+    #: write in somebody else's repository is an opinion, not a guard.
+    if not top.endswith("/.claude/scripts"):
+        return []
+    try:
+        import silent_side_effect as det
+    except Exception:
+        #: Loud, not silent. A missing detector is exactly the failure it exists
+        #: to find, and a check that cannot run must refuse rather than pass.
+        print("COMMIT REFUSED: silent_side_effect.py is missing, so this gate "
+              "could not run.", file=sys.stderr)
+        return [("silent_side_effect.py", 0, ["the detector itself"])]
+    out = []
+    for path in paths:
+        if not path.endswith(".py"):
+            continue
+        blob = blobs.get(path, b"")
+        if b"\0" in blob or not blob:
+            continue
+        tmp = f"/tmp/.silentgate-{os.path.basename(path)}"
+        try:
+            with open(tmp, "wb") as fh:
+                fh.write(blob)
+            for lineno, caught, acts in det.scan(tmp):
+                if set(acts) - det.CLEANUP_ONLY:
+                    out.append((path, lineno, sorted(set(acts))))
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    return out
+
+
 def main():
     shared_branch_warning()
     staged = staged_paths()
@@ -194,6 +244,29 @@ def main():
             # stopped. The line number is enough for a person to go and look.
             line = text.count("\n", 0, m.start()) + 1
             bad.append((path, line))
+
+    silent = silent_handlers(paths, blobs)
+    if silent:
+        print("COMMIT REFUSED: a guard here cannot report its own failure.",
+              file=sys.stderr)
+        for path, lineno, acts in silent:
+            print(f"  {path}:{lineno}  swallows a failed {', '.join(acts)}",
+                  file=sys.stderr)
+        print("", file=sys.stderr)
+        print("The try does something -- writes a file, sends a message, runs a", file=sys.stderr)
+        print("command -- and the except is nothing but `pass`. When that write", file=sys.stderr)
+        print("fails, the guard carries on and reports success, so a dead guard", file=sys.stderr)
+        print("and a working one leave identical evidence. session-recorder was", file=sys.stderr)
+        print("that way for two days and its tier stayed green throughout.", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Replace the `pass` with:", file=sys.stderr)
+        print("  try: (__import__(\"sys\").path.append(__import__(\"os\").path"
+              ".expanduser(\"~/.claude/scripts\")), "
+              "__import__(\"guard_report\").broken(__file__, LINE))", file=sys.stderr)
+        print("  except Exception: pass", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Deleting a leftover temp file is exempt and needs no change.", file=sys.stderr)
+        return 1
 
     if not bad:
         return 0
