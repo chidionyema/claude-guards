@@ -118,6 +118,33 @@
     "WorkingDirectory": "{HOME}/.deepseek-bridge",
     "label": "ai.estate.deepseek-bridge"
   },
+  "ai.estate.dep-alerts": {
+    "EnvironmentVariables": {
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
+    },
+    "LowPriorityIO": true,
+    "Nice": 10,
+    "ProgramArguments": [
+      "{PYTHON3_SYSTEM}",
+      "{HOME}/.claude/scripts/estate/dep_alerts.py"
+    ],
+    "StandardErrorPath": "{HOME}/.claude/logs/dep-alerts.log",
+    "StandardOutPath": "{HOME}/.claude/logs/dep-alerts.log",
+    "StartCalendarInterval": {
+      "Hour": 8,
+      "Minute": 10
+    },
+    "WorkingDirectory": "{HOME}/.claude/scripts",
+    "label": "ai.estate.dep-alerts"
+  },
   "ai.estate.drills": {
     "EnvironmentVariables": {
       "PATH": [
