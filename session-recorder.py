@@ -212,9 +212,33 @@ def cmd_hook() -> int:
         return 0
     try:
         record(Path(t), payload.get("session_id", "unknown"), payload.get("cwd") or os.getcwd())
-    except Exception:
-        pass                                  # a recorder that breaks a turn is worse than none
+    except Exception as exc:
+        # A recorder that breaks a turn is worse than none, so this still returns 0.
+        # But a recorder that fails SILENTLY is worse than both: it is a recovery file
+        # that stopped being written on 21 August and reported success every turn since,
+        # and the founder finds out when a session dies and there is nothing to restore.
+        # LAW 6: the loop closes at the reader, so the failure goes where a reader is.
+        # ESTATE_BOARD.jsonl is handed to every session at startup; a log file is not.
+        _board_failure(exc)
     return 0
+
+
+def _board_failure(exc: BaseException) -> None:
+    """Say it where somebody is standing. Never raises: this is the failure path already."""
+    try:
+        line = json.dumps({
+            "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "from": "session-recorder.py",
+            "kind": "guard-broken",
+            "text": ("the recovery file is NOT being written -- "
+                     f"{type(exc).__name__}: {exc}. Sessions that die from here lose "
+                     "their context. Fix before trusting --restore."),
+        }, ensure_ascii=False)
+        board = Path.home() / ".claude" / "ESTATE_BOARD.jsonl"
+        with open(board, "a") as fh:
+            fh.write(line + "\n")
+    except Exception:
+        pass
 
 
 def cmd_restore(cwd: str) -> int:
