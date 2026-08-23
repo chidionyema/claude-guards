@@ -14,6 +14,7 @@ pattern list serves the copier and the commit gate (LAW 3).
 
 Installed with:  git config core.hooksPath scripts/hooks
 """
+import json
 import os
 import subprocess
 import sys
@@ -211,6 +212,81 @@ def silent_handlers(paths, blobs):
     return out
 
 
+#: An encrypted secret store is safe to commit ONLY where the ciphertext is not
+#: world-readable. Measured 2026-08-23 in chidionyema/prospector, which is PUBLIC:
+#: deploy/secrets.env.age had been committed in 4 snapshot commits, and GitHub
+#: still serves that blob by sha (87600ac4) even though no branch reaches it. It
+#: holds 25 credentials whose values are unchanged today, Stripe live keys and the
+#: Fly token among them.
+#:
+#: age is not broken and the private key has never been in git, so nothing is
+#: readable. That is exactly why this is a guard and not an incident: the exposure
+#: is permanent and silent, and it only becomes a breach later, on the day the key
+#: leaks -- at which point the ciphertext cannot be recalled from a public archive.
+#:
+#: The rule is the pairing, not the file. Ciphertext plus a private remote is the
+#: design working. Ciphertext plus a public remote is a decision nobody made.
+CIPHERTEXT = (b"age-encryption.org/v1", b"-----BEGIN PGP MESSAGE")
+VIS_CACHE = os.path.join(os.path.expanduser("~"), ".claude", "state", "repo-visibility.json")
+
+
+def _remote_is_public():
+    """True, False, or None when it genuinely cannot be established.
+
+    None is not "probably fine". main() treats it as public, because the cost of
+    being wrong that way is a refused commit and the cost of the other way is a
+    permanent public copy of every production credential.
+    """
+    try:
+        url = subprocess.run(["git", "remote", "get-url", "origin"],
+                             capture_output=True, text=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if not url:
+        return False          # no remote: nothing leaves this disk
+    try:
+        with open(VIS_CACHE) as fh:
+            cache = json.load(fh)
+    except (OSError, ValueError):
+        cache = {}
+    if url in cache:
+        return cache[url]
+    try:
+        out = subprocess.run(["gh", "repo", "view", url, "--json", "isPrivate",
+                              "-q", ".isPrivate"],
+                             capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0:
+        return None
+    answer = out.stdout.strip().lower()
+    if answer not in ("true", "false"):
+        return None
+    public = answer == "false"
+    cache[url] = public
+    try:
+        os.makedirs(os.path.dirname(VIS_CACHE), exist_ok=True)
+        with open(VIS_CACHE, "w") as fh:
+            json.dump(cache, fh)
+    except OSError as exc:
+        sys.path.append(os.path.join(os.path.expanduser("~"), ".claude", "scripts"))
+        import guard_report
+        guard_report.broken(__file__, 0, f"cannot cache repo visibility: {exc}")
+    return public
+
+
+def refuse_ciphertext_to_public(paths, blobs):
+    """Staged encrypted stores, when this repository's remote is not private."""
+    hits = [p for p in paths
+            if blobs.get(p, b"").startswith(CIPHERTEXT)]
+    if not hits:
+        return [], True
+    public = _remote_is_public()
+    if public is False:
+        return [], True
+    return hits, public is True
+
+
 def main():
     shared_branch_warning()
     staged = staged_paths()
@@ -231,6 +307,24 @@ def main():
     bad = []
     paths = [p for p in staged if os.path.realpath(p) != SELF]
     blobs = staged_blobs(paths)
+
+    cipher, certain = refuse_ciphertext_to_public(paths, blobs)
+    if cipher:
+        where = "is PUBLIC" if certain else "could not be confirmed private"
+        print(f"COMMIT REFUSED: an encrypted secret store, and this remote {where}.",
+              file=sys.stderr)
+        for path in cipher[:10]:
+            print(f"  {path}", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("age is not broken, so nothing is readable today. The problem is that a", file=sys.stderr)
+        print("public git object is permanent: it stays fetchable by sha after the", file=sys.stderr)
+        print("branch is gone, so the day the private key leaks, every credential in", file=sys.stderr)
+        print("here is readable retroactively and cannot be recalled.", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("Make the repository private, or keep the store out of it. If you are", file=sys.stderr)
+        print("certain, the override is explicit and leaves a record:", file=sys.stderr)
+        print("  ESTATE_GUARDS_OFF=1 git commit ...", file=sys.stderr)
+        return 1
     for path in paths:
         blob = blobs.get(path, b"")
         if b"\0" in blob:
