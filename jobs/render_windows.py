@@ -28,6 +28,7 @@ import xml.etree.ElementTree as ET
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MANIFEST = os.path.join(HERE, "jobs.json")
+PLATFORMS = os.path.join(HERE, "platforms.json")
 NS = "http://schemas.microsoft.com/windows/2004/02/mit/task"
 
 # Keys this renderer honours. Anything in the manifest and not in here is
@@ -65,6 +66,50 @@ def posix_only(cmd):
     return cmd.startswith("/") or cmd.startswith("\\usr\\") or cmd.startswith("\\bin\\")
 
 
+def _table():
+    return json.load(open(PLATFORMS))["windows"]
+
+
+def win_program(a, losses, trans):
+    """Resolve a {PLACEHOLDER} program to the Windows one that runs it."""
+    if not (a.startswith("{") and a.endswith("}")):
+        return a
+    name, t = a[1:-1], _table()
+    if name in t["programs"]:
+        got = t["programs"][name]
+        if name in ("PYTHON3_SYSTEM", "PYTHON3_USER"):
+            trans.append(f"{a} resolves to {got} from PATH. macOS has two "
+                         f"pythons with different site-packages and Windows has "
+                         f"one, so this job's dependencies must be installed for "
+                         f"that interpreter")
+        return got
+    losses.append(f"{a}: platforms.json names no Windows program for it, so the "
+                  f"task is generated and cannot run")
+    return a
+
+
+def win_search_path(k, entries, losses):
+    """A search path is a list. Join it with ';' and say what did not survive.
+
+    Windows finds its own system tools through its default PATH, so dropping
+    /usr/bin and its neighbours is correct rather than lossy. Any OTHER absolute
+    POSIX directory is a real loss, and it is named one entry at a time instead
+    of condemning the whole variable."""
+    t = _table()
+    kept, lost = [], []
+    for e in entries:
+        if e in t["system_path_dirs"]:
+            continue
+        if e.startswith("{HOME}") or not e.startswith("/"):
+            kept.append(win_path(e))
+        else:
+            lost.append(e)
+    if lost:
+        losses.append(f"{k} names {len(lost)} POSIX directory(ies) with no Windows "
+                      f"equivalent, dropped from the search path: " + ", ".join(lost))
+    return t["path_separator"].join(kept)
+
+
 def build_command(job):
     """(command, arguments, losses, translations).
 
@@ -75,29 +120,29 @@ def build_command(job):
     argv = job.get("ProgramArguments") or ([job["Program"]] if "Program" in job else [])
     if not argv:
         return None, None, ["no Program or ProgramArguments; nothing to run"], []
-    argv = [win_path(a) for a in argv]
 
+    losses, trans = [], []
     # The check is on the program the job actually names. Running it after the
     # cmd.exe wrapper is chosen tests the wrapper, which is always portable, and
     # the whole class of unrunnable POSIX interpreters then reports clean.
-    losses = []
+    argv = [win_program(argv[0], losses, trans)] + list(argv[1:])
+    argv = [win_path(a) for a in argv]
     if posix_only(argv[0]):
         losses.append(f"the program is a POSIX path ({argv[0]}); no such file exists "
                       f"on Windows, so this task is generated but cannot run until "
                       f"the interpreter is named portably")
 
-    env = job.get("EnvironmentVariables") or {}
+    env = dict(job.get("EnvironmentVariables") or {})
     out, err = job.get("StandardOutPath"), job.get("StandardErrorPath")
-    trans = []
 
-    # A POSIX PATH is colon-separated. Turning its slashes round produces a
-    # string Windows accepts and then silently ignores every entry of, which is
-    # worse than an error. Name it rather than emit a confidently wrong PATH.
     for k, v in sorted(env.items()):
-        if isinstance(v, str) and v.count(":") >= 2 and "/" in v:
+        if isinstance(v, list):
+            env[k] = win_search_path(k, v, losses)
+        elif isinstance(v, str) and v.count(":") >= 2 and "/" in v:
             losses.append(f"{k} is a colon-separated POSIX search path with "
-                          f"{v.count(':') + 1} entries; Windows separates on ';' "
-                          f"and none of these directories exist there")
+                          f"{v.count(':') + 1} entries declared as one string; "
+                          f"declare it as a list of directories in jobs.json and "
+                          f"this renderer can join it with ';' instead")
 
     if not env and not out and not err:
         return argv[0], " ".join(argv[1:]), losses, trans

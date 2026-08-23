@@ -18,6 +18,7 @@ import argparse, json, os, plistlib, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MANIFEST = os.path.join(HERE, "jobs.json")
+PLATFORMS = os.path.join(HERE, "platforms.json")
 LIVE = os.path.expanduser("~/Library/LaunchAgents")
 
 
@@ -28,7 +29,36 @@ def fill(v, home):
     return v
 
 
+def resolve(job, plat):
+    """Turn a platform-neutral declaration back into one platform's strings.
+
+    Two things in a job are not portable and are declared without a platform in
+    them. The program is a placeholder such as {PYTHON3_SYSTEM}, because
+    /usr/bin/python3 does not exist off macOS. A search path is a LIST of
+    directories, because ':' is not a separator everywhere. This function is
+    where a platform's own names enter, and jobs/platforms.json is the only
+    file that holds them."""
+    t = json.load(open(PLATFORMS))[plat]
+    progs, sep = t["programs"], t["path_separator"]
+
+    def prog(a):
+        # {HOME}/x is not a program placeholder; only a whole-value one is.
+        return progs.get(a[1:-1], a) if a.startswith("{") and a.endswith("}") else a
+
+    d = dict(job)
+    if d.get("ProgramArguments"):
+        d["ProgramArguments"] = [prog(a) for a in d["ProgramArguments"]]
+    if "Program" in d:
+        d["Program"] = prog(d["Program"])
+    env = d.get("EnvironmentVariables")
+    if env:
+        d["EnvironmentVariables"] = {
+            k: (sep.join(v) if isinstance(v, list) else v) for k, v in env.items()}
+    return d
+
+
 def render(job, home):
+    job = resolve(job, "launchd")
     d = {k: fill(v, home) for k, v in job.items() if k != "label"}
     d["Label"] = job["label"]
     return d

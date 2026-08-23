@@ -2,7 +2,29 @@
   "ai.architect.gateway": {
     "EnvironmentVariables": {
       "HERMES_HOME": "{HOME}/dev/code/hermes-v2",
-      "PATH": "{HOME}/dev/code/hermes-v2/hermes-agent/venv/bin:/usr/local/bin:{HOME}/.kimi-code/bin:{HOME}/.local/bin:/usr/local/opt/node@20/bin:{HOME}/anaconda3/bin:{HOME}/anaconda3/condabin:/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/usr/local/share/dotnet:~/.dotnet/tools:/Library/Frameworks/Mono.framework/Versions/Current/Commands:{HOME}/.cargo/bin:{HOME}/.rvm/bin:{HOME}/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/1.2.3/bin",
+      "PATH": [
+        "{HOME}/dev/code/hermes-v2/hermes-agent/venv/bin",
+        "/usr/local/bin",
+        "{HOME}/.kimi-code/bin",
+        "{HOME}/.local/bin",
+        "/usr/local/opt/node@20/bin",
+        "{HOME}/anaconda3/bin",
+        "{HOME}/anaconda3/condabin",
+        "/bin",
+        "/System/Cryptexes/App/usr/bin",
+        "/usr/bin",
+        "/usr/sbin",
+        "/sbin",
+        "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin",
+        "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin",
+        "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin",
+        "/usr/local/share/dotnet",
+        "~/.dotnet/tools",
+        "/Library/Frameworks/Mono.framework/Versions/Current/Commands",
+        "{HOME}/.cargo/bin",
+        "{HOME}/.rvm/bin",
+        "{HOME}/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/1.2.3/bin"
+      ],
       "VIRTUAL_ENV": "{HOME}/dev/code/hermes-v2/.venv"
     },
     "ExitTimeOut": 25,
@@ -38,11 +60,19 @@
   },
   "ai.estate.consultd": {
     "EnvironmentVariables": {
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "KeepAlive": true,
     "ProgramArguments": [
-      "/usr/bin/python3",
+      "{PYTHON3_SYSTEM}",
       "{HOME}/.claude/scripts/consultd.py",
       "serve"
     ],
@@ -65,7 +95,15 @@
       "BRIDGE_SEARCH_OFF": "true",
       "BRIDGE_SIGNIN_MARKERS": "",
       "BRIDGE_URL": "https://chat.deepseek.com/",
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "KeepAlive": true,
     "ProgramArguments": [
@@ -80,10 +118,47 @@
     "WorkingDirectory": "{HOME}/.deepseek-bridge",
     "label": "ai.estate.deepseek-bridge"
   },
+  "ai.estate.drills": {
+    "EnvironmentVariables": {
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
+    },
+    "LowPriorityIO": true,
+    "Nice": 10,
+    "ProgramArguments": [
+      "{PYTHON3_SYSTEM}",
+      "{HOME}/.claude/scripts/drills/run.py",
+      "--all"
+    ],
+    "StandardErrorPath": "{HOME}/.claude/logs/drills.log",
+    "StandardOutPath": "{HOME}/.claude/logs/drills.log",
+    "StartCalendarInterval": {
+      "Hour": 4,
+      "Minute": 30,
+      "Weekday": 1
+    },
+    "WorkingDirectory": "{HOME}/.claude/scripts",
+    "label": "ai.estate.drills"
+  },
   "ai.estate.kimi-bridge": {
     "EnvironmentVariables": {
       "KIMI_BRIDGE_HEADLESS": "true",
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "KeepAlive": true,
     "ProgramArguments": [
@@ -100,12 +175,17 @@
   },
   "ai.estate.tracked-guard": {
     "EnvironmentVariables": {
-      "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+      "PATH": [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin"
+      ]
     },
     "Nice": 5,
     "ProcessType": "Background",
     "ProgramArguments": [
-      "/usr/bin/python3",
+      "{PYTHON3_SYSTEM}",
       "{HOME}/.claude/scripts/tracked.py",
       "--sync"
     ],
@@ -119,7 +199,29 @@
   "ai.hermes.gateway": {
     "EnvironmentVariables": {
       "HERMES_HOME": "{HOME}/dev/code/hermes-v2",
-      "PATH": "{HOME}/dev/code/hermes-v2/hermes-agent/venv/bin:/usr/local/bin:{HOME}/.kimi-code/bin:{HOME}/.local/bin:/usr/local/opt/node@20/bin:{HOME}/anaconda3/bin:{HOME}/anaconda3/condabin:/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/usr/local/share/dotnet:~/.dotnet/tools:/Library/Frameworks/Mono.framework/Versions/Current/Commands:{HOME}/.cargo/bin:{HOME}/.rvm/bin:{HOME}/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/1.2.3/bin",
+      "PATH": [
+        "{HOME}/dev/code/hermes-v2/hermes-agent/venv/bin",
+        "/usr/local/bin",
+        "{HOME}/.kimi-code/bin",
+        "{HOME}/.local/bin",
+        "/usr/local/opt/node@20/bin",
+        "{HOME}/anaconda3/bin",
+        "{HOME}/anaconda3/condabin",
+        "/bin",
+        "/System/Cryptexes/App/usr/bin",
+        "/usr/bin",
+        "/usr/sbin",
+        "/sbin",
+        "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin",
+        "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin",
+        "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin",
+        "/usr/local/share/dotnet",
+        "~/.dotnet/tools",
+        "/Library/Frameworks/Mono.framework/Versions/Current/Commands",
+        "{HOME}/.cargo/bin",
+        "{HOME}/.rvm/bin",
+        "{HOME}/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/1.2.3/bin"
+      ],
       "VIRTUAL_ENV": "{HOME}/dev/code/hermes-v2/.venv"
     },
     "ExitTimeOut": 25,
@@ -157,10 +259,15 @@
     "EnvironmentVariables": {
       "HERMES_HOME": "{HOME}/.hermes",
       "HOME": "{HOME}",
-      "PATH": "/usr/local/bin:/usr/bin:/bin:{HOME}/.local/bin"
+      "PATH": [
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "{HOME}/.local/bin"
+      ]
     },
     "ProgramArguments": [
-      "/usr/local/bin/python3",
+      "{PYTHON3_USER}",
       "{HOME}/.hermes/scripts/launchd_receipt.py",
       "--label",
       "ai.hermes.runaway-reaper",
@@ -177,7 +284,14 @@
   },
   "com.chidionyema.graphify-sweep": {
     "EnvironmentVariables": {
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "Nice": 5,
     "ProgramArguments": [
@@ -198,10 +312,17 @@
   },
   "com.chidionyema.guard-selftest": {
     "EnvironmentVariables": {
-      "PATH": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "ProgramArguments": [
-      "/usr/local/bin/python3",
+      "{PYTHON3_USER}",
       "{HOME}/.claude/scripts/estate-selftest.py",
       "--quiet",
       "--alert"
@@ -223,7 +344,14 @@
   },
   "com.chidionyema.reflect": {
     "EnvironmentVariables": {
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "Nice": 5,
     "ProgramArguments": [
@@ -244,7 +372,14 @@
   },
   "com.estate.bundlepush": {
     "EnvironmentVariables": {
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "LowPriorityIO": true,
     "ProcessType": "Background",
@@ -260,11 +395,18 @@
   },
   "com.estate.costsentinel": {
     "EnvironmentVariables": {
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "Nice": 5,
     "ProgramArguments": [
-      "/usr/local/bin/python3",
+      "{PYTHON3_USER}",
       "{HOME}/.claude/scripts/estate/estate_cost_sentinel.py",
       "--digest"
     ],
@@ -276,11 +418,18 @@
   },
   "com.estate.downshift": {
     "EnvironmentVariables": {
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "Nice": 5,
     "ProgramArguments": [
-      "/usr/local/bin/python3",
+      "{PYTHON3_USER}",
       "{HOME}/.claude/scripts/estate/estate_downshift.py"
     ],
     "RunAtLoad": true,
@@ -293,7 +442,7 @@
     "Nice": 10,
     "ProcessType": "Background",
     "ProgramArguments": [
-      "/usr/local/bin/python3",
+      "{PYTHON3_USER}",
       "{HOME}/.claude/scripts/founder_board.py",
       "--html",
       "{HOME}/.claude/state/founder-board.html"
@@ -308,7 +457,7 @@
   "com.founder.boardserve": {
     "KeepAlive": true,
     "ProgramArguments": [
-      "/usr/local/bin/python3",
+      "{PYTHON3_USER}",
       "{HOME}/.claude/scripts/board_serve.py"
     ],
     "RunAtLoad": true,
@@ -319,10 +468,18 @@
   },
   "com.founder.estateaudit": {
     "EnvironmentVariables": {
-      "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:{HOME}/.local/bin"
+      "PATH": [
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+        "{HOME}/.local/bin"
+      ]
     },
     "ProgramArguments": [
-      "/usr/bin/python3",
+      "{PYTHON3_SYSTEM}",
       "{HOME}/.claude/scripts/estate/estate_audit.py",
       "--html",
       "--state"
@@ -335,11 +492,18 @@
   },
   "com.founder.estatepush": {
     "EnvironmentVariables": {
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "Nice": 5,
     "ProgramArguments": [
-      "/bin/bash",
+      "{BASH}",
       "{HOME}/.claude/scripts/estate/estate_push.sh"
     ],
     "RunAtLoad": true,
@@ -350,7 +514,7 @@
   },
   "com.founder.estatewatch": {
     "ProgramArguments": [
-      "/usr/bin/python3",
+      "{PYTHON3_SYSTEM}",
       "{HOME}/.claude/scripts/estate/estate_watch.py"
     ],
     "RunAtLoad": true,
@@ -363,7 +527,7 @@
     "Nice": 10,
     "ProcessType": "Background",
     "ProgramArguments": [
-      "/bin/sh",
+      "{SH}",
       "{HOME}/.claude/scripts/stuck_detector_tick.sh"
     ],
     "RunAtLoad": true,
@@ -375,7 +539,14 @@
   },
   "com.prospector-control.failover-watch": {
     "EnvironmentVariables": {
-      "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "ProgramArguments": [
       "{HOME}/.prospector/bin/failover",
@@ -389,10 +560,17 @@
   },
   "com.prospector-control.receipt-bridge": {
     "EnvironmentVariables": {
-      "PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "/usr/local/bin",
+        "/opt/homebrew/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "ProgramArguments": [
-      "/usr/local/bin/python3",
+      "{PYTHON3_USER}",
       "{HOME}/.hermes/scripts/launchd_receipt.py",
       "--label",
       "com.prospector-control.receipt-bridge",
@@ -411,7 +589,14 @@
   "com.prospector.backup": {
     "EnvironmentVariables": {
       "HOME": "{HOME}",
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ],
       "PROSPECTOR_STORE_DIR": "{HOME}/Documents/code/prospector/store"
     },
     "ProgramArguments": [
@@ -436,7 +621,14 @@
   "com.prospector.estate-inventory": {
     "EnvironmentVariables": {
       "HOME": "{HOME}",
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ]
     },
     "ProgramArguments": [
       "{HOME}/Documents/code/prospector-live/.venv/bin/python",
@@ -459,7 +651,14 @@
   "com.prospector.launchd-held": {
     "EnvironmentVariables": {
       "HOME": "{HOME}",
-      "PATH": "/usr/local/bin:{HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "PATH": [
+        "/usr/local/bin",
+        "{HOME}/.local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ],
       "PROSPECTOR_STORE_DIR": "{HOME}/Documents/code/prospector/store"
     },
     "ProgramArguments": [
@@ -482,7 +681,14 @@
   "com.prospector.log-rotation": {
     "EnvironmentVariables": {
       "HOME": "{HOME}",
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ],
       "PROSPECTOR_STORE_DIR": "{HOME}/Documents/code/prospector/store"
     },
     "ProgramArguments": [
@@ -501,7 +707,14 @@
   "com.prospector.offsite-backup": {
     "EnvironmentVariables": {
       "HOME": "{HOME}",
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "PATH": [
+        "{HOME}/.local/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ],
       "PROSPECTOR_STORE_DIR": "{HOME}/Documents/code/prospector/store"
     },
     "ProgramArguments": [
@@ -522,7 +735,14 @@
   "com.prospector.process-audit": {
     "EnvironmentVariables": {
       "HOME": "{HOME}",
-      "PATH": "/usr/local/bin:{HOME}/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "PATH": [
+        "/usr/local/bin",
+        "{HOME}/.local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin"
+      ],
       "PROSPECTOR_STORE_DIR": "{HOME}/Documents/code/prospector/store"
     },
     "ProgramArguments": [
@@ -558,26 +778,5 @@
       "{HOME}/Library/Application Support/Steam/Steam.AppBundle/Steam"
     ],
     "label": "com.valvesoftware.steamclean"
-  },
-  "ai.estate.drills": {
-    "label": "ai.estate.drills",
-    "ProgramArguments": [
-      "/usr/bin/python3",
-      "{HOME}/.claude/scripts/drills/run.py",
-      "--all"
-    ],
-    "StartCalendarInterval": {
-      "Weekday": 1,
-      "Hour": 4,
-      "Minute": 30
-    },
-    "WorkingDirectory": "{HOME}/.claude/scripts",
-    "StandardOutPath": "{HOME}/.claude/logs/drills.log",
-    "StandardErrorPath": "{HOME}/.claude/logs/drills.log",
-    "Nice": 10,
-    "LowPriorityIO": true,
-    "EnvironmentVariables": {
-      "PATH": "{HOME}/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-    }
   }
 }
