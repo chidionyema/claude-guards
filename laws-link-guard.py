@@ -43,8 +43,51 @@ def rel_target(link: str) -> str:
     return os.path.relpath(CANON, os.path.dirname(link))
 
 
+def uninvert() -> str:
+    """Put the laws back at CANON if somebody made CANON the symlink.
+
+    An agent following LAW 24 reasonably concludes the laws should live inside
+    the tracked repository, moves ~/AGENTS.md to ~/.claude/AGENTS.md and points
+    ~/AGENTS.md at it. That reads fine and is fatal here: the loop below then
+    replaces ~/.claude/AGENTS.md with a link to ../AGENTS.md, which is now a
+    link back, and 64,920 bytes of laws become a symlink cycle that resolves to
+    nothing. It happened on 2026-08-23 and was caught before the hook ran.
+
+    The laws are already in git as AGENTS.snapshot.md, so the inversion buys
+    nothing. Undo it rather than refuse, because a Stop hook that blocks gets
+    switched off.
+    """
+    if not os.path.islink(CANON):
+        return ""
+    real = os.path.realpath(CANON)
+    #: realpath() of a symlink is the file it lands on, and realpath() of that
+    #: file is itself, so comparing the two always says "equal". An earlier
+    #: version guarded on exactly that and never fired once.
+    if not os.path.isfile(real) or os.path.islink(real):
+        return ""
+    #: Match back to the literal LINKS path, not the realpath. On macOS /var is
+    #: itself a symlink to /private/var, and relinking against the resolved form
+    #: writes a nine-hop relative path that works but reads as damage.
+    link = next((l for l in LINKS
+                 if os.path.realpath(os.path.dirname(l)) == os.path.realpath(os.path.dirname(real))
+                 and os.path.basename(l) == os.path.basename(real)), "")
+    if not link:
+        return ""                       # pointed somewhere else on purpose
+    body = open(real, "rb").read()
+    os.remove(CANON)
+    with open(CANON, "wb") as f:
+        f.write(body)
+    os.remove(link)
+    os.symlink(rel_target(link), link)
+    return f"topology was inverted: the laws are a file at {CANON} again, {link} links to it"
+
+
 def main() -> int:
     changed = []
+
+    flip = uninvert()
+    if flip:
+        changed.append(flip)
 
     if not os.path.exists(CANON):
         # The one copy is gone. Come back from the newest thing that survives:
