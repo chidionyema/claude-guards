@@ -275,6 +275,49 @@ def _remote_is_public():
     return public
 
 
+ALLOW_REL = os.path.join(".estate", "public-ciphertext-ok")
+
+
+def _declared_public_ciphertext(paths):
+    """This repository's own written statement that its ciphertext may be public.
+
+    hermes-v2 does this deliberately: the age ciphertext ships in the image and the
+    key is a Fly secret, which is the standard sealed-secret shape and not a mistake.
+    A guard that refuses it would be worked around with ESTATE_GUARDS_OFF=1, and a
+    guard people routinely switch off is not a guard.
+
+    Returns the declaration text, or None. Three conditions, each closing a way the
+    exemption could be granted without a person ever seeing it:
+
+      - the file is TRACKED, so adding it was itself a reviewable commit;
+      - it is not staged in THIS commit, so the exemption cannot arrive inside the
+        very change it exempts;
+      - it says something. An empty opt-out file records a decision nobody made, so
+        the floor is 40 characters naming where the key lives and why it is not here.
+
+    Every failure path returns None, which refuses. That is the behaviour, not a
+    swallowed error: a wrong refusal costs one command, a wrong pass costs every
+    credential in the file, permanently and in public.
+    """
+    if ALLOW_REL in paths:
+        return None
+    try:
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=10).stdout.strip()
+        if not top:
+            return None
+        tracked_here = subprocess.run(["git", "ls-files", "--error-unmatch", ALLOW_REL],
+                                      capture_output=True, text=True, timeout=10, cwd=top)
+        if tracked_here.returncode != 0:
+            return None
+        with open(os.path.join(top, ALLOW_REL)) as fh:
+            body = "\n".join(ln for ln in fh.read().splitlines()
+                             if ln.strip() and not ln.lstrip().startswith("#")).strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return body if len(body) >= 40 else None
+
+
 def refuse_ciphertext_to_public(paths, blobs):
     """Staged encrypted stores, when this repository's remote is not private."""
     hits = [p for p in paths
@@ -283,6 +326,11 @@ def refuse_ciphertext_to_public(paths, blobs):
         return [], True
     public = _remote_is_public()
     if public is False:
+        return [], True
+    declared = _declared_public_ciphertext(paths)
+    if declared:
+        print("note: encrypted store into a public remote, allowed by "
+              f"{ALLOW_REL}: {declared.splitlines()[0][:100]}", file=sys.stderr)
         return [], True
     return hits, public is True
 
@@ -321,8 +369,13 @@ def main():
         print("branch is gone, so the day the private key leaks, every credential in", file=sys.stderr)
         print("here is readable retroactively and cannot be recalled.", file=sys.stderr)
         print("", file=sys.stderr)
-        print("Make the repository private, or keep the store out of it. If you are", file=sys.stderr)
-        print("certain, the override is explicit and leaves a record:", file=sys.stderr)
+        print("Make the repository private, or keep the store out of it.", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("If the shape is deliberate -- ciphertext in the repo, key held elsewhere --", file=sys.stderr)
+        print(f"say so in {ALLOW_REL} and commit that file on its own. It must be", file=sys.stderr)
+        print("tracked, at least 40 characters of prose, and not staged in the same", file=sys.stderr)
+        print("commit it exempts, so the allowance is a change someone can review.", file=sys.stderr)
+        print("The one-off escape leaves no such record:", file=sys.stderr)
         print("  ESTATE_GUARDS_OFF=1 git commit ...", file=sys.stderr)
         return 1
     for path in paths:
