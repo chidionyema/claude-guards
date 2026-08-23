@@ -99,6 +99,26 @@ def board(hours=24):
     return rows, errors
 
 
+def ticket_of(session):
+    """The GitHub issue this session is working under, as a short tag.
+
+    Written by ticket-gate.py, which opens the issue itself the first time a session changes
+    anything. He prompts several tabs at once, so a status line that does not name the issue
+    leaves him holding the thread. Empty string when the session has not changed anything yet;
+    that is not a fault, it is a session that has only been reading.
+    """
+    import json as _json
+    path = os.path.join(HOME, ".claude", "state", "tickets", "%s.json" % session)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            b = _json.load(fh)
+    except Exception:
+        return ""
+    if b.get("issue"):
+        return "#%s " % b["issue"]
+    return "NO-TICKET "
+
+
 def alerts(hours=24):
     """Only what a person would want to be woken for. Silence means nothing is wrong,
     and the board is what proves the checker itself is alive."""
@@ -107,10 +127,15 @@ def alerts(hours=24):
     for r in rows:
         st = state_of(r)
         first = (r["text"].splitlines() or [""])[0][:120]
+        tk = ticket_of(r["session"])
+        if tk == "NO-TICKET ":
+            #: The gate tried to open one and GitHub refused. That is work happening off the
+            #: board, which is the exact thing he asked to be impossible.
+            out.append(f"NO TICKET {r['slug']}: could not open an issue, work is off the board")
         if st == "BLOCKED":
-            out.append(f"BLOCKED  {r['slug']}: {first}")
+            out.append(f"BLOCKED  {tk}{r['slug']}: {first}")
         elif st == "WAITING" and r["idle"] / 60 < 180:
-            out.append(f"WAITING  {r['slug']} for {r['idle']/60:.0f} min: {first}")
+            out.append(f"WAITING  {tk}{r['slug']} for {r['idle']/60:.0f} min: {first}")
         ru = reuse(r)
         if r["cache_write"] > 200_000 and ru < BREAKEVEN:
             waste = r["usd"] * (1 - ru / BREAKEVEN) if ru else r["usd"]

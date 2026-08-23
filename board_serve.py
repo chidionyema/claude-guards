@@ -11,6 +11,7 @@ This serves exactly one file, on 127.0.0.1 only, and it serves the file's OWN ag
 a stale page that says it is stale is honest, and a page that cannot say so is a black box.
 
     http://127.0.0.1:8787/                 the board
+    http://127.0.0.1:8787/ops              every session, its ticket, its last words
     http://127.0.0.1:8787/admin            the admin dashboard: freshness, and mint a link
     http://127.0.0.1:8787/audit?t=TOKEN    the full estate audit, behind a minted token
     http://127.0.0.1:8787/health           plain text, for a probe
@@ -46,8 +47,10 @@ BOARD = os.path.expanduser("~/.claude/state/founder-board.html")
 AUDIT = os.path.expanduser("~/.claude/state/estate-audit.html")
 AUDIT_JSON = os.path.expanduser("~/.claude/state/estate-audit.json")
 TOKENS = os.path.expanduser("~/.claude/state/audit-tokens.json")
+OPS = os.path.expanduser("~/.claude/state/ops-dashboard.html")
 PORT = int(os.environ.get("FOUNDER_BOARD_PORT", "8787"))
 STALE_S = 90 * 60          # the builder runs hourly; 90 minutes means a build was MISSED
+OPS_STALE_S = 15 * 60      # aiden rebuilds /ops every 5 minutes; 15 means ticks are being missed
 AUDIT_STALE_S = int(os.environ.get("AUDIT_STALE_S", 2 * 3600))
 TOKEN_TTL_S = int(os.environ.get("AUDIT_TOKEN_TTL_S", 24 * 3600))
 
@@ -276,6 +279,23 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._send(200, _admin_page(), "text/html; charset=utf-8")
             return
+        if path in ("/ops", "/opsdashboard"):
+            #: Every agent session, the GitHub issue it is working under, and its own last status
+            #: line. He prompts several tabs at once; this is the page that says which is which.
+            #: Written by ticket-gate.py --dashboard on aiden's five-minute tick.
+            try:
+                with open(OPS, "rb") as fh:
+                    body = fh.read()
+            except OSError as e:
+                self._send(503, f"no ops page on disk at {OPS}: {e}".encode(), "text/plain")
+                return
+            ops_age = time.time() - os.stat(OPS).st_mtime
+            banner = (f'<div style="font:14px/1.5 -apple-system,sans-serif;'
+                      f'background:{"#14532d" if ops_age < OPS_STALE_S else "#9a3412"};'
+                      f'color:#fff;padding:8px 16px">sessions measured '
+                      f'{int(ops_age // 60)} minutes ago</div>').encode()
+            self._send(200, banner + body, "text/html; charset=utf-8")
+            return
         try:
             age = time.time() - os.stat(BOARD).st_mtime
         except OSError as e:
@@ -290,7 +310,7 @@ class Handler(BaseHTTPRequestHandler):
                        "text/plain")
             return
         if path not in ("/", "/index.html", "/founder-board.html"):
-            self._send(404, b"this server serves: / (board), /admin, /audit?t=TOKEN, /health\n",
+            self._send(404, b"this server serves: / (board), /ops, /admin, /audit?t=TOKEN, /health\n",
                        "text/plain")
             return
         try:

@@ -32,6 +32,9 @@ HERE = os.path.join(HOME, ".claude", "scripts", "aiden")
 BOARD = os.path.join(HOME, ".claude", "state", "aiden-board.html")
 SENT = os.path.join(HOME, ".claude", "state", "aiden-sent.json")
 RECEIPTS = os.path.join(HOME, ".claude", "state", "aiden-ticks.jsonl")
+#: The ticket counts as they stood the last time he was told them. A message goes out when this
+#: file and the live board disagree, and not otherwise.
+TICKET_COUNTS = os.path.join(HOME, ".claude", "state", "aiden-ticket-counts.json")
 
 #: How long an alert stays "already said". Long enough that a slow-moving
 #: problem is not repeated every five minutes, short enough that one still
@@ -41,6 +44,14 @@ QUIET_SECONDS = 6 * 3600
 _spec = importlib.util.spec_from_file_location("aiden", os.path.join(HERE, "aiden.py"))
 aiden = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(aiden)
+
+#: The ticket gate. Loaded by path because its filename carries a dash and cannot be imported
+#: by name. It owns the ops page and the ticket counts; this file owns the schedule and the
+#: delivery. Neither is duplicated.
+_gspec = importlib.util.spec_from_file_location(
+    "ticket_gate", os.path.join(HOME, ".claude", "scripts", "ticket-gate.py"))
+gate = importlib.util.module_from_spec(_gspec)
+_gspec.loader.exec_module(gate)
 
 
 def load(path, default):
@@ -198,17 +209,66 @@ def main():
     result = {"ok": True, "why": "nothing needed a person"}
     if fresh:
         going = fresh[:12]
-        result = deliver("\n".join(a for _, a in going))
+        #: The ticket line rides on top of every message that goes out. Founder, 2026-08-23:
+        #: "i should be seeing ticketss noving not asking what are you doing". It is one line and
+        #: it is not deduplicated, because its numbers are the point: a message that says the same
+        #: counts as the last one is itself the finding.
+        try:
+            head = gate.headline() + "\n\n"
+        except Exception:                         # noqa: BLE001 - alerts still go out
+            head = ""
+        result = deliver(head + "\n".join(a for _, a in going))
         if result.get("ok"):
             for key, _ in going:
                 seen[key] = now
     with open(SENT, "w") as f:
         json.dump(seen, f)
 
+    #: Ticket movement, on its own trigger. Founder, 2026-08-23: "i should be seeing ticketss
+    #: noving not asking what are you doing". It cannot ride only on the alert message, because
+    #: an estate with no alerts sends nothing and he learns nothing -- and a ticket closing is
+    #: good news, which is exactly the kind an alert channel never carries.
+    #:
+    #: The trigger is a change in the counts, not the clock. Identical numbers every five minutes
+    #: is the noise that teaches a person to mute a channel; a number that moved is the whole
+    #: message. Silence here means the board did not move, and the page says so either way.
+    if not (result.get("ok") and fresh):
+        try:
+            now_counts = gate.counts(gate.movement().get("items") or [])
+            was = load(TICKET_COUNTS, {})
+            if was and was != now_counts:
+                moved = ", ".join("%s %+d" % (k, now_counts[k] - was.get(k, 0))
+                                  for k in sorted(now_counts) if now_counts[k] != was.get(k))
+                out = deliver(gate.headline() + "\n         moved: " + moved)
+                if out.get("ok"):
+                    with open(TICKET_COUNTS, "w") as f:
+                        json.dump(now_counts, f)
+                result = out
+            elif not was:
+                with open(TICKET_COUNTS, "w") as f:
+                    json.dump(now_counts, f)
+        except Exception as exc:                  # noqa: BLE001 - never crash a tick
+            print("ticket counts: %s: %s" % (type(exc).__name__, exc), file=sys.stderr)
+
     signal.alarm(0)
     _receipt({"at": started, "alerts": len(alerts), "sent": len(fresh),
               "delivery": result, "board": BOARD,
               "took_s": round(time.time() - now, 1)})
+
+    #: The ops page is rebuilt last, and deliberately after the receipt. It costs a second walk of
+    #: ~/.claude/projects -- measured 16.6s on 2026-08-23 against a tick that already ran 46-168s
+    #: -- and the first version of this ran it before delivery, which pushed one tick past the
+    #: 240s deadline and sent nothing at all. Delivery is the job; the page is the second copy of
+    #: the same facts. It gets its own 90s bound so it can never take the tick down with it.
+    signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(TimeoutError("ops page")))
+    signal.alarm(90)
+    try:
+        gate.dashboard()
+    except Exception as exc:                      # noqa: BLE001 - never crash a tick
+        print("ops page not rebuilt: %s: %s" % (type(exc).__name__, exc), file=sys.stderr)
+    finally:
+        signal.alarm(0)
+
     _drop_lock()
     return 0 if result.get("ok") else 1
 
