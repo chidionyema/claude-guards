@@ -247,15 +247,30 @@ try:
 except Exception:  # noqa: BLE001
     pass
 
-# Order: the web bridges first (kimi, then deepseek), then the local floor,
-# then the honest 503.
+# Keyed HTTPS rails, ahead of everything. A key cannot expire while nobody is
+# watching; a browser session can, and does. Absent or unimportable costs the
+# cascade three backends, never the daemon.
+try:
+    from direct_api_backends import DIRECT as _DIRECT
+except Exception:  # noqa: BLE001
+    _DIRECT = []
+
+# Order: the keyed APIs first, then the web bridges (kimi, then deepseek), then
+# the local floor, then the honest 503.
+#
+# The keyed rails lead as of 2026-08-23, and the reason is failure mode rather
+# than answer quality, which is unmeasured. A bridge dies when a login wall
+# appears at 03:00 and stays dead until a person signs in, which LAW 27 calls
+# turning a one-time cost into an operational one. A key dies when the balance
+# hits zero, which is a number somebody can watch. Measured that day: groq,
+# mistral and openrouter all answered; kimi and deepseek both needed a browser.
 #
 # KimiBackend is deliberately NOT in this list. It calls api.kimi.com/coding,
 # which is Kimi For Coding, a subscription this account does not hold. Measured
 # 2026-08-22: every readiness check returned 402 and the daemon spent a network
 # round trip per cycle proving it. The class stays because subscribing is one
 # line away; the cascade does not carry a backend that cannot answer.
-BACKENDS = _WEB_BRIDGES + [OllamaBackend(), NoneBackend()]
+BACKENDS = _DIRECT + _WEB_BRIDGES + [OllamaBackend(), NoneBackend()]
 REAL = [b for b in BACKENDS if b.name != "none"]
 
 

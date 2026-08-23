@@ -2,6 +2,16 @@
   "max_age_days_default": 8,
   "drills": [
     {
+      "id": "no-anthropic",
+      "what_breaks": "Anthropic goes down, suspends the account, or prices us out, and every agent on this estate stops at once.",
+      "why": "LAW 19: portability outranks everything. The founder called this the single biggest risk to the company's existence on 2026-08-23. The laws were already symlinked into ~/.codex, ~/.gemini and ~/.cursor, so the groundwork for an exit was in place and the exit itself had never once been taken. The drill strips every Anthropic credential from the environment and checks two layers: a model answering at all, and something that can actually edit a file. A chat completion is not a replacement for an agentic coder, so a pass needs one of each.",
+      "cmd": [
+        "/usr/bin/python3",
+        "{HERE}/no_anthropic.py"
+      ],
+      "max_age_days": 2
+    },
+    {
       "id": "rebuild",
       "what_breaks": "This Mac dies and the estate has to come back on a new machine.",
       "why": "LAW 19: a dependency whose exit has never been drilled is not portable, it is a hope.",
