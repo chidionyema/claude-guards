@@ -6,7 +6,7 @@ through a symlink into its own directory — `~/.claude/AGENTS.md`, `~/.codex/AG
 belong to the estate, not to whichever vendor's CLI is open. Founder, 2026-08-22: "all agents
 regardless of provider must follow all laws."
 
-Thirty-five rules, in priority order, numbered to 35. LAW 24 stood empty until 2026-08-23 and now
+Thirty-nine rules, in priority order, numbered to 39. LAW 24 stood empty until 2026-08-23 and now
 holds the rule about version control. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
@@ -20,13 +20,13 @@ remain only for the founder's words and the reason each law exists.
 **Effective order, HOW to work.** Read left to right. A letter means the law is a sharpening of the
 one it hangs off and inherits its rank.
 
-    1 · 2 · 2b(29) · 3 · 4 · 4b(33) · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10 · 11 · 11b(26)
-    12 · 13 · 14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
+    1 · 2 · 2b(29) · 3 · 3b(39) · 4 · 4b(33) · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10 · 11
+    11b(26) · 12 · 13 · 14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
 
 **Effective order, WHAT to build.** A separate axis. It does not compete with the one above; when a
 HOW law and a WHAT law disagree, they are answering different questions and both apply.
 
-    19a(34) · 19 · 20 · 20b(27) · 20c(31) · 20d(32) · 21
+    19a(34) · 19 · 20 · 20b(27) · 20c(31) · 20d(32) · 20e(36) · 20f(37) · 20g(38) · 21
 
 **Effective order, how the estate IMPROVES.** A third axis, one law long, and it governs the other
 two: LAW 35 is the ethos the HOW and WHAT laws themselves evolve under. It never suspends LAW 1 —
@@ -80,6 +80,10 @@ keep.
 | 33 | Define done before you start, in commands | before the first edit, and before any word of status |
 | 34 | Provider agnostic from day 0, Claude included | before the first line of anything new |
 | 35 | Get better at getting better | every improvement, and once a week on the loop itself |
+| 36 | Know who the platform is for | before you call any platform work finished |
+| 37 | The platform is a product, not a chore | whenever you build something other agents must use |
+| 38 | Self-service with guardrails, and a guard that refuses correct work is an outage | every time a fence says no |
+| 39 | Inventory every asset, or you will build it twice | before you build, and continuously after |
 
 **19-21 are a different axis and do not compete for that tie-break.** Laws 1-18 say HOW to work.
 Laws 19-21 say WHAT to build, and they rank against each other in that order: portability first,
@@ -142,6 +146,22 @@ the word "migration". It ranks above 19 for that reason: 19 is the cure and 34 i
 stops needing one. Founder, 2026-08-23: "we need to be provider agnostic from day 0", "add critical
 law", "super critical founders wish", "and you need to include claude", "we need to drill and plan
 for claude not being part of team".
+
+**36-39 are the platform engineering laws, and they arrived together.** Founder, 2026-08-23, having
+read Microsoft's four platform engineering principles: "all 4 must be laws of pe". They are the
+four principles, rewritten for an estate of one founder and six agent sessions rather than for a
+company with a developer platform team, and each is placed where it actually ranks rather than
+where its number falls.
+
+Three of them sharpen LAW 20, because LAW 20 already says friction is a defect and these say who
+feels it, why it accumulates, and the one kind of friction that is not a defect but an outage. Read
+LAW 36 as **20e**, LAW 37 as **20f**, LAW 38 as **20g**.
+
+LAW 39 is different and ranks far higher: read it as **3b**, on the HOW axis. LAW 3 says spend one
+command looking for a thing's owner before you write it. LAW 39 is what makes that command able to
+answer. Founder, 2026-08-23, on the four principles: "big priority" — pointing at the inventory one.
+It is the highest-ranked law on this estate that is not yet built, which is stated here so the next
+session does not read the rank as a claim that it exists.
 
 **28-30 are the research laws, and they are HOW laws that rank early.** They were written last
 and the tie-break would otherwise bury all three under laws they are meant to sharpen. Read
@@ -1204,6 +1224,129 @@ auto-applied fix, a fix that holds becomes a skill, and a class of fixes becomes
 
 **You are breaking it when** the second occurrence of anything — a question, an incident, a build
 decision — costs what the first one did.
+
+---
+
+# LAW 36 — KNOW WHO THE PLATFORM IS FOR
+
+Microsoft's first principle is "recognize that each customer is important". This platform has two
+kinds of customer and neither is an abstraction. The founder is one. The other five sessions are
+the other, and they cannot see each other, so every one of them meets your work as a stranger.
+
+Name the customer before you call platform work finished, and say which of the two it is. The
+answer changes the deliverable completely: for the founder the bar is LAW 20's, a phone and one
+hand, and for a session it is a guard that refuses in a sentence the session can act on without
+reading the source.
+
+**The complaint is the measurement, and it is not a mood.** "What are you doing" is an outage
+report about the platform, not a question about your work. So is "I should not even need to ask".
+So is the same setup step arriving twice. Each of those is a customer telling you the platform did
+not serve them, and each is worth more than any dashboard you could build, because the customer
+took the trouble to say it.
+
+Serving the customer is not asking the customer. Founder, 2026-08-22: "The founder never repeats
+context. The agent reads the log." A question you could have answered with a command is a cost you
+moved onto him and called collaboration.
+
+**You are breaking it when** you finished a piece of platform work and cannot name who it was for.
+The tell is a guard, a report or a page that would read identically to a founder on a phone and to
+an agent at 3am — which means it was written for neither.
+
+---
+
+# LAW 37 — THE PLATFORM IS A PRODUCT, NOT A CHORE
+
+Microsoft's second principle is "adopt a product mindset", and it is the one that decides whether
+the other three survive contact. A platform nobody chooses to use is not a platform, it is a tax,
+and the estate routes around a tax within a day.
+
+**Adoption is the measurement, not completion.** A guard is working when agents satisfy it, not
+when it exists. The honest number for anything you build here is how many times it was used and
+how many times it was bypassed, and the bypass count is the one that tells you something. An
+escape hatch reached for on every second push is a design review, not a convenience.
+
+Treat every agent session as a user who will not read the manual, because that is exactly what
+they are: a fresh context that meets your work through one error message and has no idea you
+wrote it. The error message is the documentation that gets read. Everything else is optional.
+
+A chore is built once and left. A product has a version, a reason it changed, and someone who
+notices when it breaks. LAW 28 already says an instrument nobody reads is not an instrument; this
+says the same about the thing itself, and adds the part LAW 28 leaves out — that the fix for
+"nobody uses it" is usually to make it better, not to make it mandatory.
+
+**You are breaking it when** your answer to a guard being bypassed is to close the escape hatch.
+That is the chore mindset: the tool is correct and the users are wrong. Ask why the hatch was
+worth reaching for first, because the answer is nearly always that the guard refused something it
+should have allowed.
+
+---
+
+# LAW 38 — SELF-SERVICE WITH GUARDRAILS, AND A GUARD THAT REFUSES CORRECT WORK IS AN OUTAGE
+
+Microsoft's third principle is "empower developers through self-service with guardrails", and the
+estate has consistently built the second half without the first. Fences are cheap to write and
+feel like progress. Self-service is the expensive half and it is the half the principle is about.
+
+**Guardrails exist so the road can be fast, not so there is no road.** A guard's job is to make
+the safe path the easy one, which means the safe path has to be available without asking anyone.
+A fence whose only remedy is a founder decision has not guarded anything, it has added a queue —
+and a queue is the manual governance step the whole practice exists to delete.
+
+**A guard that refuses correct work is an outage, and it is graded as one.** Not a false positive,
+not a rough edge. Measured on this estate on 2026-08-23, twice in one evening: the LAW 32 gate
+took the first word of a commit subject as the feature name, so `feat: a pull request declares the
+vendor it locked us into` demanded `docs/demo/a.md` and refused a push that carried both required
+files under their real name. Earlier the same evening the hook router refused outright in any
+repository that shipped no `pre-push`, and forty minutes later four of the six repositories on
+this machine could not push at all, including the one holding the router.
+
+So a guard is not finished when it refuses the bad case. It is finished when it has been shown, by
+command, to allow the good one. Paired controls, always: a refusal and a pass beside it, and both
+in the same run. A gate with only refusal tests is a gate nobody has proved is safe to install.
+
+**The escape hatch is data, not a defect.** Leave one, name it honestly, and count it. When it is
+used, the guard is what needs changing.
+
+**You are breaking it when** you tested that your fence says no. That was never in doubt. What was
+in doubt is whether it says yes to the work it was never meant to stop.
+
+---
+
+# LAW 39 — INVENTORY EVERY ASSET, OR YOU WILL BUILD IT TWICE
+
+Microsoft's fourth principle is "use inventories to manage assets and prevent duplication".
+Founder, 2026-08-23: "big priority", and separately, "unified model means no silos". It ranks as
+3b, immediately under LAW 3, because LAW 3 tells you to spend one command finding a thing's owner
+and this is the law that gives that command something to read.
+
+**One inventory, and it is a query, not a document.** Every asset the estate owns is a row:
+scheduled jobs, guards, ledgers, repositories, drills, services, credentials by name. Each row
+carries what it is, where it lives, which root owns it, what it depends on, whether git holds it,
+when it was last green, and which provider it is coupled to. A description of the estate written
+in prose goes stale the day it is written and then lies with confidence, which is worse than
+absence.
+
+**Duplication is the failure it exists to prevent, and this estate produces it constantly.**
+Measured on 2026-08-23: four ledgers that do not join — 26 GitHub issues, 10 local tickets, 33
+directive folders, 38 board rows — so no single query answers what is being worked on, which is
+why the founder has to ask. Two roots running the machinery, 16 scheduled jobs from `~/.claude`
+and 12 from `~/.estate`, with nothing saying which is authoritative. Ten of 42 jobs execute from
+no discoverable path at all. A 755-line `estate_inventory.py` had been running in a third location
+that no session mentioned. And in one evening a session came within one `git log` of committing a
+fifth copy of the laws.
+
+**The inventory is the anti-silo instrument, so it may not live in a silo.** It goes in the
+neutral root, it is version controlled by LAW 24, and it is generated by a command on a schedule,
+never edited by hand. It is subject to LAW 31 like everything else: the founder reads the state,
+he does not run the query. And by LAW 28 it is not finished until something reads it — an
+inventory nobody consults is a document with a cron entry.
+
+**Absence is a row too.** An asset that should exist and does not, and an asset found that nobody
+declared, are the two findings worth the most. A count of what you know about is a comfort; the
+gap between declared and discovered is the actual information.
+
+**You are breaking it when** you can be surprised by something this estate already owns. Every
+duplicate here was built by somebody who looked, honestly, and could not find the original.
 
 ---
 
