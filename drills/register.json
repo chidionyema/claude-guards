@@ -1,0 +1,47 @@
+{
+  "max_age_days_default": 8,
+  "drills": [
+    {
+      "id": "rebuild",
+      "what_breaks": "This Mac dies and the estate has to come back on a new machine.",
+      "why": "LAW 19: a dependency whose exit has never been drilled is not portable, it is a hope.",
+      "cmd": ["/bin/bash", "{HERE}/../rebuild/drill.sh"],
+      "max_age_days": 8
+    },
+    {
+      "id": "estate-bundle-restore",
+      "what_breaks": "A commit exists only on this Mac and the Mac dies.",
+      "why": "estate_bundle_push.sh already clones each bundle back after uploading it. The drill is that the newest receipt says so and is recent, because a push script that stopped running still leaves yesterday's green receipt behind.",
+      "cmd": ["/usr/bin/python3", "{HERE}/check_bundle_restore.py"],
+      "max_age_days": 2
+    },
+    {
+      "id": "offsite-backup-restore",
+      "what_breaks": "The prospector data is gone and the offsite copy is the only one left.",
+      "why": "com.prospector.offsite-backup writes to an S3-compatible bucket and exits 0. Nothing has ever read an object back out. LAW 28: clean receipts from a backup that never copied a byte is a lie with a cron schedule.",
+      "cmd": null,
+      "todo": "Pull the newest object from the bucket into a throwaway directory, open it, and assert it contains the table or file it claims to."
+    },
+    {
+      "id": "secret-rotation",
+      "what_breaks": "A credential leaks and has to be replaced before anyone can be told it leaked.",
+      "why": "LAW 21: a rotation that has not been proved by a command reads as not done. Nothing here has ever rotated a live credential and then shown the old one failing.",
+      "cmd": null,
+      "todo": "Rotate one low-blast-radius credential end to end: mint, install, prove the new one works, prove the old one now returns 401."
+    },
+    {
+      "id": "telegram-delivery",
+      "what_breaks": "Something breaks at 03:00 and the message never arrives.",
+      "why": "LAW 28: prove the arrival, not the send. The old coordinator fired escalate 18 times and delivered 0 notifications, and nothing caught it for four days.",
+      "cmd": null,
+      "todo": "Send a marked message and read it back off the API, so a dead poller or a wrong chat id fails the drill rather than passing it."
+    },
+    {
+      "id": "fly-rollback",
+      "what_breaks": "A deploy takes production down and the previous release has to come back.",
+      "why": "LAW 19 grades a dependency by its exit. The exit from a bad Fly release is a rollback nobody has run.",
+      "cmd": null,
+      "todo": "On a non-customer app, deploy a known-bad release, roll it back, and assert the health endpoint answers again."
+    }
+  ]
+}
