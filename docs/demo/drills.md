@@ -7,26 +7,58 @@ checks it still goes anywhere. Then it writes one line on the board every
 session reads at startup, so a session that opens on Tuesday morning already
 knows.
 
-A good week reads like this:
+The weekly job has not fired yet. `launchctl print gui/501/ai.estate.drills`
+reported `runs = 0` on 2026-08-23. The job is loaded and its definition is
+correct, and its first Monday has not come round. Every run below was started by
+an agent typing the command, which is the thing the schedule exists to replace.
 
-    All 2 written recovery drills passed. 4 recovery paths still have no
-    drill and are therefore unproven: offsite-backup-restore,
-    secret-rotation, telegram-delivery, fly-rollback.
+## The real run, 2026-08-23
 
-A bad week names the thing that broke, not the place to go and look:
+    $ /usr/bin/python3 drills/run.py --all
 
-    1 of 2 recovery drills failed: rebuild (every declared job rendered for
-    this home: expected 29, got 28). 4 more recovery paths have no drill at
-    all.
+      no-anthropic           PASS   rc=0    100.4s  VERDICT: the estate can still work without Anthropic.
+      rebuild                PASS   rc=0    6.4s  DRILL PASSED
+      estate-bundle-restore  PASS   rc=0    0.2s  4 of the last 17 pushes cloned back standalone, newest push 3.5h ago
+
+That run put this line on `ESTATE_BOARD.jsonl`, which is the only part of it a
+person ever sees:
+
+    {"ts": "2026-08-23T20:45:46Z", "from": "drills", "kind": "drills-passed",
+     "text": "All 3 written recovery drills passed. 7 recovery paths still have
+     no drill and are therefore unproven: offsite-backup-restore,
+     secret-rotation, telegram-delivery, windows-rebuild, github-gone,
+     cloudflare-gone, stripe-gone."}
+
+A bad week names the thing that broke, not the place to go and look. This one is
+real too, from the run 20 minutes earlier, before the checker was fixed:
+
+    {"ts": "2026-08-23T20:25:26Z", "from": "drills", "kind": "drills-failed",
+     "text": "1 of 3 recovery drills failed: estate-bundle-restore (  None
+     None  restore=None) -> /Users/chidionyema/.claude/state/drills/
+     estate-bundle-restore-2026-08-23T202526Z.log. 7 more recovery paths have
+     no drill at all: ..."}
 
 The count of unproven paths leads both lines on purpose. It is the number that
 should be going down, and it is the one thing an agent cannot quietly leave
 alone while reporting green.
 
-## What passed on 2026-08-23
+## What that failure turned out to be
 
-    rebuild                PASS   11.3s   the estate rebuilt from its own
-                                          repositories into a throwaway home,
-                                          14 manual steps remaining
-    estate-bundle-restore  PASS    0.4s   4 of the last 20 pushes cloned back
-                                          standalone, newest push 1.8h ago
+The drill was right to be red and wrong about why, which is the more expensive
+kind of red. The bundle pusher writes `{"event":"skipped"}` when another copy of
+itself already holds the lock, and those rows carry no slug and no verdict
+because no push was attempted. The checker counted them as pushes that proved
+nothing, so the estate's own concurrency control turned the drill red while
+every real push in the window had passed.
+
+Underneath it was a real fault the drill could not see: one copy of the pusher
+held the lock for 4586 seconds and three runs skipped behind it. The checker now
+reads the skips for that, and only that:
+
+      3 of the last 20 runs skipped on a held lock; longest wait 76 min
+      that wedge cleared: 2026-08-23T17:15:57Z pushed 3.5h ago, after it
+      4 of the last 17 pushes cloned back standalone, newest push 3.5h ago
+
+A wedge over an hour with nothing pushed since fails the drill. A wedge a later
+push cleared reports as history, because a check that stays red after the thing
+recovered is one people learn to ignore.
