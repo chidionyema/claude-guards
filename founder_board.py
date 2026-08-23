@@ -257,7 +257,7 @@ def collect_estate_audit() -> list[Row]:
 
 
 def collect_prs() -> list[Row]:
-    """What is in flight. A PR nobody can merge is the pipeline stopped (LAW 12)."""
+    """What is in flight. A PR nobody can merge is the pipeline stopped (LAW 1)."""
     cmd = ["gh", "pr", "list", "--repo", "chidionyema/prospector", "--limit", "30",
            "--json", "number,title,mergeable,statusCheckRollup,createdAt,isDraft"]
     rc, out, err = sh(cmd, 90)
@@ -654,8 +654,11 @@ def _push_gate_reach() -> Row:
     written, tested and green while every repository that ships a feature pushes
     straight past them.
 
-    Measured 2026-08-23: bound in 2 repositories, and both of them are the
-    directory that holds the hooks.
+    Measured 2026-08-23 at 16:00: bound in 2 repositories, and both of them
+    were the directory that holds the hooks. Measured again at 19:50: bound in
+    every repository on the machine, because core.hooksPath was set globally
+    instead of repository by repository. A sweep can never catch up with git
+    clone. One global setting does not have to.
     """
     state = os.path.expanduser("~/.claude/state/law-enforcement.json")
     label = "Repos the push gate runs in"
@@ -667,6 +670,13 @@ def _push_gate_reach() -> Row:
         return _unknown(label, f"the probe has never written {state}: {e}", cmd)
     reach = d.get("hook_reach") or {}
     bound, total = reach.get("bound"), reach.get("repos")
+    if reach.get("global"):
+        #: Inherited, not swept. A repository cloned after this row was drawn is
+        #: gated too, which is the only version of this number that stays true.
+        return Row(GOOD, label, "every repo",
+                   "core.hooksPath is set globally, so repositories cloned "
+                   "tomorrow are gated as well",
+                   "git config --global --get core.hooksPath")
     if bound is None or not total:
         return _unknown(label, "the probe wrote no reach figure", cmd)
     binds = d.get("hook_binds") or []
