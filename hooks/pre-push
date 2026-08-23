@@ -264,6 +264,29 @@ def secrets(shas):
     return found
 
 
+def dependencies():
+    """Refuse a push that leaves a dependency neither drilled nor dismissed.
+
+    The check already existed and already refused. It just refused in the wrong
+    place. `drills/audit.py --ci` runs as the `guards` job on main, so an
+    unclassified host is caught after the push, on the branch every session
+    pushes to, and it goes red for all of them until somebody notices whose
+    commit did it. Measured 2026-08-23: fly.io and api.fly.io sat unclassified
+    and the guards job failed on every push to claude-guards main.
+
+    Running it here moves the refusal to the person who added the host, while
+    they are still holding the change. Same script, same exit code, earlier.
+    """
+    audit = os.path.join(os.getcwd(), "drills", "audit.py")
+    if not os.path.isfile(audit):
+        return []                          # a repo with no dependency register
+    r = subprocess.run([sys.executable, audit, "--ci"],
+                       capture_output=True, text=True)
+    if r.returncode == 0:
+        return []
+    return [l for l in r.stdout.splitlines() if l.strip()]
+
+
 def main():
     problems = []
     stale_problems = []
@@ -293,6 +316,21 @@ def main():
                 elif n < MIN_BODY_CHARS:
                     problems.append(
                         f"  {path} is a stub, {n} characters of prose, {MIN_BODY_CHARS} is the floor")
+    dep_problems = dependencies()
+    if dep_problems:
+        sys.stderr.write(
+            "\npush refused: a dependency is neither drilled nor dismissed (LAW 19).\n\n"
+            + "\n".join("  " + l for l in dep_problems) + """
+
+Every host and credential in this tree is one of two things: something a drill
+proves we survive losing, or something dismissed in writing with a reason. There
+is no third state, because an unclassified dependency reads as covered.
+
+Classify each one in drills/dependencies.json, then push again. This is the same
+check the guards job runs on main; it is here so it refuses you instead of
+turning main red for every other session.
+""")
+        return 1
     if secret_problems:
         sys.stderr.write(
             "\npush refused: this push adds a live credential (LAW 21).\n\n"
