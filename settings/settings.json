@@ -152,5 +152,5 @@
       "Standing instruction from the user: prefer acting to asking on routine estate work. Interruptions on ordinary read, inspect, deploy and repo-administration commands cost more than they protect."
     ]
   },
-  "cleanupPeriodDays": 3650
+  "cleanupPeriodDays": 30
 }
