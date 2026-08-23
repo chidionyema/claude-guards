@@ -8,7 +8,7 @@ Measured 2026-08-23. Every number below came from a command, not from memory.
 |---|---|---|
 | this machine's name is compiled in | 188 occurrences across 35 files, 158 of them inside job definitions | a different username breaks every scheduled job |
 | the scheduler is macOS only | ~~33 files know about `launchd`~~ FIXED 2026-08-23 | `jobs/render_windows.py` renders all 28 to Task Scheduler XML. 28 of 28 lose something on the way; the losses are counted below |
-| `~/.claude` has no remote | ~~1029 tracked files in one place~~ FIXED 2026-08-23 | private remote `github.com/chidionyema/claude-estate`, with `scripts/` as the submodule `claude-guards` |
+| `~/.claude` has no remote | ~~1029 tracked files in one place~~ FIXED 2026-08-23 | private remote `github.com/chidionyema/claude-estate`, with `scripts/` as the submodule `claude-guards`. 73 tracked files: the laws, settings, jobs and shell config. `projects/` was removed on 2026-08-23 and does not come back |
 | load-bearing dotfiles untracked | `.prospector .config .ssh .aws .gnupg .zshrc .gitconfig .npmrc` | nothing records what they contained |
 | credentials have no manifest | 11 environment variables named in code | nobody can list what a new machine must be given |
 | external accounts | GitHub, Fly, Cloudflare R2, Telegram, Anthropic, Docker | each needs a sign-in a machine cannot do for itself |
@@ -33,14 +33,28 @@ Anything beyond those five is a defect, not a step.
 **1. DONE 2026-08-23. `~/.claude` has a private remote.** `github.com/chidionyema/claude-estate`,
 created private, with `scripts/` registered as the submodule `claude-guards`.
 
-   The repository holds conversation transcripts and project memory, so the
-   remote is private and a commit gate stands in front of it. Before the first
-   push, 1029 files were scanned for credential shapes; 5 matched and each was
-   read individually and identified as a detector pattern rather than a value.
-   `scripts/hooks/pre-commit` now refuses any commit whose staged content
-   matches that pattern, reading the staged blob rather than the working tree,
-   and reporting `file:line` only so a refusal cannot print the thing it
-   stopped.
+   The remote is private and a commit gate stands in front of it.
+   `scripts/hooks/pre-commit` refuses any commit whose staged content matches a
+   credential shape, reading the staged blob rather than the working tree, and
+   reporting `file:line` only so a refusal cannot print the thing it stopped.
+
+   **The repository no longer holds conversation transcripts or project memory,
+   and must not again.** It carried 878 checkpoint notes, 704 memory files and 4
+   state probes under `projects/` until 2026-08-23. Founder: "this shold not be
+   ingithub". They were removed from the index and rewritten out of all 51
+   commits with `git-filter-repo`, taking the repository from 1,659 tracked files
+   to 73. Those files stay on disk and go to the offsite backup; they do not go
+   to a code-hosting vendor. `.gitignore` no longer admits them and the commit
+   gate refuses any staged path under `projects/`, because `.gitignore` alone is
+   one `git add -f` away from being wrong.
+
+   Scanned before removal: 193 credential-shaped matches across the 720 tracked
+   markdown files in the prospector project. Every one is a variable NAME with no
+   value after it, except a single `EXA_API_KEY=` whose value is 26 characters of
+   lowercase letters and hyphens with no digit in it. An Exa key is a UUID and
+   contains hex digits, so that one is a placeholder in a code snippet, not a
+   key. Nothing needs rotating. (An earlier reading of "5 matched" counted files,
+   not matches, and is corrected here.)
 
 **2. DONE 2026-08-23. Widen `tracked.json` from four entries to the whole machine surface.**
 The manifest built today already works and already has a guard that fails on
