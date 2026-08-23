@@ -22,3 +22,5 @@
 	format = ssh
 [commit]
 	gpgsign = true
+[core]
+	hooksPath = /Users/chidionyema/.estate/guards/hooks
