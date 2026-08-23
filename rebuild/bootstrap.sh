@@ -36,8 +36,13 @@ echo "$(git -C "$TARGET/.claude" ls-files | wc -l | tr -d ' ') files, submodule 
 $(git -C "$TARGET/.claude/scripts" rev-parse --short HEAD 2>/dev/null || echo MISSING)"
 
 say "2/4  the files that live outside it"
-python3 "$TARGET/.claude/scripts/tracked.py" --restore \
-  ${DRILL:+--into "$TARGET"} 2>&1 | grep -Ev '^$' | sed 's/^/    /'
+if ! python3 "$TARGET/.claude/scripts/tracked.py" --restore \
+     ${DRILL:+--into "$TARGET"} 2>&1 | grep -Ev '^$' | sed 's/^/    /'; then
+  echo "    STEP 2 FAILED. Everything after this is meaningless."
+  echo "    Usual cause: the outer repo pins an older scripts/ commit than the"
+  echo "    one this script needs. git -C .claude submodule status."
+  exit 1
+fi
 
 say "3/4  the scheduled jobs, rendered for THIS home"
 python3 "$TARGET/.claude/scripts/jobs/render.py" --write \

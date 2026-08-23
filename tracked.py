@@ -259,6 +259,31 @@ def sync():
     return 0
 
 
+def stale_gitlink():
+    """The outer repo records a commit for scripts/. A clone reads that, not the
+    submodule's own HEAD, so committing in the submodule and not in the parent
+    leaves the remote describing a machine that no longer exists. It is silent:
+    everything works here, and only a fresh clone finds out.
+
+    Found by the first rebuild drill, which cloned a scripts/ three commits
+    behind and failed on an unrecognised --restore."""
+    import subprocess
+    outer = os.path.dirname(HERE)
+    r = subprocess.run(["git", "-C", outer, "submodule", "status", "--", HERE],
+                       capture_output=True, text=True)
+    if r.returncode or not r.stdout.strip():
+        return None
+    line = r.stdout.strip()
+    if not line.startswith("+"):
+        return None
+    head = subprocess.run(["git", "-C", HERE, "rev-parse", "--short", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    return (f"the parent repository pins an OLD scripts/ commit. Its HEAD is {head}, "
+            f"the parent records something else.\n"
+            f"    A fresh clone gets the recorded one. Fix with:\n"
+            f"        git -C {outer} add scripts && git -C {outer} commit -m 'point at {head}'")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
@@ -328,6 +353,11 @@ def main():
             print("    Record what these must contain in rebuild/PREREQUISITES.md, by name.")
         print("commit the result to record it")
         return 0
+    stale = stale_gitlink()
+    if stale:
+        print(f"\n{stale}")
+        drift += 1
+
     if drift:
         print(f"\n{drift} difference(s). LAW 24: run `tracked.py --pull`, then commit.")
         return 1 if a.check else 0

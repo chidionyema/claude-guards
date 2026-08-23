@@ -388,7 +388,25 @@ def collect_launchd() -> list[Row]:
             dead.append(f"{label} (exit {code})")
     rows = [Row(GOOD if not dead else BAD, "Background jobs failing",
                 f"{len(dead)} of {watched}", "; ".join(dead[:6]), "launchctl list")]
+    rows.append(_runners_in_git())
     return rows
+
+
+def _runners_in_git() -> Row:
+    """A committed plist does not mean the script it runs is kept anywhere (LAW 24)."""
+    guard = os.path.join(SCRIPTS, "estate", "runners-in-git.py")
+    cmd = f"{guard} --quiet"
+    if not os.path.exists(guard):
+        return _unknown("Every job's script is in git", "guard is missing", cmd)
+    rc, out, err = sh([sys.executable, guard, "--quiet"], 120)
+    line = next((l for l in out.splitlines() if l.startswith("jobs:")), "")
+    if not line:
+        return _unknown("Every job's script is in git",
+                        (err or out).strip()[:160] or f"exit {rc}", cmd)
+    holes = [l.strip() for l in out.splitlines() if l.strip().startswith("HOLE")]
+    n = line.split("holes:")[-1].strip()
+    return Row(GOOD if rc == 0 else BAD, "Every job's script is in git",
+               f"{n} not kept", "; ".join(h[6:] for h in holes[:4]) or line, cmd)
 
 
 def collect_founder_decisions() -> list[Row]:
