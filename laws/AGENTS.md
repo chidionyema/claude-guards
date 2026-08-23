@@ -6,7 +6,7 @@ through a symlink into its own directory — `~/.claude/AGENTS.md`, `~/.codex/AG
 belong to the estate, not to whichever vendor's CLI is open. Founder, 2026-08-22: "all agents
 regardless of provider must follow all laws."
 
-Thirty-one rules, in priority order, numbered to 31. LAW 24 stood empty until 2026-08-23 and now
+Thirty-two rules, in priority order, numbered to 32. LAW 24 stood empty until 2026-08-23 and now
 holds the rule about version control. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
@@ -49,6 +49,7 @@ keep.
 | 29 | Attribute before you repair | before every fix that claims to know why |
 | 30 | Experience accumulates, or it is not research | every time a run produces something worth knowing |
 | 31 | The founder does not run scripts | every time you build something a person has to invoke |
+| 32 | A feature ships with a demo and an onboarding | before any new feature is pushed |
 
 **19-21 are a different axis and do not compete for that tie-break.** Laws 1-18 say HOW to work.
 Laws 19-21 say WHAT to build, and they rank against each other in that order: portability first,
@@ -89,6 +90,12 @@ identity, ever. After that, the machine owns the session."
 a defect and LAW 27 says a setup step may cost his hands once. LAW 31 says the running of things
 never costs them at all. Founder, 2026-08-23: "founder does not run scripts", "tired of the slack
 and excuses".
+
+**LAW 32 is a HOW law and ranks with LAW 20, not last.** Read it as 20d, and it is the last of the
+three. LAW 27 kills a setup step repeated at him, LAW 31 kills a command aimed at him, and LAW 32
+says the thing itself does not exist until he can see it working and knows how to stop it. Founder,
+2026-08-23: "every new feature needs deno and onboarding for founder , can this be enforced in git
+?" The answer was yes, and the gate is `hooks/pre-push` in claude-guards.
 
 **28-30 are the research laws, and they are HOW laws that rank early.** They were written last
 and the tie-break would otherwise bury all three under laws they are meant to sharpen. Read
@@ -911,6 +918,45 @@ browser, because no agent may ever do that as him.
 
 **You are breaking it when** your reply tells him what to type. He asked for the outcome. The
 command was your business.
+
+---
+
+# LAW 32 — A FEATURE SHIPS WITH A DEMO AND AN ONBOARDING
+
+Code that works and nobody can see is not a feature, it is a file. A feature is the code plus the
+two things that carry it to a person: a demo that shows it running, and an onboarding page that says
+what he needs to know and the one command that turns it off.
+
+Two files, named for the feature, in the repository that holds it:
+
+```
+docs/demo/<name>.md         what he sees when it runs, and what it just did
+docs/onboarding/<name>.md   what it is for, what it costs, where it lives, how to stop it
+```
+
+**The demo shows, it does not describe.** Real output from a real run, pasted, with the command that
+produced it above it. A demo with invented output is worse than none, because it reads as evidence.
+
+**The onboarding answers the questions he actually asks**, in this order: what is this for, what
+does it cost, what does it watch or change, where does it live, how do I turn it off, how do I turn
+it back on, what goes wrong. The off switch is not optional and it is not a paragraph. It is one
+command he could run, which is the only reason he will ever trust the thing to run unattended.
+
+**A heading with nothing under it does not count.** Satisfying a gate without satisfying the founder
+is the failure this law is made of, so the floor is 200 characters of prose per file once headings
+and blank lines are stripped, and the gate counts them.
+
+**The gate is mechanical, because a rule agents remember is a rule agents forget.** `hooks/pre-push`
+in claude-guards refuses a push whose new feature carries neither file. A feature is a `feat:`
+commit subject, or a brand new top level directory the push adds source files to and that survives
+to the tip. Install it per repository with `git config core.hooksPath scripts/hooks`.
+
+This is not documentation and it does not replace it. Documentation explains a system to whoever
+reads it later. These two files exist for one reader, on a phone, who did not build the thing and
+should not have to.
+
+**You are breaking it when** you finished a feature and the only way to see it work is to be you.
+
 
 ---
 

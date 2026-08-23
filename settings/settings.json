@@ -142,7 +142,8 @@
       "Running a nested claude process (for example claude -p ...) against a throwaway CLAUDE_CONFIG_DIR to test a settings, permission or hook change.",
       "git worktree add / list / remove under /private/tmp/claude-501/** and ~/Documents/code/wt-*, and ordinary git operations in those trees.",
       "launchctl list, print, kickstart, bootout, bootstrap, enable and disable for the user's own com.prospector.* and com.hermes.* LaunchAgents.",
-      "Running test suites, linters, builds and the POPDD gate anywhere in the user's own checkouts, including npm, npx, dotnet, pytest, ruff and vitest."
+      "Running test suites, linters, builds and the POPDD gate anywhere in the user's own checkouts, including npm, npx, dotnet, pytest, ruff and vitest.",
+      "Merging the user's own pull requests in his own GitHub repositories, with gh pr merge or the equivalent gh api PUT repos/OWNER/REPO/pulls/N/merge, including --squash and --delete-branch. Standing instruction from the founder, 2026-08-23, in his own words: 'i dont need friction, agents should be able to merge'. A merge here is recoverable: the branch, the commits and git revert are all still in the repository. Stopping to ask him for each one is the loop he is telling us to stop."
     ],
     "environment": [
       "$defaults",
@@ -150,5 +151,6 @@
       "The user owns the GitHub repo chidionyema/prospector and the Fly.io organisation hosting the prospector-*, store-*, mumchimp-* and tie-* apps. Commands aimed at those resources administer the user's own infrastructure.",
       "Standing instruction from the user: prefer acting to asking on routine estate work. Interruptions on ordinary read, inspect, deploy and repo-administration commands cost more than they protect."
     ]
-  }
+  },
+  "cleanupPeriodDays": 3650
 }

@@ -45,23 +45,26 @@
   "repos": [
     {
       "path": "~/.claude",
-      "why": "settings, skills, agent definitions"
+      "why": "settings, skills, agent definitions",
+      "branch": "main"
     },
     {
       "path": "~/.claude/scripts",
-      "why": "the guards, the board, the mirror"
+      "why": "the guards, the board, the mirror",
+      "branch": "main"
     },
     {
       "path": "~/dev/code/hermes-v2",
-      "why": "The Architect"
+      "why": "The Architect (works on a feature branch by design)"
     },
     {
       "path": "~/dev/code/maestro",
-      "why": "Maestro"
+      "why": "Maestro (works on a feature branch by design)"
     },
     {
       "path": "~/dev/code/crew",
-      "why": "the coordination board and DECISIONS.md"
+      "why": "the coordination board and DECISIONS.md",
+      "branch": "main"
     }
   ],
   "secrets": [

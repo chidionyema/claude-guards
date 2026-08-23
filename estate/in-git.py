@@ -16,7 +16,7 @@ closed is how the last four holes survived:
 What it is NOT allowed to do is pass because it did not look. Every class that
 cannot run reports UNKNOWN and fails the sweep, never a quiet zero.
 """
-import glob, json, os, plistlib, subprocess, sys
+import glob, json, os, plistlib, subprocess, sys, time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from estate.ingit import covered, mirrors, HOME, REPO   # noqa: E402
@@ -122,6 +122,14 @@ def check_repos(d, _mm):
         if not os.path.isdir(os.path.join(p, ".git")):
             holes.append(f"{e['path']}: not a git repo")
             continue
+        # A shared checkout parked on a stray branch is how one session's
+        # `git add -A` strands another session's files where main cannot see them.
+        # It happened three times in one afternoon before anything looked for it.
+        want = e.get("branch")
+        cur = sh(["git", "-C", p, "rev-parse", "--abbrev-ref", "HEAD"])[1]
+        if want and cur != want:
+            holes.append(f"{e['path']}: checked out on '{cur}', not '{want}'; "
+                         f"work committed here does not reach {want}")
         dirty = sh(["git", "-C", p, "status", "--porcelain"])[1].splitlines()
         # Untracked files are somebody's work in flight. Modified TRACKED files are
         # an edit to something the estate already depends on, which is the hole.
@@ -199,7 +207,7 @@ def check_escrow(d, _mm):
     p = os.path.expanduser(cfg["receipt"])
     if not os.path.exists(p):
         return 0, ["no bundle receipts at " + cfg["receipt"] + ", the offsite copy is unproven"]
-    last = {}
+    last, malformed = {}, 0
     for line in open(p):
         line = line.strip()
         if not line:
@@ -208,7 +216,15 @@ def check_escrow(d, _mm):
             r = json.loads(line)
         except ValueError:
             continue
-        last[r.get("slug") or r.get("repo")] = r
+        key = r.get("slug") or r.get("repo")
+        if not key:
+            # The pusher has written a record with every field null. It proves
+            # nothing, and sorting it against real slugs raised a TypeError that
+            # took the whole class down, so a bad line now costs one hole and
+            # not six classes of answer.
+            malformed += 1
+            continue
+        last[key] = r
     if not last:
         return 0, ["the receipts file is empty, no repo has an offsite copy"]
     now, holes, ok = __import__("time").time(), [], 0
@@ -228,7 +244,58 @@ def check_escrow(d, _mm):
     for name in want:
         if not any(s and s.endswith(name) for s in last):
             holes.append("%s: has no offsite copy at all" % name)
+    if malformed:
+        holes.append("%d bundle receipt(s) name no repo, so they prove nothing" % malformed)
     return ok, holes
+
+
+STATE = os.path.join(HOME, ".claude", "state", "in-git-status.json")
+GREEN_EVERY_S = 24 * 3600
+
+
+def deliver(holes, lines):
+    """Alert when the set of holes changes, and once a day when it has not.
+
+    On the set, not the count: two holes closing while two open is not a quiet
+    day, and reporting every hour that the same hole is still open is how an
+    alert channel gets muted (LAW 28).
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        import estate_alert
+    except Exception as exc:                       # alerting never breaks the sweep
+        print("[in-git] cannot load estate_alert: %r" % (exc,), file=sys.stderr)
+        return
+
+    try:
+        prev = json.load(open(STATE)).get("holes", [])
+    except (OSError, ValueError):
+        prev = None                                # first run ever: say something
+
+    if prev is None or set(prev) != set(holes):
+        body = ("Load-bearing files: %d not kept anywhere\n\n" % len(holes)
+                + "\n".join("- " + h for h in holes)) if holes else \
+               "Load-bearing files: every one is in git again"
+        ok = estate_alert.send_operator_alert(body, debounce_key="in-git-change",
+                                              debounce_s=600)
+        print("[in-git] change alert delivered=%s" % ok)
+        return
+
+    stamp = os.path.join(HOME, ".claude", "state", "in-git-last-green.txt")
+    try:
+        last = float(open(stamp).read().strip())
+    except (OSError, ValueError):
+        last = 0.0
+    if time.time() - last < GREEN_EVERY_S:
+        return
+    ok = estate_alert.send_operator_alert(
+        "Load-bearing files, no change\n\n" + "\n".join(lines),
+        debounce_key="in-git-green", debounce_s=GREEN_EVERY_S - 60)
+    print("[in-git] daily green delivered=%s" % ok)
+    if ok:
+        os.makedirs(os.path.dirname(stamp), exist_ok=True)
+        with open(stamp, "w") as f:
+            f.write(str(time.time()))
 
 
 CLASSES = [("runners", check_runners), ("declared", check_declared),
@@ -240,20 +307,34 @@ def main():
     quiet = "--quiet" in sys.argv
     d = json.load(open(DECL))
     mm = mirrors()
-    total_holes, lines = 0, []
+    all_holes, lines, counts = [], [], {}
     for name, fn in CLASSES:
         try:
             ok, holes = fn(d, mm)
         except Exception as e:
             ok, holes = 0, [f"the {name} check could not run: {type(e).__name__}: {e}"]
-        total_holes += len(holes)
+        all_holes += holes
+        counts[name] = {"kept": ok, "holes": len(holes)}
         lines.append("  %-9s kept=%-3d holes=%d" % (name, ok, len(holes)))
         for h in holes:
             lines.append("     HOLE  " + h)
-    if not quiet or total_holes:
+    if not quiet or all_holes:
         print("\n".join(lines))
-    print("load-bearing holes: %d" % total_holes)
-    return 1 if total_holes else 0
+    print("load-bearing holes: %d" % len(all_holes))
+
+    if "--no-deliver" not in sys.argv:
+        deliver(all_holes, lines)
+    # Written last, so the next run compares against a state the founder was
+    # actually told about. A crash in delivery must not silence the next alert.
+    try:
+        os.makedirs(os.path.dirname(STATE), exist_ok=True)
+        with open(STATE, "w") as f:
+            json.dump({"ts": time.time(),
+                       "iso": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                       "holes": all_holes, "classes": counts}, f, indent=2)
+    except OSError as e:
+        print("[in-git] cannot write %s: %s" % (STATE, e), file=sys.stderr)
+    return 1 if all_holes else 0
 
 
 if __name__ == "__main__":
