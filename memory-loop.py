@@ -14,7 +14,7 @@ Wired to TWO hook events (one script, branch on the event):
 Reads JSON on stdin (incl. transcript_path). Project dir is derived from transcript_path
 (~/.claude/projects/<slug>/<session>.jsonl), so checkpoints live beside the session that made them.
 """
-import json, os, re, sys, hashlib, subprocess
+import json, os, re, sys, time, hashlib, subprocess
 from datetime import datetime
 
 # Seconds. A project's state probe must answer fast or be skipped — but "skipped" means the
@@ -391,6 +391,40 @@ def _dynamic_laws():
         return None
 
 
+SNAPSHOT = os.path.expanduser("~/dev/code/crew/STATE.md")
+SNAPSHOT_STALE_MIN = 150          # the hourly job has missed two runs
+SNAPSHOT_URL = "https://github.com/chidionyema/crew/blob/main/STATE.md"
+
+
+def _snapshot_freshness():
+    """How old the estate snapshot is, computed now, at the moment a session reads it.
+
+    The page carries a timestamp written when it was generated, which is exactly the number that
+    goes on lying when the generator dies: the file stops changing and the header keeps claiming
+    the hour it last succeeded. So the age is computed here, by the reader, and a stale page is
+    labelled NOT RUN rather than left to look current. A missing file says so too, because an
+    absent snapshot and a healthy one must never produce the same silence.
+    """
+    try:
+        if not os.path.exists(SNAPSHOT):
+            return ("[estate] NO SNAPSHOT. %s does not exist, so nothing has measured this estate. "
+                    "Do not assume healthy. Rebuild it with crew/scripts/estate-snapshot."
+                    % SNAPSHOT)
+        mins = (time.time() - os.path.getmtime(SNAPSHOT)) / 60.0
+        where = "%s  (%s)" % (SNAPSHOT, SNAPSHOT_URL)
+        if mins > SNAPSHOT_STALE_MIN:
+            return ("[estate] SNAPSHOT STALE, NOT RUN for %.0f minutes. The hourly job "
+                    "com.founder.estatesnapshot has missed at least two runs, so %s describes an "
+                    "estate that has moved. Treat every row as unmeasured, regenerate with "
+                    "crew/scripts/estate-snapshot, and find out why the job stopped."
+                    % (mins, where))
+        return ("[estate] Estate snapshot is %.0f minutes old and current: %s\nRead it before you "
+                "measure anything yourself and before you ask the founder anything. Every row is a "
+                "command and its output. It is a starting point, not a verdict." % (mins, where))
+    except Exception:
+        return None
+
+
 def inject(transcript_path, event="SessionStart", laws_only=False):
     probe = None if laws_only else run_state_probe(transcript_path)
     ckpt = None if laws_only else latest_checkpoint(transcript_path)
@@ -410,6 +444,11 @@ def inject(transcript_path, event="SessionStart", laws_only=False):
         dyn = _dynamic_laws()
         if dyn:
             parts.append(dyn)
+    #: Rides with the laws so it survives compaction, which is when a session is most likely to
+    #: start re-measuring what the snapshot already knows.
+    fresh = _snapshot_freshness()
+    if fresh:
+        parts.append(fresh)
     if probe:
         parts.append(
             "[state-probe] VERIFIED LIVE STATE — authoritative. This is the single source of truth "
