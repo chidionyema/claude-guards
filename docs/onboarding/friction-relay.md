@@ -1,83 +1,76 @@
-# Friction relay, onboarding
+# friction-relay
 
 ## What it is for
 
-Six Claude sessions run on this machine at once and none of them can read the
-others. When the founder tells one session it is doing something wrong, the
-other five never hear it, so they keep doing it. He then has to say the same
-thing again to the next session, and again to the one after that.
+You talk to whichever session happens to be open. Until now, a correction you gave
+one session was invisible to the other five, so they carried on annoying you the
+same way. This reads what you said to any of them in the last six hours and puts it
+in front of every session as it starts — including after a compaction, which is
+exactly the moment a session forgets that kind of thing first.
 
-The relay closes that gap. Every session, when it starts, is shown what he
-complained about to any session in the last six hours. It is the only way one
-correction reaches all six.
+It only reads and reports. It changes nothing and blocks nothing.
 
 ## What it costs
 
-Nothing in money. It makes no model calls at all. It reads a small file that a
-background job has already prepared, so the session start it runs on is not
-measurably slower.
+Nothing you will notice. The session-start step reads a small cache file and takes
+about a tenth of a second. A background job rebuilds that cache every 10 minutes
+and takes about 15 seconds, at low priority.
 
-## What it watches and what it changes
+No network calls. No API spend.
 
-It reads the transcripts under `~/.claude/projects`, which Claude Code writes
-whether the relay runs or not. It changes nothing. Its only output is text
-printed into a session as that session begins.
+## What it reads
 
-It shows at most six complaints and says how many it held back, so a bad hour
-does not bury the session start under a wall of text.
+Your own transcripts on this machine, under `~/.claude/projects/`. Only your
+messages, only the last six hours, only on this laptop. Nothing is sent anywhere —
+the output goes into the session that is already reading them.
 
 ## Where it lives
 
-```
-~/.claude/scripts/friction-relay.py         the script
-~/.claude/state/friction-relay.json         the cache it reads
-~/.claude/state/logs/friction-relay.out     what the refresh job printed
-~/Library/LaunchAgents/ai.estate.friction-relay.plist
-```
-
-Two things run it. A hook on `SessionStart` in `~/.claude/settings.json` prints
-the complaints into a starting session. A launchd job, `ai.estate.friction-relay`,
-rebuilds the cache every 600 seconds so the hook never has to walk the disk.
+    ~/.claude/scripts/friction-relay.py          the program
+    ~/.claude/state/friction-relay.json          the cache it reads
+    ~/.claude/settings.json                      the SessionStart hook
+    ~/Library/LaunchAgents/ai.estate.friction-relay.plist    the 10-minute refresh
 
 ## How to turn it off
 
-```
-launchctl bootout gui/501/ai.estate.friction-relay
-```
+One command, and it stops immediately:
 
-That stops the cache being rebuilt, and within ten minutes the relay has nothing
-recent to say and goes quiet on its own. To silence it the same second, delete
-the cache as well:
+    launchctl bootout gui/$(id -u)/ai.estate.friction-relay
 
-```
-rm -f ~/.claude/state/friction-relay.json
-```
+That stops the refresh. The sessions then read a cache that stops getting newer,
+and within six hours it goes quiet on its own because everything in it has aged out.
 
-Nothing else depends on either file. Sessions start normally without it.
+To stop it completely, including the session-start line, remove the hook:
+
+    python3 - <<'EOF'
+    import json, os
+    p = os.path.expanduser("~/.claude/settings.json")
+    c = json.load(open(p))
+    for g in c.get("hooks", {}).get("SessionStart", []):
+        g["hooks"] = [h for h in g.get("hooks", []) if "friction-relay" not in h.get("command", "")]
+    json.dump(c, open(p, "w"), indent=2)
+    EOF
 
 ## How to turn it back on
 
-```
-launchctl bootstrap gui/501 ~/Library/LaunchAgents/ai.estate.friction-relay.plist
-```
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/ai.estate.friction-relay.plist
 
-The cache rebuilds on the next tick and the next session start shows the
-complaints again.
+If you removed the hook as well, an agent can re-add it; ask for it by name.
 
-## What can go wrong
+## What goes wrong
 
-It fails open, deliberately and in every case. An empty cache, a stale cache,
-unreadable JSON or a payload shaped wrong all end the same way: it prints
-nothing and exits 0. A hook that can break a session start is a hook somebody
-deletes by lunchtime, so this one cannot.
+**It says nothing.** That is the normal state when you have not complained about
+anything in six hours. It is not a failure.
 
-The failure that is possible is a quiet one. If the launchd job stops, the cache
-stops moving and the relay keeps showing whatever it last held until those
-entries age past six hours, after which it says nothing. Silence therefore means
-either a calm six hours or a dead refresh job, and the two look the same from
-inside a session. The log at `~/.claude/state/logs/friction-relay.out` is what
-tells them apart.
+**It shows something stale.** The refresh job has stopped. Check it with
+`launchctl list | grep friction` — a dash in the first column means it is not
+running right now, which is correct between its 10-minute runs; a non-zero number
+in the second column means its last run failed.
 
-It judges a complaint with a word list, so it is not exact. It can carry a line
-that was not really a complaint, and it can miss one phrased mildly. Carrying an
-extra line costs a session nothing; missing one costs the founder a repeat.
+**It shows something that was not a complaint.** The word list it uses is borrowed
+from the founder board rather than kept as a second copy, so a false positive there
+shows up in both places and is fixed in one.
+
+**Anything else.** Every error path exits silently and injects nothing. A hook that
+breaks a session start is a hook somebody deletes by lunchtime, so this one fails
+open by design — if it is broken you get silence, never a broken session.
