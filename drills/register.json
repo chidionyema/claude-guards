@@ -66,6 +66,20 @@
       "cmd": null,
       "todo": "With github.com unreachable, rebuild claude-estate and claude-guards from the R2 bundles alone into a throwaway home, and run the existing rebuild assertions against the result. If that cannot pass, the fix is a full-history bundle for the repos that have a remote, not a bigger comment.",
       "max_age_days": 30
+    },
+    {
+      "id": "cloudflare-gone",
+      "what_breaks": "Cloudflare suspends the account or the Workers platform goes away.",
+      "why": "survival-stack does not run ON Cloudflare, it IS a Cloudflare Workers application: the control plane is a Worker, its state is in R2 and KV, and its DNS is Cloudflare's. api.cloudflare.com, dash.cloudflare.com, the workers.dev hostnames and the r2.cloudflarestorage.com buckets are one vendor wearing four names. The estate's offsite backups are in the same account, so a suspension takes the product and the recovery path together. Nothing has ever been exported from it.",
+      "cmd": null,
+      "max_age_days": 30
+    },
+    {
+      "id": "stripe-gone",
+      "what_breaks": "Stripe freezes the account or terminates the relationship.",
+      "why": "api.stripe.com is the only route money takes into this company. A freeze does not degrade the product, it stops revenue while the product keeps serving, which is the failure that looks fine on every dashboard. The drill is whether a second processor can be switched on and whether the customer records needed to do it live anywhere but Stripe.",
+      "cmd": null,
+      "max_age_days": 90
     }
   ],
   "retired": [

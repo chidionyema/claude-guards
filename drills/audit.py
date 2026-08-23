@@ -39,6 +39,7 @@ GUARDS = os.path.dirname(HERE)          # the claude-guards checkout this file l
 ROOT = GUARDS
 DEPS = os.path.join(HERE, "dependencies.json")
 REGISTER = os.path.join(HERE, "register.json")
+REPOS = os.path.join(HERE, "repos.json")
 
 HOST = re.compile(rb"https?://([a-zA-Z0-9.-]+\.[a-z]{2,})")
 CRED = re.compile(rb"\b([A-Z][A-Z0-9]*_(?:API_KEY|TOKEN|SECRET|KEY|ACCOUNT_ID|PASSWORD))\b")
@@ -88,30 +89,41 @@ def discover(root, deps_path, exclude):
     except (OSError, subprocess.SubprocessError):
         tracked = None
 
-    for dirpath, dirnames, filenames in os.walk(root):
-        here = os.path.abspath(dirpath)
-        if riding_along and (here == GUARDS or here.startswith(GUARDS + os.sep)):
-            dirnames[:] = []
-            continue
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
-        for fn in filenames:
-            full = os.path.join(dirpath, fn)
-            rel = os.path.relpath(full, root)
-            if full == deps_path or fn == "audit.py" or fn.endswith(BINARY):
+    def consider(full):
+        nonlocal skipped
+        rel = os.path.relpath(full, root)
+        if full == deps_path or os.path.basename(full) == "audit.py" or full.endswith(BINARY):
+            return
+        if riding_along and (full == GUARDS or full.startswith(GUARDS + os.sep)):
+            return
+        if any(fnmatch.fnmatch(rel, pat) or rel.startswith(pat.rstrip("/") + "/")
+               for pat in exclude):
+            skipped += 1
+            return
+        try:
+            with open(full, "rb") as fh:
+                blob = fh.read(2_000_000)
+        except OSError:
+            return
+        hosts.update(m.decode() for m in HOST.findall(blob))
+        creds.update(m.decode() for m in CRED.findall(blob))
+
+    if tracked is not None:
+        # Walking is pointless once git has named the files: ~/.claude holds
+        # 1658 tracked files inside a directory tree of millions, and os.walk
+        # pays for the tree.
+        for full in tracked:
+            consider(full)
+    else:
+        for dirpath, dirnames, filenames in os.walk(root):
+            here = os.path.abspath(dirpath)
+            if riding_along and (here == GUARDS or here.startswith(GUARDS + os.sep)):
+                dirnames[:] = []
                 continue
-            if tracked is not None and full not in tracked:
-                continue
-            if any(fnmatch.fnmatch(rel, pat) or rel.startswith(pat.rstrip("/") + "/")
-                   for pat in exclude):
-                skipped += 1
-                continue
-            try:
-                with open(full, "rb") as fh:
-                    blob = fh.read(2_000_000)
-            except OSError:
-                continue
-            hosts.update(m.decode() for m in HOST.findall(blob))
-            creds.update(m.decode() for m in CRED.findall(blob))
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            for fn in filenames:
+                consider(os.path.join(dirpath, fn))
+
     return hosts, creds, skipped
 
 
@@ -139,6 +151,66 @@ def check(kind, found, table, live):
     return problems
 
 
+def sweep(ci):
+    """Audit every repository, including the ones GitHub will not run a job for.
+
+    Four of the six repositories are public and the gate runs on their pull
+    requests. Two are private, and Actions refuses to start a job on this
+    account's private repositories -- the annotation is verbatim "The job was
+    not started because recent account payments have failed or your spending
+    limit needs to be increased". A gate that cannot run on two repositories is
+    not a gate on those two, so they are read here instead. That is detection
+    rather than enforcement, and the difference is named in the output rather
+    than glossed over.
+    """
+    home = os.path.expanduser("~")
+    repos = json.load(open(REPOS))["repos"]
+    lines, bad = [], 0
+    for r in repos:
+        root = r["root"].replace("{HOME}", home)
+        deps = os.path.join(root, r["deps"])
+        if not os.path.isdir(root):
+            lines.append(f"  {r['name']:<16} MISSING     no checkout at {root}")
+            bad += 1
+            continue
+        p = subprocess.run([sys.executable, os.path.abspath(__file__), "--ci",
+                            "--root", root, "--deps", deps],
+                           capture_output=True, text=True)
+        head = (p.stdout.strip().splitlines() or [""])[0]
+        counts = head.split(": ", 1)[-1] if ": " in head else head
+        how = "PR gate" if r.get("ci") else "here only"
+        if p.returncode == 0:
+            lines.append(f"  {r['name']:<16} clean       {counts}   [{how}]")
+        else:
+            bad += 1
+            unc = [l.strip() for l in p.stdout.splitlines() if ": not classified" in l
+                   or ": both " in l or ": classified with" in l or "which is not a drill" in l]
+            lines.append(f"  {r['name']:<16} UNCLASSIFIED  {counts}   [{how}]")
+            lines.extend("      " + u for u in unc)
+
+    enforced = sum(1 for r in repos if r.get("ci"))
+    print(f"{len(repos)} repositories, {enforced} with the gate on their pull requests, "
+          f"{len(repos) - enforced} readable only here")
+    print("\n".join(lines))
+    for r in repos:
+        if r.get("no_ci_because"):
+            print(f"\n  {r['name']}: {r['no_ci_because']}")
+
+    if not ci:
+        try:
+            sys.path.insert(0, GUARDS)
+            import tracked
+            tracked.board("dependency-audit",
+                          f"Dependency audit swept {len(repos)} repositories: "
+                          + (f"{bad} with something unclassified." if bad
+                             else "every host and credential is drilled or dismissed.")
+                          + f" {enforced} of {len(repos)} are enforced on pull requests; the rest are private "
+                            "and Actions will not start a job on them.", "drills")
+        except Exception as e:
+            print(f"board post failed: {e}", file=sys.stderr)
+    return 1 if bad else 0
+
+
 def main():
     ap = argparse.ArgumentParser(description="Every dependency is drilled or dismissed.")
     ap.add_argument("--ci", action="store_true",
@@ -149,9 +221,14 @@ def main():
                     help="the answer key for that tree (default: drills/dependencies.json)")
     ap.add_argument("--register", default=REGISTER,
                     help="the drill register every covered_by must name (default: drills/register.json)")
+    ap.add_argument("--sweep", action="store_true",
+                    help="audit every repository in repos.json; the answer for the ones CI cannot reach")
     ap.add_argument("--list", action="store_true",
                     help="print what is in the tree and exit 0; for writing an answer key")
     a = ap.parse_args()
+
+    if a.sweep:
+        return sweep(a.ci)
 
     if not os.path.exists(a.deps):
         # A missing answer key is the one failure that must not read as clean.
