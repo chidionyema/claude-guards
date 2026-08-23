@@ -130,6 +130,10 @@ def report() -> dict:
     return {
         "generated": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
         "register": REGISTER,
+        # An absent register and an empty one produce the same empty lists, and reading them
+        # the same way is how a board goes green on a file somebody deleted. The reader needs
+        # to be able to tell the two apart, so say which this is.
+        "register_exists": os.path.exists(REGISTER),
         "open": [g for g in graded if g["state"] == OPEN],
         "unverifiable": [g for g in graded if g["state"] == UNVERIFIABLE],
         "done": [g for g in graded if g["state"] == DONE],

@@ -1032,9 +1032,19 @@ def c_founder_actions() -> list[dict]:
                        WARN if openish else UNK,
                        g.get("source") or "founder_actions.py", detail))
     if not out:
-        out.append(row("access", "Waiting on the founder", "0", OK,
-                       "founder_actions.py --json",
-                       "Nothing is blocked on an authorisation only he can give."))
+        # An empty register and a deleted one both produce an empty list, and grading them the
+        # same way is how this row goes green on a file somebody removed. The register is
+        # gitignored runtime state, so losing it is a real path, not a hypothetical one.
+        if not r.get("register_exists"):
+            out.append(row("access", "Waiting on the founder", "UNKNOWN", UNK,
+                           r.get("register", "founder_actions.py"),
+                           "The register file is not there, so this is not a pass. Either "
+                           "nothing has ever been added to it, or it was deleted and every "
+                           "item in it went with it."))
+        else:
+            out.append(row("access", "Waiting on the founder", "0", OK,
+                           "founder_actions.py --json",
+                           "Nothing is blocked on an authorisation only he can give."))
     return out
 
 
