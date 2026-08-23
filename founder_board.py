@@ -121,7 +121,7 @@ def collect_spend() -> list[Row]:
     concurrent interactive coding sessions, which no halt in this estate can touch.
     """
     cmd = ["/usr/local/bin/python3",
-           os.path.join(HOME, ".claude", "scripts", "estate_spend.py"), "--json"]
+           os.path.join(HOME, ".claude", "scripts", "estate", "estate_spend.py"), "--json"]
     rc, out, err = sh(cmd, 240)
     if rc not in (0, 2) or not out.strip():      # rc 2 is --cap's "over the line", unused here
         return [_unknown("Claude spend today", err.strip()[:200] or f"exit {rc}",
@@ -488,8 +488,8 @@ def collect_shipped_to_live() -> list[Row]:
     session could truthfully say "merged" while the deploy failed, or the deploy could go green
     while the site served the wrong thing. These rows are that chain, one row per link.
     """
-    rows = [_run_row("Store deploy, last run", _gh_runs("deploy-store-web.yml"),
-                     "deploy-store-web.yml"),
+    rows = [_run_row("Store deploy, last run", _gh_runs("deploy-web.yml"),
+                     "deploy-web.yml"),
             _run_row("Engine deploy, last run", _gh_runs("deploy-engine.yml"),
                      "deploy-engine.yml")]
 
