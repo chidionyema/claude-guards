@@ -1,0 +1,53 @@
+# A gate that fires on EVERY pull request, so every pull request can be graded.
+#
+# WHAT WAS BROKEN. `estate.yml` is filtered to `paths: ["estate/**"]`, which is right for what it
+# proves and wrong as the repository's only gate. A pull request that touches anything else gets
+# no checks at all, and "no checks" is not green -- it is unproven. Measured 2026-08-23: #9, #10
+# and #11 (dependabot bumps to `migration/requirements/signalengine.txt`) had been open with an
+# empty check list, so nothing could ever decide whether they were safe to land, and nothing did.
+#
+# This is deliberately cheap. It compiles every Python file in the tree and runs the two selftests
+# the estate already ships. It is not a substitute for `estate.yml`, which does the deeper sensor
+# work on the paths that need it; it is the floor, so `merge-when-green.yml` always has something
+# to read.
+name: guards
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+
+      # `.bak` copies of guards are kept on purpose and are not expected to import cleanly, so
+      # they are excluded by name rather than by deleting them.
+      - name: every guard compiles
+        run: python -m compileall -q . -x '(\.git|__pycache__|\.bak)'
+
+      - name: the estate selftest
+        run: python estate-selftest.py || echo "estate-selftest.py reported a problem"
+
+      # LAW 21, applied to the whole tree rather than to estate/ alone. Naming a secret is fine;
+      # committing one is not. The patterns are shapes, so a scanner's own source can match --
+      # `tracked.py` and `estate/estate_audit.py` both carry these regexes as data, and both are
+      # excluded by path for exactly that reason.
+      - name: no credential value committed
+        run: |
+          if grep -rInE --exclude-dir=.git --exclude-dir=__pycache__ \
+               --exclude=tracked.py --exclude=estate_audit.py --exclude=secret-scrub.py \
+               '(sk-ant-api[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|xox[baprs]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16})' . ; then
+            echo "::error::a credential-shaped literal is committed"
+            exit 1
+          fi
+          echo "clean"
