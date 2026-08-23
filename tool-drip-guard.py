@@ -175,7 +175,8 @@ def save(path: str, st: dict) -> None:
             json.dump(st, fh)
         os.replace(tmp, path)
     except Exception:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 177))
+        except Exception: pass
 
 
 def emit(rule: str, **fields) -> None:
@@ -195,13 +196,15 @@ def emit(rule: str, **fields) -> None:
                 with open(EVENT_LOG, "w") as fh:
                     fh.writelines(tail)
         except OSError:
-            pass
+            try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 197))
+            except Exception: pass
         rec = {"t": round(time.time(), 3), "rule": rule}
         rec.update(fields)
         with open(EVENT_LOG, "a") as fh:
             fh.write(json.dumps(rec, default=str) + "\n")
     except Exception:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 203))
+        except Exception: pass
 
 
 def _segments(cmd: str) -> list:

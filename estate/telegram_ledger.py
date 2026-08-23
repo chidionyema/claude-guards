@@ -48,7 +48,8 @@ def _trim() -> None:
         lines = LEDGER.read_text(errors="replace").splitlines()[-_KEEP_LINES:]
         LEDGER.write_text("\n".join(lines) + "\n")
     except OSError:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 50))
+        except Exception: pass
 
 
 def record(source: str, outcome: str, text: str = "", *, key: str = "",
@@ -76,7 +77,8 @@ def record(source: str, outcome: str, text: str = "", *, key: str = "",
         _trim()
     except Exception:
         # Bookkeeping never breaks the thing it is bookkeeping for.
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 77))
+        except Exception: pass
 
 
 def read(since_s: float = 0.0) -> list[dict]:

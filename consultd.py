@@ -102,7 +102,8 @@ def log(row):
         with open(LOG_FILE, "a") as fh:
             fh.write(json.dumps(row) + "\n")
     except Exception:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 104))
+        except Exception: pass
 
 
 def workdir():

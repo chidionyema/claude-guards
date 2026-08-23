@@ -98,7 +98,8 @@ def post(entry: dict, path: pathlib.Path = BOARD) -> None:
         with path.open("a") as fh:
             fh.write(json.dumps(entry, sort_keys=True) + "\n")
     except Exception:
-        pass  # never block a send because the board could not be written
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 100))
+        except Exception: pass
 
 
 def check(message: str, to: str, session: str, now: float, board: list[dict],

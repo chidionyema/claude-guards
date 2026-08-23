@@ -234,7 +234,8 @@ def write_state(session: str, st: dict) -> None:
         tmp.write_text(json.dumps(st))
         tmp.replace(p)            # atomic; a torn state file would fail open forever
     except Exception:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 236))
+        except Exception: pass
 
 
 def ledger(entry: dict) -> None:
@@ -249,7 +250,8 @@ def ledger(entry: dict) -> None:
         finally:
             os.close(fd)
     except Exception:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 251))
+        except Exception: pass
 
 
 def walk_back(st: dict, lane_name: str, limit: int) -> str:

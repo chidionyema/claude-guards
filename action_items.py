@@ -197,7 +197,8 @@ def collect(repo: str = "", ref: str = "") -> dict:
         with open(LEDGER, "w") as fh:
             json.dump({"first_seen": seen, "measured_at": now}, fh)
     except OSError:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 199))
+        except Exception: pass
     return result
 
 

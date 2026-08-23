@@ -155,7 +155,8 @@ def save_state(state: dict) -> None:
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps(state), encoding="utf-8")
     except Exception:  # noqa: BLE001 - failing to record must not fail the turn
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 157))
+        except Exception: pass
 
 
 def report(found: list[tuple[str, str]]) -> str:

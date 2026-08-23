@@ -76,7 +76,8 @@ def _debounced(key: str, window_s: float, record: bool = True) -> bool:
         _DEBOUNCE.parent.mkdir(parents=True, exist_ok=True)
         _DEBOUNCE.write_text(json.dumps(data))
     except OSError:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 78))
+        except Exception: pass
     return False
 
 

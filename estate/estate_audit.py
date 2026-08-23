@@ -634,7 +634,8 @@ def c_ci_reach() -> list[dict]:
                 fh.write(json.dumps({"at": stamp, "repo": repo, "visibility": vis,
                                      "healed": healed, "last5": outcomes}) + "\n")
         except OSError:
-            pass                                   # the record is a bonus, never the check
+            try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 636))
+            except Exception: pass
         if healed.startswith("failed"):
             sev, note = CRIT, (f"found private and could not be put back: {healed}. Every job "
                                "in this repo is refused before it starts until it is public")

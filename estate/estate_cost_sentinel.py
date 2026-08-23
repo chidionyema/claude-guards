@@ -127,7 +127,8 @@ def record(res: dict) -> None:
                 "reqs_by_owner": res.get("reqs_by_owner", {}),
             }) + "\n")
     except OSError:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 129))
+        except Exception: pass
 
 
 def main() -> int:

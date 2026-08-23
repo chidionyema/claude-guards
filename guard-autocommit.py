@@ -137,7 +137,8 @@ def maybe_push(repo: Path) -> str:
     try:
         stamp.write_text(str(time.time()))
     except Exception:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 139))
+        except Exception: pass
     return "pushed" if rc == 0 else "push failed (local commit is safe)"
 
 

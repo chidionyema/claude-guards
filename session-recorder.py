@@ -145,7 +145,8 @@ def _git(cwd: str) -> list[str]:
                 out.append(f"{len(dirty)} tracked file(s) modified and not committed")
                 out.extend("  " + l for l in dirty[:10])
     except Exception:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 147))
+        except Exception: pass
     return out
 
 
@@ -238,7 +239,8 @@ def _board_failure(exc: BaseException) -> None:
         with open(board, "a") as fh:
             fh.write(line + "\n")
     except Exception:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 240))
+        except Exception: pass
 
 
 def cmd_restore(cwd: str) -> int:

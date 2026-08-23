@@ -132,7 +132,8 @@ def save_marks(ledger: Path, marks: "dict[str, int]") -> None:
     try:
         marks_path(ledger).write_text(json.dumps(marks))
     except Exception:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 134))
+        except Exception: pass
 
 
 def norm(text: str) -> str:

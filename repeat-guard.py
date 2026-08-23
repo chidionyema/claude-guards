@@ -273,7 +273,8 @@ def main() -> int:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         state.write_text(json.dumps(already[-50:]), encoding="utf-8")
     except OSError:
-        pass
+        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 275))
+        except Exception: pass
     print(reflection(first, again), file=sys.stderr)
     return 2      # block the Stop; the text above reaches the model
 
