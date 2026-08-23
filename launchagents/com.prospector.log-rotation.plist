@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.prospector.log-rotation</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/chidionyema/Documents/code/prospector-live/.venv/bin/python</string>
+    <string>-m</string>
+    <string>ops.automations.log_rotation</string>
+    <string>--fix</string>
+  </array>
+  <key>WorkingDirectory</key><string>/Users/chidionyema/Documents/code/prospector-live</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key><string>/Users/chidionyema</string>
+    <key>PATH</key><string>/Users/chidionyema/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>PROSPECTOR_STORE_DIR</key><string>/Users/chidionyema/Documents/code/prospector/store</string>
+  </dict>
+  <key>StandardOutPath</key><string>/Users/chidionyema/Documents/code/prospector/store/log_rotation.log</string>
+  <key>StandardErrorPath</key><string>/Users/chidionyema/Documents/code/prospector/store/log_rotation.log</string>
+  <key>StartInterval</key><integer>21600</integer>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>

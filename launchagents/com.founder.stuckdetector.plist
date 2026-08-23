@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.founder.stuckdetector</string>
+  <!-- ProgramArguments[0] is the ABSOLUTE interpreter. A launchd job whose arg0 needs PATH
+       resolution dies at exit 126 and the failure names nothing useful; measured on this
+       machine, several estate jobs sit at nonzero exits for exactly this. -->
+  <key>ProgramArguments</key><array>
+    <string>/bin/sh</string>
+    <string>/Users/chidionyema/.claude/scripts/stuck_detector_tick.sh</string>
+  </array>
+  <!-- 300s. The detector's own SILENT_S is 900, and Prometheus staleness guidance is that a
+       check runs at least twice inside the window it grades; 300 gives three. Its DEBOUNCE=2
+       then means a real stall is named after two consecutive sightings, ~10 minutes, and a
+       session that resumes in between is never named at all. -->
+  <key>StartInterval</key><integer>300</integer>
+  <key>RunAtLoad</key><true/>
+  <!-- IT WRITES, IT DOES NOT PAGE. The founder's standing rule is that a self-clearing
+       condition must never page, and every class this detector knows can self-clear (a session
+       resumes, a retry succeeds, a laptop wakes). A sleeping MacBook is byte-identical to a
+       dead agent, so this must not be the pager on its own. The log is the evidence a pager
+       would later be built on, and it costs nothing to be wrong in it. -->
+  <key>StandardOutPath</key><string>/Users/chidionyema/.claude/state/logs/stuck-detector.jsonl</string>
+  <key>StandardErrorPath</key><string>/Users/chidionyema/.claude/state/logs/stuck-detector.err</string>
+  <key>WorkingDirectory</key><string>/Users/chidionyema</string>
+  <key>ProcessType</key><string>Background</string>
+  <key>Nice</key><integer>10</integer>
+</dict>
+</plist>

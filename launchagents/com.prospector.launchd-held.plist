@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>/Users/chidionyema</string>
+		<key>PATH</key>
+		<string>/usr/local/bin:/Users/chidionyema/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+		<key>PROSPECTOR_STORE_DIR</key>
+		<string>/Users/chidionyema/Documents/code/prospector/store</string>
+	</dict>
+	<key>Label</key>
+	<string>com.prospector.launchd-held</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/chidionyema/Documents/code/prospector/.venv/bin/python</string>
+		<string>/Users/chidionyema/.hermes/scripts/launchd_receipt.py</string>
+		<string>--label</string>
+		<string>com.prospector.launchd-held</string>
+		<string>--</string>
+		<string>/Users/chidionyema/Documents/code/prospector/.venv/bin/python</string>
+		<string>/Users/chidionyema/Documents/code/prospector/scripts/launchd_plists.py</string>
+		<string>--assert-held</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/chidionyema/Documents/code/prospector/store/scheduler/launchd-held.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/chidionyema/Documents/code/prospector/store/scheduler/launchd-held.log</string>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>WorkingDirectory</key>
+	<string>/tmp</string>
+</dict>
+</plist>

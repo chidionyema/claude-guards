@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.expressvpn.ExpressVPN.agent</string>
+  <key>LimitLoadToSessionType</key>
+  <string>Aqua</string>
+  <key>EnvironmentVariables</key>
+    <dict>
+      <key>XVPN_CLIENT_VERSION</key>
+      <string>9.0.12</string>
+      <key>XVPN_CLIENT_BUILD</key>
+      <string>9</string>
+      <key>XVPN_STAGING</key>
+      <string></string>
+      <key>XVPN_WORK_DIR</key>
+      <string></string>
+      <key>XVPN_VERBOSE</key>
+      <string>0</string>
+      <key>XVPN_DEBUG</key>
+      <string>0</string>
+      <key>XVPN_BASE_URL</key>
+      <string></string>
+      <key>VERBOSE</key>
+      <string></string>
+      <key>XVPN_APPUPDATE_CHANNEL</key>
+      <string></string>
+    </dict>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Applications/ExpressVPN.app/Contents/MacOS/expressvpnd</string>
+    <string>--become-root</string>
+  </array>
+  <key>KeepAlive</key>
+  <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>Sockets</key>
+  <dict>
+    <key>Listeners</key>
+    <dict>
+        <key>SockServiceName</key>
+        <string>2015</string>
+        <key>SockType</key>
+        <string>dgram</string>
+        <key>SockFamily</key>
+        <string>IPv4</string>
+    </dict>
+  </dict>
+  <key>StandardErrorPath</key>
+  <string>/dev/null</string>
+  <key>StandardOutPath</key>
+  <string>/dev/null</string>
+</dict>
+</plist>
