@@ -162,8 +162,21 @@ def scan_file(path, prev):
     return rec, st.st_mtime
 
 
+#: One walk per process. tick.py asks for the same window twice, once for the
+#: board and once for the alerts, and this machine holds 81,377 transcripts
+#: across 16,631 project directories with iCloud servicing the same volume. The
+#: second walk bought nothing and doubled the wall clock: on 2026-08-23 a single
+#: tick sat 46 minutes inside a job scheduled every 5, having burned 26 seconds
+#: of CPU, so it was waiting on the disk rather than working. The identical
+#: double walk cost founder_board.py 126s of a 385s page and was fixed there the
+#: same day; this file has its own copy of the walk, so that fix did not reach it.
+_CACHE = {}
+
+
 def sessions(hours=BOARD_HOURS):
     """Every transcript touched inside the window, folded and costed."""
+    if hours in _CACHE:
+        return _CACHE[hours]
     state = load_state()
     cutoff = time.time() - hours * 3600
     out, errors = [], []
@@ -206,4 +219,5 @@ def sessions(hours=BOARD_HOURS):
                         "idle": time.time() - mtime, **rec})
     save_state(state)
     out.sort(key=lambda r: r["idle"])
+    _CACHE[hours] = (out, errors)
     return out, errors

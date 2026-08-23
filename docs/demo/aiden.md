@@ -43,9 +43,22 @@ And the delivery receipt from the watcher's own log, which is the proof the
 message arrived rather than the proof it was sent:
 
 ```
-{"at":"2026-08-23T14:38:06Z","alerts":1,"sent":1,
- "delivery":{"ok":true,"rc":0,
- "out":{"success":true,"platform":"telegram","message_id":"12777"}}}
+$ tail -1 ~/.claude/state/aiden-ticks.jsonl
+{"at": "2026-08-23T20:08:00Z", "alerts": 9, "sent": 9,
+ "delivery": {"ok": true, "message_id": 12903, "why": ""},
+ "board": "/Users/chidionyema/.claude/state/aiden-board.html", "took_s": 15.5}
+```
+
+`message_id` is Telegram's own number for the message, handed back by its API.
+It is the receipt, and it is the only thing the cycle is judged on. An exit code
+says a program ended; it does not say a message arrived.
+
+Asking Telegram whether that message really exists in the channel is the second
+check, and it passed on the same run:
+
+```
+$ # editMessageText against id 12903
+  telegram says: True
 ```
 
 ## What it just did
