@@ -794,6 +794,115 @@ def c_backup() -> list[dict]:
 
 CHECKS.append(c_backup)
 
+
+# ---------------------------------------------------------------- disaster recovery
+
+# WHY THIS CHECK EXISTS. On 2026-08-23 the founder asked whether the estate could be flipped
+# off Fly, and the honest answer took forty minutes to assemble by hand. Worse, part of the
+# answer I gave him was wrong: I said the money ledger could not be pulled back out of R2. It
+# could, and `backup_store.py --restore-money` had existed the whole time and restored
+# 1,650,225 records when finally run.
+#
+# The scanner is `deploy/stack.sh`, which already exists and is already the two-angle probe
+# (the platform is asked AND the service is asked). This is only the wire from it into the
+# hourly audit, which estate_watch.py already reads and already sends to Telegram. Nothing
+# new is scheduled and nothing new is delivered -- LAW 3, LAW 23, LAW 28 in that order.
+
+PROSPECTOR_CANDIDATES = (
+    os.environ.get("PROSPECTOR_REPO", ""),
+    str(pathlib.Path.home() / "Documents/code/prospector"),
+    str(pathlib.Path.home() / "dev/code/prospector"),
+    str(pathlib.Path.home() / "code/prospector"),
+)
+
+
+def _prospector_repo() -> str | None:
+    """The first checkout that actually carries deploy/stack.sh.
+
+    Deliberately not "the first directory that exists". The main checkout sat detached at an
+    old commit for most of 2026-08-23, so a path test would have found a prospector with no
+    stack.sh in it and this check would have graded the estate on a file it never ran.
+    """
+    for c in PROSPECTOR_CANDIDATES:
+        if c and (pathlib.Path(c) / "deploy/stack.sh").is_file():
+            return c
+    return None
+
+
+def c_disaster_recovery() -> list[dict]:
+    out: list[dict] = []
+    repo = _prospector_repo()
+    if repo is None:
+        out.append(row("gap", "Copies of the money data that survive losing Fly", "UNMEASURED",
+                       UNK, "no deploy/stack.sh in " + ", ".join(c for c in PROSPECTOR_CANDIDATES if c),
+                       "Not graded. The prospector checkout on this machine does not carry "
+                       "deploy/stack.sh, so nothing here says whether the backups are good. "
+                       "It is not a pass."))
+        return out
+
+    # --- what copies exist, and how old ------------------------------------------------
+    rc, txt = sh("bash deploy/stack.sh recover --json", timeout=120, cwd=repo)
+    try:
+        d = json.loads(txt)
+    except Exception:                                        # noqa: BLE001
+        out.append(row("gap", "Copies of the money data that survive losing Fly", "UNMEASURED",
+                       UNK, f"deploy/stack.sh recover --json in {repo} (rc={rc})",
+                       "Not graded: the inventory did not return JSON. It is not a pass. "
+                       + txt[:300]))
+        return out
+
+    missing = [r["what"] for r in d["rows"] if r["age"] in ("MISSING", "UNKNOWN")]
+    stale = d.get("stale", [])
+    # A missing copy is worse than a stale one: stale means the job stopped recently, missing
+    # means there is nothing to restore from at all.
+    sev = CRIT if missing else (CRIT if stale else OK)
+    value = f"{len(d['rows']) - len(missing)}/{len(d['rows'])}"
+    detail = (
+        "Every copy the estate has, with the command that restores it, is "
+        "`deploy/stack.sh recover`. "
+    )
+    if missing:
+        detail += "NOTHING TO RESTORE FROM for: " + ", ".join(missing) + ". "
+    if stale:
+        detail += (f"Older than {d['stale_after_hours']:.0f}h, so whatever writes them has "
+                   "stopped: " + ", ".join(stale) + ". ")
+    if not missing and not stale:
+        ages = ", ".join(f"{r['what']} {r['age']}" for r in d["rows"] if r["where"].startswith("r2:"))
+        detail += "All off-machine copies are current: " + ages + "."
+    out.append(row("backup", "Copies of the money data that survive losing Fly", value, sev,
+                   f"deploy/stack.sh recover --json in {repo}", detail))
+
+    # --- can each component run anywhere ------------------------------------------------
+    rc, txt = sh("bash deploy/stack.sh status --json", timeout=120, cwd=repo)
+    try:
+        st = json.loads(txt)["rows"]
+    except Exception:                                        # noqa: BLE001
+        out.append(row("gap", "Components with nowhere left to run", "UNMEASURED", UNK,
+                       f"deploy/stack.sh status --json in {repo} (rc={rc})",
+                       "Not graded: the probe did not return JSON. It is not a pass. " + txt[:300]))
+        return out
+
+    # A component is only in trouble when EVERY platform says it is not there. The engine
+    # being down on the laptop while Fly serves is the normal state, not a finding, and a
+    # check that reports it hourly is the noise that gets a channel muted.
+    by_comp: dict[str, list[str]] = {}
+    for r in st:
+        by_comp.setdefault(r["component"], []).append(r["state"])
+    nowhere = sorted(c for c, states in by_comp.items() if "UP" not in states)
+    out.append(row("platform", "Components with nowhere left to run", str(len(nowhere)),
+                   CRIT if nowhere else OK,
+                   f"deploy/stack.sh status --json in {repo}",
+                   ("Not serving on any platform: " + ", ".join(nowhere) + ". "
+                    "`deploy/stack.sh status` shows which probe said what; "
+                    "`deploy/cutover.sh --from fly --to laptop` moves the engine."
+                    if nowhere else
+                    "Every component answers on at least one platform: "
+                    + ", ".join(sorted(by_comp)) + ".")))
+    return out
+
+
+CHECKS.append(c_disaster_recovery)
+
 # ---------------------------------------------------------------- render
 
 SEV_LABEL = {CRIT: "CRITICAL", WARN: "WARN", UNK: "UNKNOWN", OK: "CLEAN"}
