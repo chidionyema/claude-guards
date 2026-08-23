@@ -43,6 +43,15 @@ def main():
     ap.add_argument("--home", default=os.path.expanduser("~"))
     a = ap.parse_args()
 
+    if a.platform == "windows":
+        # Delegated rather than reimplemented: Task Scheduler XML shares no keys
+        # with a plist, so one renderer per platform is the cost of being able to
+        # leave (LAW 19), not duplication.
+        import subprocess
+        return subprocess.run(
+            [sys.executable, os.path.join(HERE, "render_windows.py")]
+            + (["--write", "--into", a.into] if a.write else ["--check"])).returncode
+
     if a.platform != "launchd":
         print(f"no renderer for {a.platform} yet. The manifest is platform-neutral;")
         print(f"only this renderer is macOS. Write jobs/render_{a.platform}.py to add one.")
