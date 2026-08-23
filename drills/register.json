@@ -53,13 +53,6 @@
       "todo": "Send a marked message and read it back off the API, so a dead poller or a wrong chat id fails the drill rather than passing it."
     },
     {
-      "id": "fly-rollback",
-      "what_breaks": "A deploy takes production down and the previous release has to come back.",
-      "why": "LAW 19 grades a dependency by its exit. The exit from a bad Fly release is a rollback nobody has run.",
-      "cmd": null,
-      "todo": "On a non-customer app, deploy a known-bad release, roll it back, and assert the health endpoint answers again."
-    },
-    {
       "id": "windows-rebuild",
       "what_breaks": "The laptop dies and the replacement is a Windows machine.",
       "why": "The rebuild drill restores this estate into a throwaway home on THIS operating system. It has never once been run on Windows, so the honest state of a Windows rebuild is unproven, not hard. jobs/render_windows.py turns all 29 jobs into Task Scheduler XML and every one of them loses something on the way.",
@@ -73,6 +66,14 @@
       "cmd": null,
       "todo": "With github.com unreachable, rebuild claude-estate and claude-guards from the R2 bundles alone into a throwaway home, and run the existing rebuild assertions against the result. If that cannot pass, the fix is a full-history bundle for the repos that have a remote, not a bigger comment.",
       "max_age_days": 30
+    }
+  ],
+  "retired": [
+    {
+      "id": "fly-rollback",
+      "retired_on": "2026-08-23",
+      "why": "Founder, 2026-08-23: the estate is moving off Fly, so a drill for rolling back a Fly deploy would be proving a recovery path we are leaving. Recorded here rather than only in git history so nobody adds it back from the same reasoning that added it the first time.",
+      "still_uncovered": "A bad deploy taking production down is still a real loss mode. It is not replaced by a vague entry, because a drill that names no platform cannot be run and would read as coverage. It goes back on this register the day the replacement platform is chosen, named for that platform."
     }
   ]
 }
