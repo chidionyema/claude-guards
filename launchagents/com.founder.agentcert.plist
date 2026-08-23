@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.founder.agentcert</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/local/bin/python3</string>
+        <string>/Users/chidionyema/.claude/scripts/estate/agent_cert.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/chidionyema/.claude/scripts/estate</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <!-- Hourly. Every acceptance command in the estate runs, each with a 120s
+         ceiling, so a full sweep is minutes rather than seconds. Alerts fire on
+         a claim changing state, not on it being red, so an agent sitting at
+         12 of 16 does not send the same four rows every hour. -->
+    <key>StartInterval</key>
+    <integer>3600</integer>
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/chidionyema/.claude/agent-cert/cert.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/chidionyema/.claude/agent-cert/cert.err.log</string>
+</dict>
+</plist>

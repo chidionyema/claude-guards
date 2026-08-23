@@ -1,0 +1,21 @@
+{
+  "_comment": "Every agent the estate runs, and where it keeps the claims it makes about itself. An agent with no REQUIREMENTS.jsonl is certified as 'cannot be certified', which is a result, not a pass. Adding an agent here is the whole of onboarding it into certification.",
+  "agents": [
+    {
+      "name": "architect",
+      "home": "~/dev/code/hermes-v2",
+      "ledger": "REQUIREMENTS.jsonl",
+      "home_env": "HERMES_HOME",
+      "onboarded": "2026-08-23",
+      "spec": "docs/THE-ARCHITECT.md"
+    },
+    {
+      "name": "maestro",
+      "home": "~/dev/code/maestro",
+      "ledger": "REQUIREMENTS.jsonl",
+      "home_env": "MAESTRO_HOME",
+      "onboarded": "2026-08-23",
+      "spec": "docs/MAESTRO-DEPUTY-v1.0.md"
+    }
+  ]
+}
