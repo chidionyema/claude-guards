@@ -15,6 +15,7 @@ redefined here; it is imported from scripts/token-audit.py, which is the estate'
 existing meter and already deduplicates message ids. A transcript repeats a
 message id on retry, and counting both overstates spend by about 2x.
 """
+import datetime
 import json
 import os
 import sys
@@ -55,6 +56,16 @@ def save_state(state):
     with open(tmp, "w") as f:
         json.dump(state, f)
     os.replace(tmp, STATE)
+
+
+def _epoch(ts):
+    """Transcript timestamps are ISO 8601 with a Z. Nothing else appears there."""
+    if not ts:
+        return 0.0
+    try:
+        return datetime.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
 
 
 def blank():
@@ -126,7 +137,15 @@ def scan_file(path, prev):
             rec["cache_write"] += u.get("cache_creation_input_tokens", 0)
             rec["cache_read"] += u.get("cache_read_input_tokens", 0)
             rec["output"] += u.get("output_tokens", 0)
-            rec["usd"] += _ta.cost(msg.get("model"), u)
+            spent = _ta.cost(msg.get("model"), u)
+            rec["usd"] += spent
+            #: A burn rate has to be spend over a real window, not lifetime spend
+            #: divided by whatever number is handy. Keeping the last hour of
+            #: (when, how much) is the only honest way to answer "right now",
+            #: and it is four hundred floats, not a time series database.
+            when = _epoch(r.get("timestamp"))
+            if when:
+                rec["recent"].append([when, spent])
             rec["model"] = msg.get("model") or rec["model"]
             if r.get("timestamp"):
                 rec["ts"] = r["timestamp"]
@@ -138,6 +157,8 @@ def scan_file(path, prev):
                         rec["text"] = b["text"].strip()
 
     rec["ids"] = rec["ids"][-ID_MEMORY:]
+    horizon = time.time() - 3600
+    rec["recent"] = [x for x in rec["recent"] if x[0] >= horizon][-2000:]
     return rec, st.st_mtime
 
 
