@@ -64,7 +64,12 @@ SUBSTRATE = [
 ]
 
 WORD = "PORTABLE"
-ASK = f"Reply with exactly one word and nothing else: {WORD}"
+#: "Reply with exactly one word and nothing else: PORTABLE" reads as a riddle to
+#: a 3B local model, which answered "Device", "Charger" and "Storage" on three
+#: consecutive runs. It was following an instruction it had understood as
+#: word-association. Copying is the smallest thing a model can be asked to do,
+#: and it is the thing this drill actually needs to know a rail can do.
+ASK = f"Copy the following word exactly, and write nothing else. {WORD}"
 
 
 def _key_from_store(var):
