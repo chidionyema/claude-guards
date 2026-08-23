@@ -107,6 +107,16 @@
     "{HERE}/check_db_integrity.py"
    ],
    "max_age_days": 1
+  },
+  {
+   "id": "recovery-posture",
+   "what_breaks": "A scheduled job stops running and nothing on this Mac notices, because every other instrument grades the output of a job that got a turn.",
+   "why": "Founder, 2026-08-23: 'bsiclly if i disappered today the esate should be able to run itself'. That is a claim about recovery, and recovery was the one property nothing measured. Found on the first run: com.founder.agentcert and com.prospector.launchd-held fire on the same second every hour, lost the estate-gate slot race every time, and had never completed a single run -- while launchd reported exit 0 for both. The drill grades six ways a job stops recovering itself: its program is missing from disk, it has no KeepAlive or RunAtLoad or interval at all, it is a live service whose first crash is permanent, it is gated and never gets a turn, it is loaded with no plist so it dies at the next reboot, or its plist is on disk and it is not loaded. It tells three identical-looking gated symptoms apart by cause, because losing every slot race, dying mid-run and simply running right now need different repairs.",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/check_recovery_posture.py"
+   ],
+   "max_age_days": 1
   }
  ],
  "retired": [
