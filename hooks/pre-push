@@ -49,7 +49,15 @@ IGNORED_TOP = {
     "checkpoints", "state", "evidence", "__pycache__", ".venv",
 }
 SOURCE = re.compile(r"\.(py|sh|js|ts|tsx|go|rs|rb|java|cs|swift|c|cc|cpp|h|mjs)$")
-FEAT = re.compile(r"^feat(\([^)]*\))?\s*:\s*(?P<name>[\w.-]+)", re.I)
+#: The scope names the feature when there is one, and the first word after the
+#: colon only when there is not. `feat(friction-relay): carry the founder's
+#: complaints to every session` used to be read as a feature called "carry",
+#: because the pattern skipped the scope and took the verb. The gate then
+#: refused the push until somebody wrote docs/demo/carry.md, which is a page
+#: about a verb. Measured 2026-08-23: that refusal blocked five commits on
+#: claude-guards main, four of them from other sessions.
+FEAT = re.compile(
+    r"^feat(?:\((?P<scope>[\w.-]+)\))?\s*:\s*(?P<word>[\w.-]+)", re.I)
 #: A body this short is a placeholder, not a demo.
 MIN_BODY_CHARS = 200
 #: LAW 7's escape hatch, in the shape the estate's other fences already use.
@@ -95,7 +103,8 @@ def features(local, shas):
         subject = git("log", "-1", "--format=%s", sha).strip()
         m = FEAT.match(subject)
         if m:
-            found.setdefault(m.group("name"), f"commit {sha[:8]} says `{subject[:60]}`")
+            name = m.group("scope") or m.group("word")
+            found.setdefault(name, f"commit {sha[:8]} says `{subject[:60]}`")
         #: Files this commit ADDED, against its first parent. A new top-level
         #: directory shows up here as the first source file inside it.
         added = git("diff-tree", "--no-commit-id", "--name-only", "-r",
@@ -223,10 +232,43 @@ def evidence(local_ref, shas):
     return f"  PR #{n}: {said[-1] if said else 'carries no verification evidence'}"
 
 
+#: The scanner. Written once, in one place, so pre-push and the scheduled sweep
+#: over the public repositories cannot drift apart on what a credential is.
+sys.path.insert(0, os.path.expanduser("~/.claude/scripts"))
+try:
+    import repo_secrets
+except Exception:                      # a missing scanner must not wedge every push
+    repo_secrets = None
+
+
+def secrets(shas):
+    """Credentials in the lines this push ADDS.
+
+    On 2026-08-23 two repositories were about to be made public and the scan
+    that cleared them was written by hand in a scratchpad, run once, and thrown
+    away. The founder's reply: "why isnt this automated already, thats why we
+    are always firefighting". A push is the moment the estate loses control of a
+    string, so it is the moment to look.
+
+    Only added lines, and only against each commit's first parent. Scanning the
+    whole tree on every push would refuse pushes for keys somebody else
+    committed in 2024, which is the sweep's job and a different conversation.
+    """
+    if repo_secrets is None:
+        return []
+    found = []
+    for sha in shas:
+        for h in repo_secrets.scan_diff(".", f"{sha}^..{sha}"):
+            if h["blocking"]:
+                found.append(f"  {h['kind']:<18} {h['path']}:{h['line']}  (commit {sha[:8]})")
+    return found
+
+
 def main():
     problems = []
     stale_problems = []
     evidence_problems = []
+    secret_problems = []
     for line in sys.stdin:
         parts = line.split()
         if len(parts) < 4:
@@ -235,6 +277,7 @@ def main():
         if set(local) == {"0"}:            # a branch deletion ships nothing
             continue
         shas = commits(local, remote)
+        secret_problems.extend(secrets(shas))
         behind = stale(parts[0], local, shas)
         if behind:
             stale_problems.append(behind)
@@ -250,6 +293,24 @@ def main():
                 elif n < MIN_BODY_CHARS:
                     problems.append(
                         f"  {path} is a stub, {n} characters of prose, {MIN_BODY_CHARS} is the floor")
+    if secret_problems:
+        sys.stderr.write(
+            "\npush refused: this push adds a live credential (LAW 21).\n\n"
+            + "\n".join(secret_problems) + """
+
+A push is the last moment the estate still controls this string. After it, the
+value is on a remote, in every clone, in every fork and in the caches, and the
+only honest response is to rotate the key and prove the rotation with a command.
+
+Take the value out of the commit, put it in the environment or the keychain, and
+rewrite the commit that carries it. Amending is not enough if it is already in an
+earlier commit in this push.
+
+Everything above is anchored on a vendor prefix and a real length, so it is a key
+or it is a fixture. If it is genuinely a fixture, move it under a fixtures/ or
+tests/ path, which this gate already exempts.
+""")
+        return 1
     if stale_problems:
         sys.stderr.write(
             "\npush refused: this branch has not been refreshed on main (LAW 7).\n\n"
