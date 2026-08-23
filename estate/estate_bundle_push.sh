@@ -53,18 +53,36 @@ DRY=0; [ "${1:-}" = "--dry-run" ] && DRY=1
 #: parent, the same receipts file and the same R2 keys. mkdir is atomic on the local
 #: filesystem, so it is the lock. A holder whose pid is gone is a crash, not a run.
 LOCKDIR="$HOME/.claude/state/estate-bundle-push.lock"
-if ! mkdir "$LOCKDIR" 2>/dev/null; then
-  holder=$(cat "$LOCKDIR/pid" 2>/dev/null || echo "")
-  if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
-    printf '%s already running as pid %s, this run exits without doing anything\n' \
-      "$(date -u +%FT%TZ)" "$holder"
-    exit 0
+#: A dry run measures, it does not write, so it has no business holding the
+#: write lock. It took it once, blocked on an iCloud read that never returned,
+#: and every hourly run for the next hour exited 0 saying "already running".
+#: The job looked green the whole time and copied nothing, which is the exact
+#: shape of a backup that is a lie with a cron schedule.
+if [ "$DRY" -eq 0 ]; then
+  if ! mkdir "$LOCKDIR" 2>/dev/null; then
+    holder=$(cat "$LOCKDIR/pid" 2>/dev/null || echo "")
+    if [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null; then
+      held=$(( $(date +%s) - $(stat -f %m "$LOCKDIR" 2>/dev/null || date +%s) ))
+      printf '%s already running as pid %s, this run exits without doing anything\n' \
+        "$(date -u +%FT%TZ)" "$holder"
+      #: A skip leaves a receipt. A run that copies nothing and says nothing is
+      #: indistinguishable from a run that copied everything, and the audit reads
+      #: whichever one it finds last.
+      printf '{"ts":%s,"at":"%s","event":"skipped","reason":"lock held by pid %s for %ss"}\n' \
+        "$(date +%s)" "$(date -u +%FT%TZ)" "$holder" "$held" >> "$RECEIPTS"
+      #: A skip that has gone on longer than two scheduled runs is not politeness,
+      #: it is a wedged holder, and the job must go red so the audit sees it.
+      [ "$held" -gt 7200 ] && exit 1
+      exit 0
+    fi
+    printf '%s stale lock from pid %s, taking it\n' "$(date -u +%FT%TZ)" "${holder:-unknown}"
+    rm -rf "$LOCKDIR"; mkdir "$LOCKDIR" || { echo "cannot take the lock"; exit 1; }
   fi
-  printf '%s stale lock from pid %s, taking it\n' "$(date -u +%FT%TZ)" "${holder:-unknown}"
-  rm -rf "$LOCKDIR"; mkdir "$LOCKDIR" || { echo "cannot take the lock"; exit 1; }
+  echo $$ > "$LOCKDIR/pid"
+  trap 'rm -rf "$LOCKDIR" "$WORK"' EXIT
+else
+  trap 'rm -rf "$WORK"' EXIT
 fi
-echo $$ > "$LOCKDIR/pid"
-trap 'rm -rf "$LOCKDIR" "$WORK"' EXIT
 
 #: Roots to search. Three levels deep covers ~/Documents/code/<repo>/.git and no more.
 # The iCloud root is not decoration. Found 2026-08-23 while chasing a worktree whose
