@@ -112,12 +112,43 @@ def write_pause(paths: list[str], reason: str, dry_run: bool) -> list[str]:
     return done
 
 
+def implausible(res: dict, now: dt.datetime) -> str | None:
+    """Why this row must not be written, or None if it is safe to write.
+
+    A spend series that records $0.00 when the measurement failed is a false green: the
+    reader cannot tell "we spent nothing" from "nothing was measured". Seven such rows were
+    already in the history when this was added, measured 2026-08-23 — all of them total 0.0,
+    five of them stamped 1970-01-01 by a machine whose clock had not yet synced at boot.
+    """
+    if now.year < 2020:
+        return f"system clock reads {now.isoformat(timespec='seconds')}, before NTP sync"
+    day = str(res.get("day") or "")
+    if day < "2020-01-01":
+        return f"scan day {day!r} is implausible"
+    if not res.get("files") and not res.get("requests"):
+        return "scan opened 0 transcripts, so $0.00 is a failed measurement, not a quiet day"
+    return None
+
+
 def record(res: dict) -> None:
     """Append one row per run so spend becomes a time series, not a spot reading.
 
     The audit could only say "$852 today" because no history existed — the shape of the
     curve, which is what tells you a fix worked, had to be reconstructed from transcripts.
+
+    A row that cannot be trusted is refused and reported, never written as a zero.
     """
+    now = dt.datetime.now()
+    why = implausible(res, now)
+    if why:
+        try:
+            import sys as _sys
+            _sys.path.append(os.path.expanduser("~/.claude/scripts"))
+            import guard_report
+            guard_report.broken(__file__, 0, f"refused to record spend row: {why}")
+        except Exception:
+            pass
+        return
     try:
         with open(HISTORY, "a") as fh:
             fh.write(json.dumps({
