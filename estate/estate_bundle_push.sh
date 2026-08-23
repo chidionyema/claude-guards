@@ -180,21 +180,44 @@ if [ -n "$DENIED_ROOTS" ]; then
   [ "${#ROOTS[@]}" -gt 0 ] || die "every declared root is unreadable by this process"
 fi
 
+#: Every git call in the planning loop below is wrapped, because a repo on the iCloud
+#: tree can block one forever. iCloud stores files dataless and a read waits on a
+#: network fetch that has no deadline. Measured 2026-08-23: a run sat 1h55m inside
+#: `rev-list --count --all --not --remotes` on the CloudDocs copy of haworks-platform,
+#: holding the lock above the whole time, so the 15:05 and 16:05 runs both exited
+#: "already running" and the estate went three hours with no backup while every line
+#: in the log still read fine. The comment at the top of this file already named this
+#: class and no guard was ever built. This is the guard. A repo that stalls is
+#: UNCOVERED, it is named in the receipt, and it turns the run RED, because a repo
+#: silently dropped from the plan is the exact lie this script exists to stop.
+GIT_PLAN_TIMEOUT="${GIT_PLAN_TIMEOUT:-25}"
+#: The stall goes to a file, never a variable: every caller sits inside a $( ) command
+#: substitution, which is a subshell, so an assignment would not survive it. For the
+#: same reason this must not print, because its stdout is the caller's value.
+gplan() {
+  gp_repo="$1"; shift
+  GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true \
+    timeout "$GIT_PLAN_TIMEOUT" git -C "$gp_repo" "$@"
+  gp_rc=$?
+  [ "$gp_rc" -eq 124 ] && printf '%s\t%s\n' "$gp_repo" "$1" >> "$WORK/stalled.tsv"
+  return $gp_rc
+}
+
 find "${ROOTS[@]}" -maxdepth 3 -name .git -print 2>/dev/null | sed 's|/\.git$||' | sort -u \
   > "$WORK/candidates.txt"
 
 : > "$WORK/plan.tsv"
 seen_common=""
 while read -r d; do
-  common=$(git -C "$d" rev-parse --git-common-dir 2>/dev/null) || continue
+  common=$(gplan "$d" rev-parse --git-common-dir 2>/dev/null) || continue
   case "$common" in /*) ;; *) common="$d/$common" ;; esac
   common=$(cd "$common" 2>/dev/null && pwd -P) || continue
   case "$seen_common" in *"|$common|"*) continue ;; esac
   seen_common="$seen_common|$common|"
 
-  remote=$(git -C "$d" remote | head -1)
+  remote=$(gplan "$d" remote | head -1)
   if [ -n "$remote" ]; then
-    n=$(git -C "$d" rev-list --count --all --not --remotes 2>/dev/null || echo 0)
+    n=$(gplan "$d" rev-list --count --all --not --remotes 2>/dev/null || echo 0)
     mode=incremental
     # A remote-tracking ref proves a remote answered ONCE, not that it answers now.
     # Measured 2026-08-23: 13 repos under ~/code point at dev.azure.com/OSLSoftware,
@@ -212,23 +235,43 @@ while read -r d; do
       if ! ask_remote "$d" "$remote"; then
         sleep 3
         if ! ask_remote "$d" "$remote"; then
-          n=$(git -C "$d" rev-list --count --all 2>/dev/null || echo 0)
+          n=$(gplan "$d" rev-list --count --all 2>/dev/null || echo 0)
           mode=full-unreachable-remote
           log "unreachable: $(basename "$d") points at $remote which did not answer twice, so its $n commit(s) exist only on this disk"
         fi
       fi
     fi
   else
-    n=$(git -C "$d" rev-list --count --all 2>/dev/null || echo 0)
+    n=$(gplan "$d" rev-list --count --all 2>/dev/null || echo 0)
     mode=full
   fi
+  #: A repo whose git call timed out has no honest commit count, so it is never
+  #: planned on a made-up zero. It is already on the stall list and the run goes RED.
+  if cut -f1 "$WORK/stalled.tsv" 2>/dev/null | grep -qxF "$d"; then continue; fi
   [ "${n:-0}" -gt 0 ] || continue
   printf '%s\t%s\t%s\t%s\n' "$d" "$mode" "$n" "${remote:-NO-REMOTE}" >> "$WORK/plan.tsv"
 done < "$WORK/candidates.txt"
 
+STALLED_N=0
+STALLED_LIST=""
+if [ -s "$WORK/stalled.tsv" ]; then
+  STALLED_N=$(cut -f1 "$WORK/stalled.tsv" | sort -u | wc -l | tr -d ' ')
+  STALLED_LIST=$(cut -f1 "$WORK/stalled.tsv" | sort -u | sed 's|^| |' | tr -d '\n')
+  while IFS=$'\t' read -r sr sc; do
+    log "STALLED: git $sc did not return in ${GIT_PLAN_TIMEOUT}s for $sr, so that repo is UNCOVERED by this run"
+  done < "$WORK/stalled.tsv"
+fi
+
 PLANNED=$(wc -l < "$WORK/plan.tsv" | tr -d ' ')
 log "at risk: $PLANNED repo(s) carry commits no remote has"
-[ "$PLANNED" -gt 0 ] || { log "BUNDLE PUSH GREEN  nothing at risk"; rm -rf "$WORK"; exit 0; }
+if [ "$PLANNED" -eq 0 ]; then
+  if [ "$STALLED_N" -gt 0 ]; then
+    log "BUNDLE PUSH RED  nothing was planned and $STALLED_N repo(s) hung git for over ${GIT_PLAN_TIMEOUT}s:$STALLED_LIST"
+    alert "estate_bundle_push: $STALLED_N repo(s) hung git and are NOT backed up:$STALLED_LIST"
+    rm -rf "$WORK"; exit 1
+  fi
+  log "BUNDLE PUSH GREEN  nothing at risk"; rm -rf "$WORK"; exit 0
+fi
 
 if [ "$DRY" = 1 ]; then
   log "DRY RUN. would bundle and push to :s3:$R2_BUCKET/bundles/<repo>/"
@@ -315,6 +358,12 @@ while IFS=$'\t' read -r d mode n remote; do
 done < "$WORK/plan.tsv"
 
 rm -rf "$WORK"
+
+if [ "${STALLED_N:-0}" -gt 0 ]; then
+  log "BUNDLE PUSH RED  repos=$OK skipped=$SKIPPED  but $STALLED_N repo(s) hung git for over ${GIT_PLAN_TIMEOUT}s and were never planned:$STALLED_LIST"
+  alert "estate_bundle_push: covered $OK repo(s), but $STALLED_N hung git and are NOT backed up:$STALLED_LIST"
+  exit 1
+fi
 
 if [ "$FAILED" -gt 0 ]; then
   log "BUNDLE PUSH RED  ok=$OK failed=$FAILED skipped=$SKIPPED"
