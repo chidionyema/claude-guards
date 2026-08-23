@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""Refuse a commit that stages anything shaped like a credential.
+
+LAW 21: a secret never reaches a place it can be read again, and a commit is
+exactly such a place. LAW 24 put ~/.claude under version control, which means
+`git add -A` here now runs across the whole agent-configuration surface. This
+hook is what makes that safe rather than merely intended.
+
+It reads the STAGED blob (`git show :path`), not the working tree, because the
+two differ precisely when someone stages a file and then edits it.
+
+The detection is tracked.py's SECRET regex, imported rather than copied, so one
+pattern list serves the copier and the commit gate (LAW 3).
+
+Installed with:  git config core.hooksPath scripts/hooks
+"""
+import os
+import subprocess
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from tracked import SECRET  # noqa: E402
+
+
+def staged_paths():
+    out = subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM", "-z"],
+        capture_output=True, text=True, check=True).stdout
+    return [p for p in out.split("\0") if p]
+
+
+def staged_blob(path):
+    r = subprocess.run(["git", "show", f":{path}"], capture_output=True)
+    return r.stdout if r.returncode == 0 else b""
+
+
+def main():
+    bad = []
+    for path in staged_paths():
+        blob = staged_blob(path)
+        if b"\0" in blob:
+            continue  # binary, not a config file
+        text = blob.decode("utf-8", "replace")
+        m = SECRET.search(text)
+        if m:
+            # Report WHERE, never WHAT. Any slice of the match is a slice of the
+            # secret -- `sk-[A-Za-z0-9]{20,}` truncated to 8 chars is five real
+            # characters of the key on the screen, which is the thing being
+            # stopped. The line number is enough for a person to go and look.
+            line = text.count("\n", 0, m.start()) + 1
+            bad.append((path, line))
+
+    if not bad:
+        return 0
+
+    print("COMMIT REFUSED: staged content looks like a credential.", file=sys.stderr)
+    for path, line in bad:
+        print(f"  {path}:{line}", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Take the value out of the file and point at it instead, or add the", file=sys.stderr)
+    print("path to .gitignore. Do not use --no-verify: the value is committed", file=sys.stderr)
+    print("the moment you do, and rotating it is then the only fix.", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
