@@ -11,6 +11,26 @@ holds the rule about version control. **When two laws want different things, the
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
 
+**The number on a law is not its rank.** Ten laws were written after the list was numbered, so their
+numbers record when they arrived, not what they beat. The prose below re-ranks each one, and reading
+eight paragraphs to find out whether LAW 32 beats LAW 9 is not a tie-break — it is a research task
+performed under pressure. So the effective order is stated once, here, and the paragraphs below
+remain only for the founder's words and the reason each law exists.
+
+**Effective order, HOW to work.** Read left to right. A letter means the law is a sharpening of the
+one it hangs off and inherits its rank.
+
+    1 · 2 · 2b(29) · 3 · 4 · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10 · 11 · 11b(26) · 12 · 13
+    14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
+
+**Effective order, WHAT to build.** A separate axis. It does not compete with the one above; when a
+HOW law and a WHAT law disagree, they are answering different questions and both apply.
+
+    19 · 20 · 20b(27) · 20c(31) · 20d(32) · 21
+
+LAW 25 and LAW 30 both claimed the slot "16b" until 2026-08-23. LAW 25 holds it, because it is the
+narrower rule and the one that fires more often; LAW 30 is 16c.
+
 Every law here was paid for by a real incident. The incidents, the founder's own words and the cost
 of each are in `~/.claude/LAWS-INCIDENTS.md`. Read that file when you want to know why a law says
 what it says, or when you are about to argue with one. It is never injected, so it costs nothing to
@@ -273,6 +293,20 @@ Then say what was wrong in one line and go back to work. No incident write-up.
 
 One fix at the source, in this turn. If it needs more, it is a ticket. And it never runs while LAW 1
 is open.
+
+**LAW 8 does not nest, and that is the whole of the limit.** A defect you find while fixing a defect
+is a ticket. Always, with no judgement call attached, however small it looks and however obviously
+you could close it from where you are standing. Depth is one, counted from the named job.
+
+This is the sentence that makes the law safe, because chaining is how drift actually happens. Nobody
+abandons a job in one step. Each hop is a lawful LAW 8 fix on the trap the last hop uncovered, every
+one of them correct on its own, and four hops later the named job has not moved and the agent can
+still justify every move it made. Measured on this estate, 2026-08-23: one session went from writing
+a restore drill, to purging a repository, to a health probe that was waking the machines it measured,
+to the hook configuration — four hops, four real defects, zero drills written.
+
+"I will just fix this one too" is the tell. At that moment the honest reading is that LAW 8 has
+already been spent this turn and LAW 9 is what is speaking.
 
 **You are breaking it when** you recorded a discovery instead of acting on it. The cost of finding a
 defect is already sunk; the only question left is whether one agent pays for the fix or every agent
