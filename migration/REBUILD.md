@@ -77,10 +77,35 @@ typed by hand into a directory nobody was watching.
 A rebuild that has never been drilled is a hope, by LAW 19. `rebuild/drill.sh`
 clones both repositories into a throwaway home, restores from the manifest,
 renders the jobs for that home, and asserts six things. It runs itself: the
-launch agent `ai.estate.rebuild-drill` fires Mondays at 04:30 and writes its
-verdict to `ESTATE_BOARD.jsonl`, which every session is handed at startup. PASS
-and NOT-RUN are different lines on the board, which is the whole point of
-scheduling it rather than leaving a command for somebody to type.
+launch agent `ai.estate.drills` fires Mondays at 04:30, runs every written drill
+through `drills/run.py --all`, and writes one verdict line to
+`ESTATE_BOARD.jsonl`, which every session is handed at startup. PASS and NOT-RUN
+are different lines on the board, which is the whole point of scheduling it
+rather than leaving a command for somebody to type.
+
+The job was named `ai.estate.rebuild-drill` here until 2026-08-23 and no such job
+has ever existed on this machine. The rebuild is one entry in a register of ten,
+and the scheduler runs the register, not that one drill.
+
+**Measured 2026-08-23 20:2x, and it is not yet proved by machine.** `launchctl
+print gui/501/ai.estate.drills` reports `runs = 0`. The job is loaded and its
+definition is correct; it has simply never fired, because its first Monday has
+not come round. Every PASS on the register today was produced by an agent typing
+the command, which is the exact thing the schedule exists to replace. Until a
+Monday passes, the drills are proven by hand, not by the estate.
+
+Two defects that this reading found, both fixed the same day:
+
+- `drills/run.py:post()` swallowed every failure of its own board write. A drill
+  suite that runs, passes and reaches no reader has proved nothing (LAW 28), and
+  the swallow made that indistinguishable from a quiet estate. It now writes to
+  stderr and raises a `guard-broken` row.
+- `drills/check_bundle_restore.py` counted `{"event":"skipped"}` receipts as
+  pushes that proved nothing, so the estate's own lock — working correctly —
+  turned the drill red. Skips are now separated from attempts, and they are read
+  for the one thing they do say: how long the lock was held. A wedge over an hour
+  fails the drill while it is unresolved, and reports as cleared once a later push
+  succeeds.
 
 
 ## What changed on 2026-08-23

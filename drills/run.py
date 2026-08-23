@@ -126,12 +126,30 @@ def run_one(d):
 
 
 def post(kind, text):
+    """Put the verdict where sessions read it, and say so when that fails.
+
+    This is the whole delivery half of LAW 28. A drill that runs, passes and
+    reaches nobody has proved nothing, and the swallow that used to sit here made
+    that failure look exactly like a quiet estate: no row, no error, no reader.
+    A board write that cannot happen is itself news, so it goes to the one
+    reporter that has its own failure path.
+    """
     try:
         sys.path.insert(0, os.path.dirname(HERE))
         import tracked
         tracked.board(kind, text, "drills")
-    except Exception:
-        pass
+    except Exception as exc:
+        sys.stderr.write("drills: the verdict did not reach the board: "
+                         "%s: %s\n" % (type(exc).__name__, exc))
+        try:
+            sys.path.append(os.path.expanduser("~/.claude/scripts"))
+            import guard_report
+            guard_report.broken(__file__, 128,
+                                "the drill verdict could not be posted to the board: "
+                                "%s: %s. The drills may be green and unread." % (
+                                    type(exc).__name__, exc))
+        except Exception:
+            pass   # the reporter is the last resort; stderr above already carried it
 
 
 def table(reg):
