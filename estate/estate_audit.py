@@ -425,17 +425,45 @@ CHECKS = [c_hooks, c_guards, c_skills_mcp, c_sessions, c_launchd,
           c_endpoints, c_fly, c_access, c_secrets, c_machine, c_gaps]
 
 
+#: How long the whole sweep may take before the slow checks are written off as
+#: unknown. It is a wall across all of them, not a per-check budget; sh() already
+#: caps each command.
+COLLECT_TIMEOUT = 90
+
+
 def collect() -> dict:
     t0 = time.time()
     rows: list[dict] = []
-    with futures.ThreadPoolExecutor(max_workers=max(8, len(CHECKS))) as ex:
-        fut = {ex.submit(fn): fn.__name__ for fn in CHECKS}
-        for f in futures.as_completed(fut, timeout=90):
+    ex = futures.ThreadPoolExecutor(max_workers=max(8, len(CHECKS)))
+    fut = {ex.submit(fn): fn.__name__ for fn in CHECKS}
+    try:
+        for f in futures.as_completed(fut, timeout=COLLECT_TIMEOUT):
             try:
                 rows.extend(f.result())
             except Exception as e:                           # noqa: BLE001 - a check that dies is a finding
                 rows.append(row("gap", f"check {fut[f]} failed", "ERROR", UNK,
                                 f"estate_audit.py::{fut[f]}", f"{type(e).__name__}: {e}"))
+    except futures.TimeoutError:
+        # A slow probe must never take the whole report with it. as_completed raises out
+        # of the loop, that exception reached launchd as exit 1, and no page was written
+        # at all. The auditor therefore went silent in exactly the hour it had something
+        # to say, because a machine sick enough to make a probe slow is the machine the
+        # founder needs the page for. Measured 2026-08-23: three runs died this way,
+        # "3 (of 17) futures unfinished" and "5 (of 18)".
+        #
+        # Every check that did not land is named as UNKNOWN, which is what it is, and the
+        # forty-odd rows that did land are written.
+        for f, name in fut.items():
+            if not f.done():
+                rows.append(row("gap", f"check {name} did not finish", "no answer", UNK,
+                                f"estate_audit.py::{name}",
+                                f"Still running after {COLLECT_TIMEOUT}s. This is an "
+                                f"absence, not a grade: the check was neither passed "
+                                f"nor failed, it was never answered."))
+    finally:
+        # wait=False so a hung probe cannot hold the report back. cancel_futures stops the
+        # ones that never started; the ones already running end on sh()'s own timeout.
+        ex.shutdown(wait=False, cancel_futures=True)
     order = {CRIT: 0, WARN: 1, UNK: 2, OK: 3}
     rows.sort(key=lambda r: (order.get(r["severity"], 4), r["domain"]))
     return {
@@ -1183,7 +1211,12 @@ def main() -> int:
     c = data["counts"]
     print(f"wrote {html_path} and {json_path} in {data['duration_s']}s -- "
           f"{c[CRIT]} critical, {c[WARN]} warn, {c[UNK]} unknown, {c[OK]} clean", file=sys.stderr)
-    return 1 if c[CRIT] else 0
+    # Exit 0 whenever a page was produced, criticals included. The criticals are this
+    # report's content, not its failure. launchd stores one number per job, so an audit
+    # that correctly found three critical things was indistinguishable from an audit that
+    # had crashed and found nothing, and both read as LastExitStatus = 256 for weeks. A
+    # non-zero exit from here now means one thing: no page.
+    return 0
 
 
 if __name__ == "__main__":
