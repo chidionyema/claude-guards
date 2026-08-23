@@ -6,7 +6,7 @@ through a symlink into its own directory — `~/.claude/AGENTS.md`, `~/.codex/AG
 belong to the estate, not to whichever vendor's CLI is open. Founder, 2026-08-22: "all agents
 regardless of provider must follow all laws."
 
-Thirty-three rules, in priority order, numbered to 33. LAW 24 stood empty until 2026-08-23 and now
+Thirty-four rules, in priority order, numbered to 34. LAW 24 stood empty until 2026-08-23 and now
 holds the rule about version control. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
@@ -26,7 +26,7 @@ one it hangs off and inherits its rank.
 **Effective order, WHAT to build.** A separate axis. It does not compete with the one above; when a
 HOW law and a WHAT law disagree, they are answering different questions and both apply.
 
-    19 · 20 · 20b(27) · 20c(31) · 20d(32) · 21
+    19a(34) · 19 · 20 · 20b(27) · 20c(31) · 20d(32) · 21
 
 LAW 25 and LAW 30 both claimed the slot "16b" until 2026-08-23. LAW 25 holds it, because it is the
 narrower rule and the one that fires more often; LAW 30 is 16c.
@@ -71,6 +71,7 @@ keep.
 | 31 | The founder does not run scripts | every time you build something a person has to invoke |
 | 32 | A feature ships with a demo and an onboarding | before any new feature is pushed |
 | 33 | Define done before you start, in commands | before the first edit, and before any word of status |
+| 34 | Provider agnostic from day 0, Claude included | before the first line of anything new |
 
 **19-21 are a different axis and do not compete for that tie-break.** Laws 1-18 say HOW to work.
 Laws 19-21 say WHAT to build, and they rank against each other in that order: portability first,
@@ -125,6 +126,14 @@ LAW 5, LAW 9 and LAW 17 on purpose: unblocking yourself, staying on the job and 
 measured against a finish line, and none of them can be judged before one exists. Founder,
 2026-08-23: "what is the definition of operational in this context", then "definition of done law",
 "add it", "as critical".
+
+**LAW 34 is a WHAT law and ranks first on that axis, above LAW 19.** Read it as 19a. LAW 19 says
+keep the exit open once you have taken a dependency. LAW 34 says do not build the lock-in on day 0,
+because an exit drilled out of a system that assumed one provider everywhere is a rewrite wearing
+the word "migration". It ranks above 19 for that reason: 19 is the cure and 34 is the thing that
+stops needing one. Founder, 2026-08-23: "we need to be provider agnostic from day 0", "add critical
+law", "super critical founders wish", "and you need to include claude", "we need to drill and plan
+for claude not being part of team".
 
 **28-30 are the research laws, and they are HOW laws that rank early.** They were written last
 and the tie-break would otherwise bury all three under laws they are meant to sharpen. Read
@@ -1081,6 +1090,70 @@ this is not finished. If nothing would, you have written a wish.
 **You are breaking it when** you reported a status whose definition you would have to invent in
 order to defend it. The tell is being asked what the word means and having to think.
 
+
+---
+
+# LAW 34 — PROVIDER AGNOSTIC FROM DAY 0, CLAUDE INCLUDED
+
+One estate, one identity, one ethos, one way of working, and the provider is an implementation
+detail underneath all four. Platform engineering owns making that one way of working real on every
+provider, which is the largest single function this estate has: the laws are the ethos, and the
+platform is what makes obeying them the same act whichever CLI is open.
+
+**Platform engineering's job here is three words: standardisation, consolidation, portability.**
+Founder, 2026-08-23. Standardisation is one way of working, so a session on any provider does the
+same thing the same way. Consolidation is one of each thing rather than four — one board, one
+ledger, one set of laws, one delivery channel — because four half-built copies of a thing is the
+shape this estate keeps failing in, and every duplicate is a second place for a provider assumption
+to hide. Portability is LAW 19, and it is last of the three on purpose: you cannot move an estate
+that is not consolidated, and you cannot consolidate one that is not standardised.
+Anthropic, OpenAI, Google, Moonshot and whoever ships next are interchangeable parts. The estate is
+the thing that persists; a vendor is a supplier it happens to be using this month.
+
+**Claude is a provider like any other and gets no exemption.** This is the whole weight of the law,
+because Claude is the one currently holding everything and is therefore the one nobody thinks to
+name. Founder, 2026-08-23: "and you need to include claude". A design that treats Anthropic as the
+ground it stands on rather than as one supplier has already failed, however portable the rest of it
+looks.
+
+**Day 0, not day 200.** LAW 19 keeps an exit open on a dependency already taken. This law is
+upstream of that: do not write the lock-in in the first place. An exit retrofitted onto a system
+that assumed one provider in every path is a rewrite with a friendlier name, and it arrives exactly
+when there is no time for it.
+
+**What day-0 lock-in actually looks like here**, because it is never announced:
+
+- A hook, gate or ledger that only fires for one vendor's CLI. Measured 2026-08-23, issue #53: the
+  ticket gate covers Claude Code only, not codex or gemini, so sessions on other providers change
+  files with no ticket and the board cannot see them.
+- Cost and usage read out of one vendor's transcript format, so the estate can price itself only
+  while that vendor is in the building.
+- State that lives in a vendor's directory layout, session id or file naming rather than in a store
+  the estate owns.
+- A model name, endpoint or SDK call written into a path where a swap means editing code rather
+  than config.
+
+**Unified identity and ethos.** Every agent on this estate, regardless of provider, reads the same
+laws, answers to the same ledger, writes to the same board and reports in the same voice. `~/AGENTS.md`
+is one file symlinked into each vendor's directory precisely so no provider gets its own rules.
+Where a vendor's tool cannot read the laws, the estate wraps it until it can, or the estate does not
+use it.
+
+**Drill the removal, do not assume it.** Founder, 2026-08-23: "we need to drill and plan for claude
+not being part of team". A plan for leaving that has never run is a hope, exactly as in LAW 19. The
+drill answers one question with a command: with Claude removed, what still runs? The scheduled jobs,
+the ticket gate, the closer, the board and the delivery to his phone are all estate machinery and
+none of them may require a Claude session to be alive. Whatever fails the drill is the list of work,
+and the drill goes on a schedule that goes red when it stops passing.
+
+**Every session and every pull request reinforces it.** Founder, 2026-08-23: "every agent session
+and pr needs to reinforce". The session half is already mechanical: these laws are injected at every
+session start, on every provider, from the one file. The pull request half is a gate — a change that
+introduces a new provider-specific assumption states which providers it works with and why the
+others are excluded, or it does not merge.
+
+**You are breaking it when** you can name the vendor whose disappearance would stop the estate, and
+the answer is not "none".
 
 ---
 
