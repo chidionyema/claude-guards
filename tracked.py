@@ -181,10 +181,13 @@ def sync():
         return subprocess.run(["git", "-C", HERE, *args],
                               capture_output=True, text=True, timeout=120)
 
-    if not git("status", "--porcelain", "--", *paths).stdout.strip():
+    # -uall, because plain --porcelain collapses a new directory to one line and
+    # the count then reports 1 where 8 files changed.
+    status = git("status", "--porcelain", "-uall", "--", *paths).stdout
+    if not status.strip():
         return 0
 
-    changed = [l[3:] for l in git("status", "--porcelain", "--", *paths).stdout.splitlines()]
+    changed = [l[3:] for l in status.splitlines()]
     git("add", "--", *paths)
     msg = ("LAW 24: %d load-bearing file(s) changed outside git\n\n%s\n\n"
            "Committed by the scheduled guard, not by a person.\n"
