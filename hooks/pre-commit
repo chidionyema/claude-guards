@@ -136,10 +136,50 @@ def shared_branch_warning():
           file=sys.stderr)
 
 
+#: The one directory in ~/.claude that must never be committed again.
+#: It held 878 checkpoint notes and 704 memory files -- the founder's own words,
+#: the estate's infrastructure, and every conclusion six sessions reached. All of
+#: it sat in a GitHub repository until 2026-08-23. Founder: "this shold not be
+#: ingithub". .gitignore already excludes it, but .gitignore is one `git add -f`
+#: away from being wrong, and the mistake is silent: the files reappear in a
+#: commit nobody reads and reach the remote thirty minutes later.
+#:
+#: Scoped to the ~/.claude checkout by top-level path, because this hook is shared
+#: from claude-guards and another repository may legitimately hold a projects/.
+FORBIDDEN = "projects/"
+
+
+def refuse_projects(paths):
+    """Paths under projects/ staged in the ~/.claude checkout, if any."""
+    try:
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True).stdout.strip()
+    except Exception:
+        return []
+    if not top.endswith("/.claude"):
+        return []
+    return [p for p in paths if p.startswith(FORBIDDEN)]
+
+
 def main():
     shared_branch_warning()
+    staged = staged_paths()
+    forbidden = refuse_projects(staged)
+    if forbidden:
+        print("COMMIT REFUSED: projects/ does not go in this repository.", file=sys.stderr)
+        for path in forbidden[:10]:
+            print(f"  {path}", file=sys.stderr)
+        if len(forbidden) > 10:
+            print(f"  ... and {len(forbidden) - 10} more", file=sys.stderr)
+        print("", file=sys.stderr)
+        print("These are conversation checkpoints and project memory. They were", file=sys.stderr)
+        print("removed from this repository and from all of its history on", file=sys.stderr)
+        print("2026-08-23 by the founder's instruction. They stay on disk and go", file=sys.stderr)
+        print("to the offsite backup; they do not go to a code-hosting vendor.", file=sys.stderr)
+        print("Do not use --no-verify and do not re-admit them in .gitignore.", file=sys.stderr)
+        return 1
     bad = []
-    paths = [p for p in staged_paths() if os.path.realpath(p) != SELF]
+    paths = [p for p in staged if os.path.realpath(p) != SELF]
     blobs = staged_blobs(paths)
     for path in paths:
         blob = blobs.get(path, b"")
