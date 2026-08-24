@@ -11,6 +11,8 @@
 	<string>com.chidionyema.guard-selftest</string>
 	<key>ProgramArguments</key>
 	<array>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>guard-selftest</string>
 		<string>/usr/local/bin/python3</string>
 		<string>/Users/chidionyema/.claude/scripts/estate-selftest.py</string>
 		<string>--quiet</string>
