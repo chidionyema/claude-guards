@@ -1,0 +1,20 @@
+{
+  "_comment": "Must pass. A legacy guard that shrank, and one at exactly its ceiling. Migration and refactoring are never blocked; only new hand-rolled policy and growth are. Case 3: a guard sitting exactly on its rule-count ceiling. Case 4: policy/ holding no Python at all, which is the steady state.",
+  "guards": [
+    {
+      "path": "scope-guard.py",
+      "lines": 40,
+      "rules": 0
+    },
+    {
+      "path": "rule-guard.py",
+      "lines": 1114,
+      "rules": 6
+    }
+  ],
+  "wired": [
+    "scope-guard.py",
+    "rule-guard.py"
+  ],
+  "policy_dir_py": []
+}

@@ -56,6 +56,33 @@ SOURCES = [
 #: here rather than in a password manager he does not have installed.
 ICLOUD = os.path.join(HOME, "Library/Mobile Documents/com~apple~CloudDocs/EstateRecovery")
 ICLOUD_KEY = os.path.join(ICLOUD, "estate-recovery-key.txt")
+#: The container, not the file. Whether this process can see CloudDocs at all is
+#: the only reliable way to tell "the key is gone" from "I am not allowed to look".
+ICLOUD_CONTAINER = os.path.join(HOME, "Library/Mobile Documents/com~apple~CloudDocs")
+
+
+def icloud_visible():
+    """True when this process can list the iCloud container.
+
+    Measured on this laptop, 2026-08-24, the same key file both ways:
+
+        by hand           os.stat succeeds, 189 bytes
+        under launchd     OSError errno 2, ENOENT -- and the file is still there
+
+    So TCC does not consistently answer a refusal with EACCES or EPERM. For this
+    path a scheduled job is told the file does not exist, which is why an errno
+    test called a key sitting safely in iCloud NOT PRESENT, and why the drill
+    that wraps this reported the estate unrecoverable for a day.
+
+    The container answers it without ambiguity. A process that cannot list
+    CloudDocs has learned nothing about any file inside CloudDocs, whichever
+    errno it was handed.
+    """
+    try:
+        os.listdir(ICLOUD_CONTAINER)
+        return True
+    except OSError:
+        return False
 
 #: macOS shapes the rest of this file. Measured under launchd on 2026-08-23, a
 #: scheduled job may stat and WRITE inside iCloud Drive and may not read or list
@@ -242,6 +269,7 @@ def verify():
     # The copy that matters is the one nothing here can read. Under launchd
     # stat is permitted and open is not, so size is the only angle available,
     # and it is reported as the weak angle it is rather than as a check.
+    blind = False
     try:
         n = os.stat(ICLOUD_KEY).st_size
         m = os.stat(identity).st_size
@@ -254,17 +282,21 @@ def verify():
         # they lead to different repairs: the first means the sealer is dead, the
         # second means this process lacks the right to look. Collapsing them prints
         # NOT PRESENT for a key that is sitting safely in iCloud, which sends
-        # somebody to re-seal an escrow that never broke. Under launchd stat is
-        # normally permitted, so a permission error here is the interesting case
-        # rather than the impossible one, and a check that has lost its evidence
-        # reports BLIND instead of a verdict.
-        if exc.errno in (errno.EACCES, errno.EPERM):
-            print("iCloud copy: BLIND -- cannot stat it from this process (%s). "
-                  "This is not evidence the key is missing; it is evidence this "
-                  "process may not look. Re-run by hand to get a verdict." % exc)
+        # somebody to re-seal an escrow that never broke.
+        #
+        # The errno does not tell them apart. Under launchd this path answers
+        # ENOENT, not EPERM, so the errno test sent exactly that somebody. Ask the
+        # container instead: see icloud_visible().
+        if not icloud_visible():
+            blind = True
+            print("iCloud copy: BLIND -- this process cannot list %s, so it cannot "
+                  "learn anything about a file inside it (%s). This is not evidence "
+                  "the key is missing; it is evidence this process may not look. "
+                  "Re-run by hand to get a verdict."
+                  % (ICLOUD_CONTAINER.replace(HOME, "~"), exc))
         else:
             print("iCloud copy: NOT PRESENT (%s)" % exc)
-        return 1
+            return 1
 
     env, bucket = r2_env()
     if env is None:
@@ -341,7 +373,12 @@ def verify():
               "%d of them proved against live ciphertext" % (len(names), checked))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-    return 0
+    # Reaching here means the strong angle passed: the blob came out of R2 and the
+    # recovery key opened it against live ciphertext. That is the recoverability
+    # question. The iCloud stat above is a weak supplementary angle, so when it is
+    # blind it downgrades the verdict to "not proved" and never to "failed" -- the
+    # whole point of the BLIND line is undone if it still returns a failure.
+    return 2 if blind else 0
 
 
 def selftest():
@@ -352,26 +389,49 @@ def selftest():
     collapse. It touches no key material: it replaces os.stat with a function that
     raises the errno being tested and reads the line that comes out.
 
-    Incident test, rung 4. The bug: `except OSError` printed NOT PRESENT for every
-    failure, so a permission error on a key sitting safely in iCloud read as a lost
-    key and would send somebody to re-seal an escrow that never broke.
+    Incident test, rung 4, twice over.
+
+    The first bug: `except OSError` printed NOT PRESENT for every failure, so a
+    permission error on a key sitting safely in iCloud read as a lost key.
+
+    The second bug, 2026-08-24, is why the errno column is gone. The fix for the
+    first one assumed a refusal arrives as EACCES or EPERM. Measured under launchd
+    on this laptop it arrives as ENOENT, so the fix did not fire, the scheduled
+    drill printed NOT PRESENT for an intact escrow, and three sessions were told
+    the estate could not be recovered without this machine.
+
+    The discriminator is no longer the errno. It is whether this process can list
+    the iCloud container at all, so the case matrix pins the errno at the one
+    launchd actually produces and varies the visibility instead. ENOENT must
+    produce BOTH answers -- that is the pair the old rule could not express.
     """
     import io
     import contextlib
 
     real_stat = os.stat
+    real_listdir = os.listdir
+    # errno, container visible, wanted verdict, what it stands for
     cases = [
-        (errno.ENOENT, "NOT PRESENT", "a file that genuinely is not there"),
-        (errno.EACCES, "BLIND", "a file this process may not look at"),
-        (errno.EPERM, "BLIND", "a file refused by policy rather than by absence"),
+        (errno.ENOENT, True, "NOT PRESENT",
+         "the container lists and the key is not in it -- genuinely gone"),
+        (errno.ENOENT, False, "BLIND",
+         "what launchd actually produces: ENOENT because it may not look"),
+        (errno.EACCES, False, "BLIND", "a refusal that does arrive as a refusal"),
+        (errno.EPERM, False, "BLIND", "a file refused by policy rather than by absence"),
     ]
     fails = []
-    for code, want, what in cases:
+    for code, visible, want, what in cases:
         def fake_stat(path, *a, **k):
             if str(path) == str(ICLOUD_KEY):
                 raise OSError(code, os.strerror(code), str(path))
             return real_stat(path, *a, **k)
+
+        def fake_listdir(path, *a, **k):
+            if str(path) == str(ICLOUD_CONTAINER) and not visible:
+                raise OSError(errno.EPERM, os.strerror(errno.EPERM), str(path))
+            return real_listdir(path, *a, **k)
         os.stat = fake_stat
+        os.listdir = fake_listdir
         buf = io.StringIO()
         try:
             with contextlib.redirect_stdout(buf):
@@ -380,10 +440,13 @@ def selftest():
             pass
         finally:
             os.stat = real_stat
+            os.listdir = real_listdir
         line = next((l for l in buf.getvalue().splitlines()
                      if l.startswith("iCloud copy:")), "(no iCloud line printed)")
         ok = want in line
-        print("  %s  %-8s %s" % ("pass" if ok else "FAIL", want, what))
+        print("  %s  errno %-6s container %-9s -> %-11s %s"
+              % ("pass" if ok else "FAIL", errno.errorcode.get(code, code),
+                 "visible" if visible else "invisible", want, what))
         if not ok:
             fails.append("%s: got %r" % (what, line))
         # The blind line must never be mistaken for a verdict about the key.
@@ -392,8 +455,13 @@ def selftest():
 
     for f in fails:
         print("  FAIL %s" % f)
-    print("%d/%d passed: 1 that must read as absent, 2 that must read as blind"
-          % (len(cases) - len({f.split(':')[0] for f in fails}), len(cases)))
+    # Counted from the table, not written in by hand. The hand-written "1 absent,
+    # 2 blind" went stale the moment a case was added, and a summary line that
+    # states a number nobody recomputes is the same defect as the drill above.
+    absent = sum(1 for c in cases if c[2] == "NOT PRESENT")
+    print("%d/%d passed: %d that must read as absent, %d that must read as blind"
+          % (len(cases) - len({f.split(':')[0] for f in fails}), len(cases),
+             absent, len(cases) - absent))
     return 1 if fails else 0
 
 

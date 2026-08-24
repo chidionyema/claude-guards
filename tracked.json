@@ -14,7 +14,7 @@
   {
     "live": "~/AGENTS-FULL.md",
     "repo": "laws/AGENTS-FULL.md",
-    "why": "the full text of every law. It is not injected, so nothing else reads it often enough to notice it drifting -- the repo copy was already 4 hours and one law behind when this entry was added."
+    "why": "the body of every law: the founder's words, the incident that paid for it, and the tripwires. Split out of ~/AGENTS.md on 2026-08-24 to cut the injected context from 102,649 to about 21,000 bytes. The mirror was committed that day and then never registered here, so it went 3,781 bytes stale while still looking backed up."
   },
   {
     "live": "~/.claude/LAWS-INCIDENTS.md",
