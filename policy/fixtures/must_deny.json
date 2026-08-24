@@ -1,8 +1,28 @@
 {
-  "_comment": "Two violations the policy must refuse. Case 1 is the reversion the founder predicted: a session writes a fresh Python guard instead of a Rego rule. Case 2 is the quieter version: nobody adds a file, somebody just grows an existing one.",
+  "_comment": "Two violations the policy must refuse. Case 1 is the reversion the founder predicted: a session writes a fresh Python guard instead of a Rego rule. Case 2 is the quieter version: nobody adds a file, somebody just grows an existing one. Case 3 is the reversion the line ceiling cannot see: the file did not grow, it grew three more refusals. Case 4 is a Python file under policy/, which is where the last one actually lived.",
   "guards": [
-    {"path": "urgent-fix-guard.py", "lines": 240},
-    {"path": "scope-guard.py", "lines": 400}
+    {
+      "path": "urgent-fix-guard.py",
+      "lines": 240,
+      "rules": 0
+    },
+    {
+      "path": "scope-guard.py",
+      "lines": 400,
+      "rules": 0
+    },
+    {
+      "path": "rule-guard.py",
+      "lines": 1108,
+      "rules": 9,
+      "symlink": false
+    }
   ],
-  "wired": ["urgent-fix-guard.py", "scope-guard.py"]
+  "wired": [
+    "urgent-fix-guard.py",
+    "scope-guard.py"
+  ],
+  "policy_dir_py": [
+    "policy/differential.py"
+  ]
 }

@@ -47,7 +47,13 @@ import shutil
 import subprocess
 import sys
 
-REPO = "/Users/chidionyema/Documents/code/prospector"
+#: One Mac's absolute path. Off that Mac the directory is simply not there, `_git`
+#: answers "cannot tell" to every question, and every rule that asks git something
+#: abstains IN SILENCE -- a guard that cannot see its subject permits and prints what
+#: a clean run prints. CI found it: two rule_two_dot_diff cases got None. So fall back
+#: to the tree this process is standing in, which on a runner is the checkout.
+_HOME_REPO = "/Users/chidionyema/Documents/code/prospector"
+REPO = _HOME_REPO if os.path.isdir(_HOME_REPO) else os.getcwd()
 
 #: The tree the command being judged will actually run in. A hardcoded REPO graded the shared
 #: checkout's branch even when the work was in a worktree, so an 8-file PR could be refused for

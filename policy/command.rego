@@ -341,6 +341,7 @@ rules := [
 		"must_not_match": "pulumi preview",
 		"msg": paid_infra_msg("whatever the stack provisions"),
 	},
+	# make guard inserts here
 ]
 
 # Ten rules share one message, so it is written once. Ten copies of a paragraph this

@@ -32,8 +32,15 @@ jobs:
     timeout-minutes: 5
     env:
       CONFTEST_VERSION: "0.69.0"
+      OPA_VERSION: "1.19.1"
     steps:
+      # fetch-depth: 0 because three selftest cases name a remote-tracking branch and
+      # the rules ask git whether it resolves. Measured in a clone with
+      # refs/remotes/origin/* deleted: 95/98, the three cases abstaining. With the
+      # refs present: 98/98. A guard that cannot see its subject permits in silence.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: install conftest
         run: |
@@ -41,6 +48,13 @@ jobs:
             | tar -xz conftest
           sudo mv conftest /usr/local/bin/
           conftest --version
+
+      - name: install opa
+        run: |
+          curl -sSfL -o opa \
+            "https://github.com/open-policy-agent/opa/releases/download/v${OPA_VERSION}/opa_linux_amd64_static"
+          chmod +x opa && sudo mv opa /usr/local/bin/
+          opa version
 
       # The inventory is two facts per guard: how many lines it is, and whether
       # anything in this repository runs it. Built with find and jq rather than a
@@ -63,23 +77,42 @@ jobs:
             | sort -k2 > guards.txt
           while read -r mode f; do
             if [ "$mode" = "120000" ]; then
-              printf '{"path":"%s","lines":0,"symlink":true,"target":"%s"}\n' "$f" "$(readlink "$f")"
+              printf '{"path":"%s","lines":0,"rules":0,"symlink":true,"target":"%s"}\n' "$f" "$(readlink "$f")"
             else
-              printf '{"path":"%s","lines":%s,"symlink":false}\n' "$f" "$(wc -l < "$f" | tr -d ' ')"
+              printf '{"path":"%s","lines":%s,"rules":%s,"symlink":false}\n' \
+                "$f" "$(wc -l < "$f" | tr -d ' ')" "$(grep -c '^def rule_' "$f" || true)"
             fi
           done < guards.txt | jq -s '{guards: .}' > guards.json
           grep -ohE '[A-Za-z0-9_.-]+\.py' settings/settings.json jobs/jobs.json \
             | sort -u | jq -R -s 'split("\n") | map(select(length > 0))' > wired.json
-          jq -s '{guards: .[0].guards, wired: .[1]}' guards.json wired.json > inventory.json
+          git ls-files 'policy/*.py' \
+            | jq -R -s 'split("\n") | map(select(length > 0))' > policy_py.json
+          jq -s '{guards: .[0].guards, wired: .[1], policy_dir_py: .[2]}' \
+            guards.json wired.json policy_py.json > inventory.json
           echo "guards found: $(jq '.guards | length' inventory.json)"
 
-      - name: the policy must refuse a new hand-rolled guard
+      # Every rule in policy/*.rego is a unit test away from silently permitting
+      # everything: an uncompilable RE2 pattern makes regex.match undefined rather
+      # than raising. test_no_rule_is_broken is what catches that, so it gates here.
+      - name: the rego unit tests
+        run: conftest verify --policy policy
+
+      - name: the policy must refuse, and it must be THIS rule that refuses
         run: |
-          if conftest test --policy policy policy/fixtures/must_deny.json; then
-            echo "::error::the policy permitted a case it must refuse -- the gate is not enforcing"
-            exit 1
-          fi
-          echo "correct: refused"
+          conftest test --policy policy --output json policy/fixtures/must_deny.json \
+            > deny.json || true
+          jq -r '.[].failures[]?.msg' deny.json > refusals.txt
+          fail=0
+          while IFS= read -r want; do
+            case "$want" in ''|'#'*) continue;; esac
+            if grep -qF "$want" refusals.txt; then
+              echo "  refused: $want"
+            else
+              echo "::error::the policy PERMITTED a case it must refuse: $want"
+              fail=1
+            fi
+          done < policy/fixtures/must_deny.expected
+          exit $fail
 
       - name: the policy must permit a shrinking guard
         run: conftest test --policy policy policy/fixtures/must_allow.json
@@ -89,3 +122,9 @@ jobs:
       # denial and what promotes it.
       - name: the tree itself
         run: conftest test --policy policy inventory.json
+
+      # The hook's own cases, run the way the hook runs: this is what proves the
+      # nine migrated refusals still refuse through opa, on a machine that is not
+      # the founder's laptop.
+      - name: rule-guard.py against the live policy
+        run: python3 rule-guard.py --selftest
