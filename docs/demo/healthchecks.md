@@ -45,11 +45,27 @@ estate-snapshot | status: up | last ping: 2026-08-24T00:43:54+00:00
 If that job ever stops, your phone hears about it within about 75 minutes (its hourly
 schedule plus 15 minutes of grace).
 
-## Full coverage, 2026-08-24
+## Coverage, 2026-08-24: 12 of 46 loaded jobs
 
-Every scheduled job on this Mac is now under the watch — wrapped, or excluded with a
-written reason (always-on services, Adobe/Steam vendor jobs, the Hermes reaper). The
-board, read from the monitor's own API at 02:24:
+This section said "every scheduled job on this Mac is now under the watch". That was
+wrong, and it was wrong because it was never measured — it counted rows on the
+Healthchecks board, and a job that is not wrapped never creates a row, so the board can
+only ever report on the jobs already covered. Counting from `launchctl list` instead,
+which is the set of jobs that actually exist:
+
+```
+$ ~/.claude/scripts/estate/measure-wrap-coverage.sh   # walks launchctl list, then follows
+                                                      # each plist's program into the script
+total=46  direct=12  indirect=0  bare=34
+```
+
+Twelve jobs call `hc-wrap.sh`. Thirty-four do not, so if one of them dies nothing says
+so. `indirect=0` means no job reaches the wrapper through an intermediate script either
+— the number is 12 under the stronger test, not just under a plist grep.
+
+The board below therefore describes the 12, not the estate. Wrapping the remaining 34
+starts with the backups (`com.prospector.backup`, `com.prospector.offsite-backup`) and
+`com.estate.costsentinel`.
 
 ```
 $ curl -s -H "X-Api-Key: ..." http://127.0.0.1:8000/api/v3/checks/ | <count by status>

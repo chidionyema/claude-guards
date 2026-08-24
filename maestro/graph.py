@@ -13,7 +13,7 @@ import threading
 from enum import Enum, auto
 from dataclasses import dataclass, field, asdict
 from typing import Optional, Dict, List, Any, Callable, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -213,7 +213,7 @@ class ExperienceGraph:
             return row[0] if row else 0.0
 
     def add_spend(self, amount_usd: float) -> None:
-        today = datetime.utcnow().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d")
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
                 INSERT INTO daily_spend (date, amount_usd)
@@ -230,7 +230,7 @@ class ExperienceGraph:
             success_rate = conn.execute(
                 "SELECT AVG(CASE WHEN outcome='success' THEN 1.0 ELSE 0.0 END) FROM episodes"
             ).fetchone()[0] or 0.0
-            today_spend = self.get_daily_spend(datetime.utcnow().strftime("%Y-%m-%d"))
+            today_spend = self.get_daily_spend(datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%d"))
             return {
                 "total_episodes": total_episodes,
                 "total_shapes": total_shapes,

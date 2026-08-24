@@ -71,6 +71,40 @@
       "path": "~/dev/code/crew",
       "why": "the coordination board and DECISIONS.md",
       "branch": "main"
+    },
+    {
+      "path": "~/dev/code/idp",
+      "why": "the one platform: Backstage catalog, the router, the standards page"
+    },
+    {
+      "path": "~/dev/code/estate-secrets",
+      "why": "the sops directory vault, the estate secrets standard"
+    },
+    {
+      "path": "~/dev/code/survival-stack",
+      "why": "the survival lab and its DNS shim",
+      "branch": "main"
+    },
+    {
+      "path": "~/dev/code/agent-guard",
+      "why": "the guard scaffolds every repo inherits",
+      "branch": "main"
+    },
+    {
+      "path": "~/Documents/code/prospector",
+      "why": "the product"
+    },
+    {
+      "path": "~/Documents/code/prospector-live",
+      "why": "the deployed prospector checkout and its offsite drill"
+    },
+    {
+      "path": "~/Documents/code/signalengine",
+      "why": "the signal engine"
+    },
+    {
+      "path": "~/.estate",
+      "why": "the estate's requirements ledger and agent-certification onboarding; it has a github remote and 0 commits off-remote, but nothing declared it, so no escrow rule reached it and its R2 copy sat at 472f783 while the disk moved to 7ca27f9"
     }
   ],
   "secrets": [
@@ -89,7 +123,6 @@
       "com.apple",
       "com.valvesoftware",
       "com.adobe",
-      "com.docker",
       "com.cisco",
       "com.ollama",
       "com.openssh",
@@ -117,12 +150,14 @@
     ]
   },
   "always_dirty": {
-    "comment": "Append-only logs every session writes. Flagging these forever would make the instrument cry wolf, which is LAW 28's failure, not LAW 24's.",
+    "comment": "Append-only logs every session writes, and files a running service rewrites at boot. Flagging these forever would make the instrument cry wolf, which is LAW 28's failure, not LAW 24's.",
     "paths": [
       "ESTATE_BOARD.jsonl",
       "state/",
       "agent-cert/",
-      "logs/"
+      "logs/",
+      "gateway/restart_loop.json",
+      "plugins/known_marketplaces.json"
     ]
   },
   "escrow": {

@@ -69,7 +69,18 @@ def prune_worktrees():
 
 
 def free_bytes() -> int:
-    st = os.statvfs("/System/Volumes/Data")
+    """Free bytes on the volume HOME sits on.
+
+    Not a hard-coded "/System/Volumes/Data". That path exists only on macOS, so
+    the deputy's CI job crashed here on every run: the job runs on Linux, and it
+    exists to refuse a broken skill before it reaches the Mac. It was red from
+    2026-08-23 to 2026-08-24 for this one line.
+
+    On the Mac this reads the same volume it always did. Measured 2026-08-24:
+    statvfs(HOME) and statvfs("/System/Volumes/Data") both returned
+    132848467968 free bytes.
+    """
+    st = os.statvfs(HOME)
     return st.f_bavail * st.f_frsize
 
 

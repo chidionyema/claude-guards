@@ -17,7 +17,7 @@
 		<string>--write</string>
 	</array>
 	<key>RunAtLoad</key>
-	<true/>
+	<false/>
 	<key>StandardErrorPath</key>
 	<string>/Users/chidionyema/.claude/state/logs/law-writer.err</string>
 	<key>StandardOutPath</key>

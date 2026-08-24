@@ -32,6 +32,7 @@ page, by name, and the value belongs in the password manager.
 | `~/.config/wave/state.json` | wave's session state, may hold a token | regenerated on first run |
 | `~/.prospector/escrow/agent.pem` | the escrow agent's private key | regenerate and re-enrol the agent |
 | `~/.claude/.credentials.json` | the Claude Code session | `claude` and sign in once. Ignored at `.gitignore:58`. |
+| `~/.config/opencode/opencode.json` | the file IS tracked at `config/opencode/opencode.json`, with two fields stripped: `provider.minimax.options.apiKey` and `provider.minimax.options.headers.X-Api-Key` | copy the repo's version into place, then paste the MiniMax key into both fields. `tracked.py` refuses a commit that carries them (2026-08-24 10:43:31), which is why the repo's copy is short two fields rather than out of date. |
 
 ## Generated, so deliberately absent
 

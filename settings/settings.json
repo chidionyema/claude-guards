@@ -60,7 +60,6 @@
     ],
     "defaultMode": "bypassPermissions"
   },
-  "model": "claude-fable-5[1m]",
   "hooks": {
     "SessionStart": [
       {
@@ -152,6 +151,10 @@
             "type": "command",
             "command": "python3 $HOME/.claude/scripts/context-guard-hook.py",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/goal-guard.py"
           }
         ]
       },
@@ -232,6 +235,7 @@
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
+  "crossSessionInbound": "accept",
   "agentPushNotifEnabled": true,
   "autoMode": {
     "allow": [

@@ -18,6 +18,8 @@
 -->
 <plist version="1.0">
 <dict>
+	<key>Nice</key>
+	<integer>10</integer>
   <key>Label</key>
   <string>com.estate.inventory</string>
 

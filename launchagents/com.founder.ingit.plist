@@ -23,7 +23,7 @@
 		<string>/Users/chidionyema/.claude/scripts/estate/in-git.py</string>
 	</array>
 	<key>RunAtLoad</key>
-	<true/>
+	<false/>
 	<key>StandardErrorPath</key>
 	<string>/Users/chidionyema/.claude/state/ingit.err.log</string>
 	<key>StandardOutPath</key>

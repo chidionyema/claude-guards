@@ -479,3 +479,163 @@ deny_would_fire(r, cmd) if {
 	not contains(cmd, r.marker)
 	regex.match(r.re, cmd)
 }
+
+# ---------------------------------------------------------------------------
+# A settings store printed WHOLESALE, when the same tool prints names only.
+#
+# This one arrived from the other side of the 2026-08-24 merge, where it was
+# `rule_secret_store_dump` in rule-guard.py. R16 says a refusal decidable from
+# the command string is Rego, so it lands here rather than as a seventh Python
+# rule -- which the ceiling in hand_rolled_policy.rego would have refused.
+#
+# THE CLASS, without naming any one command: a tool that holds a store of
+# settings prints the VALUES by default, and the same tool will print only the
+# NAMES if asked. An agent reaching for the default is not choosing to publish;
+# it is answering "what is configured here?" and getting the values as a side
+# effect it cannot take back, because the transcript is written before it reads
+# the output.
+#
+# Two instances paid for it. `docker compose config` expands every env_file
+# value inline: on 2026-08-24 one command put live credentials into 1,314 files,
+# 12,688 occurrences. `gh api .../actions/variables` the same day put a Stripe
+# key into a transcript; that one was pk_live_, public by design and needing no
+# rotation, which is exactly why it is the useful instance -- the mistake was
+# free once.
+#
+# WHY THESE HAVE AN `unless` AND THE TABLE ABOVE DOES NOT. The Python spelled
+# the exemptions as negative lookahead, which RE2 cannot compile at all. Stated
+# positively they are a second pattern: `re` is what the command does, `unless`
+# is the same tool asked the safe way. That is expressible in RE2 and reads
+# better than the lookahead did.
+# ---------------------------------------------------------------------------
+
+value_dump_marker := "value-dump-intended"
+
+value_dumps := [
+	{
+		"id": "compose_config",
+		"re": `\bdocker\s+compose\b[^\n;&|]*\bconfig\b`,
+		"unless": `\bdocker\s+compose\b[^\n;&|]*(?:--quiet|\s-q\b|--services|--images|--volumes|--profiles|--hash)`,
+		"dumps": "docker compose config expands every env_file value inline",
+		"instead": "docker compose config --quiet (it validates and prints nothing)",
+		"must_match": "docker compose -f deploy/compose/docker-compose.yml config",
+		"must_not_match": "docker compose config --quiet",
+	},
+	{
+		"id": "docker_inspect",
+		"re": `\bdocker\s+(?:container\s+)?inspect\b`,
+		# `>/dev/null` is in the exemption because deploy/rehearse_cluster.sh:619
+		# runs `docker inspect "$srv" >/dev/null 2>&1` purely to ask "does this
+		# container exist?". Nothing is printed, so nothing can be read again,
+		# which is the entire thing LAW 21 protects.
+		"unless": `\bdocker\s+(?:container\s+)?inspect\b[^\n;&|]*(?:--format|\s-f\b|>\s*/dev/null)`,
+		"dumps": "bare docker inspect prints .Config.Env",
+		"instead": "docker inspect --format '{{.State.Running}}' (name the field you want)",
+		"must_match": "docker inspect opsconsole-diag2",
+		"must_not_match": "docker inspect --format '{{.State.Running}}' opsA",
+	},
+	{
+		"id": "gh_actions_store",
+		"re": `\bgh\s+api\b[^\n;&|]*actions/(?:variables|secrets)\b`,
+		"dumps": "gh api actions/variables returns every variable's value",
+		"instead": "add --jq '.variables[].name' (this rule passes when the command says .name and never .value)",
+		"must_match": "gh api repos/chidionyema/prospector/actions/variables",
+		"must_not_match": "gh api repos/chidionyema/prospector/actions/runners",
+	},
+	{
+		"id": "gh_variable_list",
+		"re": `\bgh\s+variable\s+list\b`,
+		"unless": `\bgh\s+variable\s+list\b[^\n;&|]*--json\s`,
+		"dumps": "gh variable list prints values in the second column",
+		"instead": "gh variable list --json name",
+		"must_match": "gh variable list",
+		"must_not_match": "gh variable list --json name",
+	},
+	{
+		"id": "kubectl_secret_dump",
+		"re": `\bkubectl\s+get\s+secrets?\b[^\n;&|]*-o(?:utput)?[= ]\s*(?:yaml|json)`,
+		"dumps": "kubectl get secret -o yaml prints the base64 of every key",
+		"instead": "kubectl describe secret NAME (it prints key names and byte counts)",
+		"must_match": "kubectl get secret prospector-engine-env -o yaml",
+		"must_not_match": "kubectl describe secret prospector-engine-env",
+	},
+	{
+		"id": "printenv_all",
+		"re": `(?:^|[;&|]\s*)printenv\s*(?:$|[|;&\n])`,
+		"dumps": "printenv with no argument prints the whole environment",
+		"instead": "printenv NAME, or test the value without printing it",
+		"must_match": "printenv",
+		"must_not_match": "printenv PROSPECTOR_STORE_DIR",
+	},
+	{
+		"id": "env_all",
+		"re": `(?:^|[;&|]\s*)env\s*(?:$|\|)`,
+		"dumps": "env with no argument prints the whole environment",
+		"instead": "printenv NAME, or test the value without printing it",
+		"must_match": "env",
+		"must_not_match": "env PROSPECTOR_STORE_DIR=/data/store python3 run.py",
+	},
+]
+
+# A backslash continuation puts the safe flag on the NEXT line -- crew/ARCHITECTURE.md:56
+# is a real instance -- so the lines are joined before matching, exactly as the
+# Python did. LAW 38: a guard that refuses correct work is an outage.
+value_dump_input(cmd) := regex.replace(cmd, `\\\n\s*`, " ")
+
+# The whole point is that these tools CAN answer without values. A jq or format
+# expression that asks for names and never asks for values is that answer.
+names_only(cmd) if {
+	contains(cmd, ".name")
+	not contains(cmd, ".value")
+}
+
+value_dump_exempt(r, cmd) if regex.match(object.get(r, "unless", `\bZZZ_NEVER_MATCHES_ZZZ\b`), cmd)
+
+value_dump_exempt(_, cmd) if names_only(cmd)
+
+value_dump_fires(r, cmd) if {
+	not contains(cmd, value_dump_marker)
+	regex.match(r.re, cmd)
+	not value_dump_exempt(r, cmd)
+}
+
+deny contains msg if {
+	some r in value_dumps
+	cmd := value_dump_input(input.command)
+	value_dump_fires(r, cmd)
+	msg := sprintf(
+		"BLOCKED by rule-guard: this prints a settings store's VALUES.\n  %s.\n  Ask for names instead: %s\nLAW 21: a secret value never appears anywhere it can be read again -- not a transcript, not a log line, not a commit. Naming a secret is fine; printing it is not.\n\nIf you mean it, append  # %s  to the command and say in your reply why this case is different.",
+		[r.dumps, r.instead, value_dump_marker],
+	)
+}
+
+# The same self-proof the table above gets. A rule that stops agreeing with its
+# own two examples -- RE2 refusing to compile the pattern included -- reports
+# broken rather than silently permitting everything it was written to refuse.
+broken contains msg if {
+	some r in value_dumps
+	not value_dump_fires(r, value_dump_input(r.must_match))
+	msg := sprintf(
+		"value-dump rule %q no longer refuses its own must_match example %q. Until this is fixed the rule refuses nothing.",
+		[r.id, r.must_match],
+	)
+}
+
+broken contains msg if {
+	some r in value_dumps
+	value_dump_fires(r, value_dump_input(r.must_not_match))
+	msg := sprintf(
+		"value-dump rule %q refuses its own must_not_match example %q, which is the names-only form of the same tool. A guard that refuses correct work is an outage (LAW 38).",
+		[r.id, r.must_not_match],
+	)
+}
+
+broken contains msg if {
+	some cmd in permitted_commands
+	some r in value_dumps
+	value_dump_fires(r, value_dump_input(cmd))
+	msg := sprintf(
+		"value-dump rule %q refuses %q, which is on the permitted_commands list: work the estate must always be able to do (LAW 38).",
+		[r.id, cmd],
+	)
+}
