@@ -50,14 +50,23 @@ jobs:
       # Hyphenated names only. This estate's convention is that an executable is
       # `some-guard.py` and a library is `guard_report.py`; guard_report.py is
       # imported by 22 files and is not a guard.
+      # `git ls-files -s` and not `find`, because git's index is what CI checks
+      # out and the filesystem is not. Two guards in this repo are committed as
+      # symlinks to absolute paths on one Mac (mode 120000); `find` reports them
+      # as present and `wc -l` then fails on a dangling link, which is how the
+      # first version of this job died. Mode is read from the index, so a symlink
+      # is recorded as one rather than followed.
       - name: build the inventory
         run: |
-          find . -maxdepth 2 \
-               \( -name '*-guard*.py' -o -name '*-gate*.py' -o -name '*-fence*.py' -o -name 'guard-*.py' \) \
-               -not -name 'test_*' -not -name '*.bak*' \
-            | sed 's|^\./||' | sort > guards.txt
-          while read -r f; do
-            printf '{"path":"%s","lines":%s}\n' "$f" "$(wc -l < "$f" | tr -d ' ')"
+          git ls-files -s \
+            | awk '$4 ~ /(-guard|-gate|-fence)[^\/]*\.py$|\/?guard-[^\/]*\.py$/ && $4 !~ /(^|\/)test_|\.bak/ {print $1, $4}' \
+            | sort -k2 > guards.txt
+          while read -r mode f; do
+            if [ "$mode" = "120000" ]; then
+              printf '{"path":"%s","lines":0,"symlink":true,"target":"%s"}\n' "$f" "$(readlink "$f")"
+            else
+              printf '{"path":"%s","lines":%s,"symlink":false}\n' "$f" "$(wc -l < "$f" | tr -d ' ')"
+            fi
           done < guards.txt | jq -s '{guards: .}' > guards.json
           grep -ohE '[A-Za-z0-9_.-]+\.py' settings/settings.json jobs/jobs.json \
             | sort -u | jq -R -s 'split("\n") | map(select(length > 0))' > wired.json

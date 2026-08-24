@@ -64,6 +64,7 @@ legacy := {
 deny contains msg if {
 	some g in input.guards
 	not legacy[g.path]
+	not g.symlink
 	msg := sprintf(
 		"%s is new hand-rolled policy (%d lines). Policy goes in policy/*.rego, which OPA already evaluates. If this genuinely cannot be Rego, say why in the PR and add it to `legacy` in policy/hand_rolled_policy.rego.",
 		[g.path, g.lines],
@@ -104,5 +105,29 @@ warn contains msg if {
 	msg := sprintf(
 		"%s is wired to nothing -- no hook in settings/settings.json, no job in jobs/jobs.json. A guard that never runs is not a guard. Delete it, or wire it up.",
 		[g.path],
+	)
+}
+
+# A guard committed as a symlink to an absolute path outside this repository.
+#
+# Found by this policy's own first CI run, 2026-08-24: the job died because
+# `wc -l` could not read idle-guard.py, which is mode 120000 pointing at
+# /Users/chidionyema/Documents/code/prospector/scripts/claude_guards/. It
+# resolves on one Mac and nowhere else -- not on a runner, not on a second
+# machine, not for anyone who clones this repo. The guard is live (it is wired as
+# a hook), so its real source is load-bearing and is not in this repository,
+# which is LAW 24.
+#
+# WARN AND NOT DENY. Fixing it means deciding whether this repo or the prospector
+# tree owns the file, and leaving two copies to drift is worse than the symlink.
+# That is a decision with blast radius in another repository, so it is named here
+# on every run and owned by whoever holds that call, not silently swallowed by
+# skipping symlinks in the inventory.
+warn contains msg if {
+	some g in input.guards
+	g.symlink
+	msg := sprintf(
+		"%s is committed as a symlink to %s, outside this repository. It resolves on one Mac and nowhere else; CI checks out a dangling link. Decide which tree owns the file and commit it there (LAW 24).",
+		[g.path, g.target],
 	)
 }
