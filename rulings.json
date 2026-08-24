@@ -31,6 +31,27 @@
       "enforced_by": "settings.json crossSessionInbound; LAW 5 / LAW 20 / LAW 27"
     },
     {
+      "id": "R6-mature-platforms-over-hand-rolled",
+      "date": "2026-08-24",
+      "verbatim": "anything we do ourselves is risky — we need mature proven platforms, proven. all this writing bash scripts and python scripts — we need to be in the future",
+      "meaning": "LAW 43 is the primary review axis for ALL infra/platform work. Hand-rolled bash/python that a mature, proven platform already does grades REWORK with the replacement named, or NOT-RAISING-THE-BAR. Tooling research runs autonomously (online, on the record) and lands in science/RESEARCH-LEDGER.jsonl. Source: crew#102 comment 5391796940.",
+      "enforced_by": "review protocol crew#115; LAW 43"
+    },
+    {
+      "id": "R7-unify-and-standardise",
+      "date": "2026-08-24",
+      "verbatim": "we need to unify our platform and stack — standardise. no excuses, i need this production ready fully. we cant be lax about infra or platform work — the headline is risk elimination",
+      "meaning": "One standard stack, not one per session. New components use the standard or the deviation is stated and reviewed. Strict review for all infra work; production-ready is the only bar. Source: crew#102 comment 5391796940.",
+      "enforced_by": "review protocol crew#115; LAW 41"
+    },
+    {
+      "id": "R8-no-provider-spof-rebrand",
+      "date": "2026-08-24",
+      "verbatim": "our whole platform cant be dependent on one provider. minimax [ninina] needs to be part of the team and should be able to work autonomously. i dont want to see CLAUDE.md, claude folder etc — we need a rebrand — one unified framework that can onboard new providers and is agnostic",
+      "meaning": "No estate asset lives in a vendor-named home; vendor dirs get symlinks to neutral estate files (the ~/AGENTS.md pattern). Repo instruction files are AGENTS.md, with CLAUDE.md as a symlink. MiniMax (prospector's primary brain, 'ninina' in founder-speak) joins as an autonomous team member through the same certification as every agent; Gemini CLI likewise. Onboarding a new provider is a checklist, not a project. Codifies LAW 34 as a ruling.",
+      "enforced_by": "LAW 34; the rebrand plan (crew issue, 2026-08-24)"
+    },
+    {
       "id": "R4-investor-tomorrow",
       "date": "2026-08-23",
       "verbatim": "we need to think as if an investor is going to buy the platform tomorrow",
