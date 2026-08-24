@@ -24,6 +24,13 @@
       "enforced_by": "review protocol crew#105"
     },
     {
+      "id": "R5-founder-out-of-the-loop",
+      "date": "2026-08-24",
+      "verbatim": "i need to be out of the loop and things work reliably and get done — i dont need all this friction",
+      "meaning": "Nothing waits on the founder except money, identity, or an irreversible call. No approval dialogs between agents (crossSessionInbound=accept), no 'shall I' questions, no menus. If a mechanism makes him click, the mechanism is the defect.",
+      "enforced_by": "settings.json crossSessionInbound; LAW 5 / LAW 20 / LAW 27"
+    },
+    {
       "id": "R4-investor-tomorrow",
       "date": "2026-08-23",
       "verbatim": "we need to think as if an investor is going to buy the platform tomorrow",
