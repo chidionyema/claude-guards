@@ -95,12 +95,20 @@ def _is_product_repo(root: str) -> bool:
     return bool(root) and os.path.realpath(root) != _CONFIG_DIR
 
 
+#: A command that never cd's but runs everything through `git -C <path>` is telling you where
+#: it runs just as loudly. On 2026-08-24 a command built a crew worktree entirely with -C and
+#: then ran `gh pr create`; the guard graded the SESSION's repo instead and refused a 1-file
+#: PR as "65 files" — the same wrong-repo class as the two incidents above, third variant.
+_GIT_DASH_C = re.compile(r"""\bgit\s+-C\s+(?P<path>'[^']+'|"[^"]+"|[^\s;&|]+)""")
+
+
 def _repo_for(cmd: str, session_cwd: str | None) -> str:
     """The worktree this command runs in. Falls back to REPO, so behaviour never gets worse."""
-    for m in _LEADING_CD.finditer(cmd):
-        root = _worktree_root(_expand(m.group("path").strip("'\""), cmd))
-        if _is_product_repo(root):
-            return root
+    for pat in (_LEADING_CD, _GIT_DASH_C):
+        for m in pat.finditer(cmd):
+            root = _worktree_root(_expand(m.group("path").strip("'\""), cmd))
+            if _is_product_repo(root):
+                return root
     root = _worktree_root(session_cwd or "")
     return root if _is_product_repo(root) else REPO
 
@@ -270,6 +278,13 @@ def rule_pr_size(cmd: str) -> str | None:
     base = m.group(1).strip("\"'") if m else "main"
     rc, head = _git("rev-parse", "--abbrev-ref", "HEAD")
     if rc != 0 or not head:
+        return None
+    m = re.search(r"--head[= ]+(\S+)", cmd)
+    if m and m.group(1).strip("\"'") != head:
+        # The PR's declared head branch is not the branch this checkout is on, so the
+        # diff below would be some other repo's history — the exact mistake that
+        # refused a 1-file PR as "65 files" on 2026-08-24. A guard that cannot see
+        # the change it is grading abstains rather than accuses.
         return None
     rc, mb = _git("merge-base", f"origin/{base}", "HEAD")
     if rc != 0 or not mb:
