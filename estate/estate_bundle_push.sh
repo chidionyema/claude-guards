@@ -288,10 +288,15 @@ try:
         except Exception: continue
         if (str(r.get("mode", "")).startswith("full") and r.get("restore") == "clone-ok"
                 and float(r.get("ts", 0)) > cut and r.get("slug")):
-            fresh.add(r["slug"])
+            fresh.add((r["slug"], str(r.get("tip") or "")))
 except FileNotFoundError:
     pass
-open(fresh_p, "w").write("\n".join(sorted(fresh)) + "\n")
+# slug and the tip that bundle captured. Freshness alone let a repo whose
+# remote holds everything keep a 1.1-day-old escrow while its disk moved on:
+# .claude sat at e0a652c in R2 and a2dc73b on disk, and the age rule called
+# that fresh. If GitHub is what you lost, an escrow behind by a day is the
+# day of work you lost with it.
+open(fresh_p, "w").write("\n".join("%s %s" % t for t in sorted(fresh)) + "\n")
 PYFRESH
 
 : > "$WORK/plan.tsv"
@@ -337,10 +342,15 @@ while read -r d; do
   # whatever the remote holds. This is the only line that makes R2 a GitHub escrow.
   if grep -qxF "$(cd "$d" && pwd -P)" "$WORK/declared.txt" 2>/dev/null; then
     probe=$(printf %s "${d#$HOME/}" | tr '/' '-' | tr -cd 'A-Za-z0-9._-')
-    if ! grep -qxF "$probe" "$WORK/full-fresh.txt" 2>/dev/null; then
+    tip_now=$(gplan "$d" rev-parse HEAD 2>/dev/null || echo none)
+    if ! grep -qxF "$probe $tip_now" "$WORK/full-fresh.txt" 2>/dev/null; then
       n=$(gplan "$d" rev-list --count --all 2>/dev/null || echo 0)
       mode=full-escrow
-      log "escrow due: $(basename "$d") has no standalone bundle in R2 newer than ${FULL_DAYS}d, planning --all"
+      if grep -qE "^$probe " "$WORK/full-fresh.txt" 2>/dev/null; then
+        log "escrow due: $(basename "$d") has a standalone bundle but it is not at ${tip_now:0:12}, planning --all"
+      else
+        log "escrow due: $(basename "$d") has no standalone bundle in R2 newer than ${FULL_DAYS}d, planning --all"
+      fi
     fi
   fi
 
