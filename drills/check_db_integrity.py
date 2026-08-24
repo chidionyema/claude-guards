@@ -67,8 +67,22 @@ def databases():
     return sorted(seen)
 
 
-def check(path):
-    """The first line of integrity_check, read-only so a live writer is safe."""
+#: "unable to open database file (14)" is SQLITE_CANTOPEN, not a corruption verdict.
+#: Found 2026-08-24: all 4 databases the drill called BROKEN that morning passed
+#: `PRAGMA integrity_check` -> ok the moment they were checked again by hand, two of
+#: them (hermes-v2/cron/notepad.db, prospector-main/store/prospector.db) with mtimes
+#: from the day before, so they were not mid-rebuild either. The drill ran at 03:41
+#: alongside a dozen other launchd jobs (log evidence: multiple concurrent python3
+#: processes 03:35-03:49 in /var/log via `log show`), and a database that is merely
+#: locked or momentarily unreachable under that load looks identical to a missing
+#: file to sqlite3's error text. Retrying tells the two apart: real corruption
+#: ("database disk image is malformed", "row ... missing from index") repeats on
+#: every attempt, CANTOPEN from contention does not.
+OPEN_RETRIES = 3
+OPEN_RETRY_DELAY = 2.0
+
+
+def _check_once(path):
     try:
         proc = subprocess.run(
             ["sqlite3", f"file:{path}?mode=ro", "PRAGMA integrity_check;"],
@@ -79,6 +93,23 @@ def check(path):
     if not lines:
         return proc.stderr.strip()[:120] or "no output from integrity_check"
     return lines[0]
+
+
+def check(path):
+    """The first line of integrity_check, read-only so a live writer is safe.
+
+    Retries only on "unable to open database file": see OPEN_RETRIES above. Any
+    other verdict -- ok, a real corruption message, a timeout -- is returned on
+    the first attempt, so a genuinely broken database is still reported in one
+    pass and this never masks anything but a transient open failure.
+    """
+    verdict = _check_once(path)
+    attempt = 1
+    while "unable to open database file" in verdict and attempt < OPEN_RETRIES:
+        time.sleep(OPEN_RETRY_DELAY)
+        verdict = _check_once(path)
+        attempt += 1
+    return verdict
 
 
 def index_only(verdict):
