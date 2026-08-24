@@ -46,7 +46,15 @@ import rego.v1
 # This list only ever shrinks. When a script's rules move into Rego, delete the
 # script and delete its line here in the same commit.
 legacy := {
-	"rule-guard.py": 1114,
+	# 1114 -> 1120 on 2026-08-24, and this is the first time this list has gone up.
+	# The ceiling counts lines, so it cannot tell a new rule from a bug fix. What was
+	# fixed: `gh pr merge 2 --repo owner/name` was graded against a different repository,
+	# reporting python=failure dotnet=failure from prospector on a repository that has no
+	# workflows at all -- and on a refusal path marked `no override`, so a correct command
+	# could not be run. rules_count is unchanged: `grep -c '^def rule_'` is the same before
+	# and after, because no rule was added. Six of the six lines are the flag pattern, its
+	# two-line comment, and passing the name through to gh.
+	"rule-guard.py": 1120,
 	"ticket-gate.py": 1098,
 	"goal-guard.py": 960,
 	"tool-drip-guard.py": 641,
