@@ -10,14 +10,14 @@
 	<key>Label</key>
 	<string>com.founder.estatepush</string>
 	<key>Nice</key>
-	<integer>5</integer>
+	<integer>10</integer>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/bin/bash</string>
 		<string>/Users/chidionyema/.claude/scripts/estate/estate_push.sh</string>
 	</array>
 	<key>RunAtLoad</key>
-	<true/>
+	<false/>
 	<key>StandardErrorPath</key>
 	<string>/Users/chidionyema/.claude/state/logs/estate-push.err.log</string>
 	<key>StandardOutPath</key>

@@ -9,6 +9,8 @@
 	</dict>
 	<key>Label</key>
 	<string>com.prospector-control.receipt-bridge</string>
+	<key>Nice</key>
+	<integer>10</integer>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/usr/local/bin/python3</string>

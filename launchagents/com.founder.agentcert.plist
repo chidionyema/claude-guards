@@ -23,7 +23,7 @@
 		<string>/Users/chidionyema/.claude/scripts/estate/agent_cert.py</string>
 	</array>
 	<key>RunAtLoad</key>
-	<true/>
+	<false/>
 	<key>StandardErrorPath</key>
 	<string>/Users/chidionyema/.claude/agent-cert/cert.err.log</string>
 	<key>StandardOutPath</key>

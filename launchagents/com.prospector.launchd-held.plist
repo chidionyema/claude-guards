@@ -13,6 +13,8 @@
 	</dict>
 	<key>Label</key>
 	<string>com.prospector.launchd-held</string>
+	<key>Nice</key>
+	<integer>10</integer>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/Users/chidionyema/Documents/code/prospector/.venv/bin/python</string>
@@ -25,7 +27,7 @@
 		<string>--assert-held</string>
 	</array>
 	<key>RunAtLoad</key>
-	<true/>
+	<false/>
 	<key>StandardErrorPath</key>
 	<string>/Users/chidionyema/Documents/code/prospector/store/scheduler/launchd-held.log</string>
 	<key>StandardOutPath</key>

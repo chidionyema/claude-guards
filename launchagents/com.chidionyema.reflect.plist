@@ -10,7 +10,7 @@
 	<key>Label</key>
 	<string>com.chidionyema.reflect</string>
 	<key>Nice</key>
-	<integer>5</integer>
+	<integer>10</integer>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/Users/chidionyema/Documents/code/prospector/.venv/bin/python</string>
@@ -23,7 +23,7 @@
 		<string>--json</string>
 	</array>
 	<key>RunAtLoad</key>
-	<true/>
+	<false/>
 	<key>StandardErrorPath</key>
 	<string>/Users/chidionyema/.claude/reflect.log</string>
 	<key>StandardOutPath</key>

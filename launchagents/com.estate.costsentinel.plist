@@ -10,7 +10,7 @@
 	<key>Label</key>
 	<string>com.estate.costsentinel</string>
 	<key>Nice</key>
-	<integer>5</integer>
+	<integer>10</integer>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>

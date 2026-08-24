@@ -60,7 +60,6 @@
     ],
     "defaultMode": "bypassPermissions"
   },
-  "model": "claude-fable-5[1m]",
   "hooks": {
     "SessionStart": [
       {
@@ -236,6 +235,7 @@
   "tui": "fullscreen",
   "skipDangerousModePermissionPrompt": true,
   "skipWorkflowUsageWarning": true,
+  "crossSessionInbound": "accept",
   "agentPushNotifEnabled": true,
   "autoMode": {
     "allow": [
@@ -257,6 +257,5 @@
       "The user owns the GitHub repo chidionyema/prospector and the Fly.io organisation hosting the prospector-*, store-*, mumchimp-* and tie-* apps. Commands aimed at those resources administer the user's own infrastructure.",
       "Standing instruction from the user: prefer acting to asking on routine estate work. Interruptions on ordinary read, inspect, deploy and repo-administration commands cost more than they protect."
     ]
-  },
-  "crossSessionInbound": "accept"
+  }
 }
