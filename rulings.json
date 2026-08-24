@@ -119,6 +119,13 @@
       "verbatim": "no lie is deno and onboardig founder only founder decives if sonething is live or not, no one else can nove a ticket to live core",
       "meaning": "Only the founder marks anything live, done, core or operational. An agent may write ONLY the Observation column of ESTATE_STATE.md: what it measured, the command, the output, the timestamp. An agent writing an approval, a green tick, or the words live/done/operational about a component is a protocol violation. Observe and propose; the founder executes the approval. This is on top of the existing LAW 17 proof rule, not instead of it: proof earns a row in Observation, it does not earn the tick. Numbered R17, not R16: two sessions allocated R16 at the same time on 2026-08-24 — this ruling and R16-command-guards-are-rego — and the second one to reach main is the one that moves. friction-relay.py now refuses a rulings.json where two rulings share a number, so the next collision is caught before it is injected rather than after one ruling has quietly replaced the other.",
       "enforced_by": "crew/ESTATE_STATE.md two-column format; pending: PR check that rejects a diff writing the Founder Approval column"
+    },
+    {
+      "id": "R18-research-before-you-choose",
+      "date": "2026-08-24",
+      "verbatim": "ok good job but alway research, it pays off all the tine",
+      "meaning": "Before choosing any tool, standard, protocol or version, search the current state of the world and cite what you read. Not memory, not what the training data believed, not what another session asserted. The incident that paid for it: on 2026-08-24 a session started building an ingress on Traefik's own Docker labels. Research showed two things it did not know -- Kubernetes SIG Network retired the ingress-nginx controller on 2026-03-24, and Gateway API core is GA at v1.6.0 with 16 conformant implementations. The real decision was the config language, not the vendor: routes written as HTTPRoute are portable, routes written as vendor labels are not. Research changed the answer, and it cost one search. This is LAW 43 with a due date: the research is online, it is the agent's job, and it goes on the record with the sources named.",
+      "enforced_by": "idp and crew: every ADR carries a Sources section with dated URLs; adr-sources-guard.py refuses a decision record that cites nothing"
     }
   ]
 }
