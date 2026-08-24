@@ -64,6 +64,11 @@
     "why": "per-tool configuration: gh, git, rclone, uv, fish, and this estate's own tools"
   },
   {
+    "live": "~/.claude/state/drills.jsonl",
+    "repo": "state/drills.jsonl",
+    "why": "the record of which recovery paths have ever actually been taken, and when. The drill scripts were in git and their verdicts were not, so the one thing a dead laptop needed to hand over -- proof that a way back works -- was the one thing that died with it."
+  },
+  {
     "live": "~/.prospector/bin",
     "repo": "prospector-bin",
     "tree": true,
