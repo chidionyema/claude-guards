@@ -12,6 +12,11 @@
     "why": "the laws themselves, read by every agent tool through a symlink"
   },
   {
+    "live": "~/AGENTS-FULL.md",
+    "repo": "laws/AGENTS-FULL.md",
+    "why": "the full text of every law. It is not injected, so nothing else reads it often enough to notice it drifting -- the repo copy was already 4 hours and one law behind when this entry was added."
+  },
+  {
     "live": "~/.claude/LAWS-INCIDENTS.md",
     "repo": "laws/LAWS-INCIDENTS.md",
     "why": "what each law cost, and why it says what it says"

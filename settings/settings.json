@@ -184,6 +184,10 @@
             "type": "command",
             "command": "python3 $HOME/.claude/scripts/scope-guard.py",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/config-syntax-guard.py"
           }
         ]
       },
