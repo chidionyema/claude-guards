@@ -1713,3 +1713,60 @@ messages verbatim.
 output already acted on; any standing directive already in a memory file — cite the filename.
 
 **Never drop:** a decision, a file path, a command or an error string.
+
+## LAW 43 — Never reinvent the wheel and do a worse job
+
+Founder, 2026-08-24, verbatim across one stream: "why nont just use github issuess?" — "or not
+research into soneting nore nature" [research into something more mature] — "why reinvent the
+wheel badly" — "never reinvet the wheel and do  worse job" — "also not seein evidence of
+autonouse online research without ne asking".
+
+The incident that paid for it: the estate board. estate-broadcast.py, a flocked JSONL with its
+own validator, lock file and CLI — a hand-built message queue — while GitHub issues sat one
+`gh` call away on the same account. The founder asked for visibility and the honest answer was
+"51 rows exist only on this laptop, 13 hours stale". He called it a sick joke, and it was. The
+board is crew#102 now, and the whole homegrown layer shrank to an offline cache.
+
+The rule, in three parts. Before the first line of anything new, run the research: an online
+pass for the mature tool that already does this, done autonomously — the founder never asks for
+it, it simply happens, and its absence in a PR is a defect. Name what was found in the
+'## Options considered' section pr-evidence.py already gates on: at least one bullet must be an
+off-the-shelf option, adopted or rejected on the record with the reason. And when the mature
+tool wins, the homegrown thing does not get a compatibility layer that keeps it alive — it
+shrinks to glue or dies.
+
+On the WHAT axis this is 19b, directly under portability: LAW 19 says do not marry a vendor,
+LAW 43 says do not marry your own worse copy of one either. It outranks 40 and 41 because a
+module built on a mature wheel is precisely what a buyer can take over.
+
+You are breaking it when: you write a scheduler, queue, board, state machine, retry loop, or
+dashboard from scratch without a research pass on the record; when your Options considered
+section lists only variants of building it yourself; when a peer's PR does the same and your
+review does not flag it.
+
+## LAW 44 — A law without a protocol is a wish
+
+Founder, 2026-08-24, verbatim: "in tired of repearting instructino that are fucking
+autibantabkle and enforcable yet dday by fucjig day" — "you all hav the transrcpi fron
+alsession" — "i hate repeatig bnyself" — "we dotjustneed lways we need prootccols that all
+agebnt folow".
+
+The incident: session-90dce5a0 measured it the same day — 42 laws, 26 checks, only 10 laws
+carried a check, and 21 of 26 checks pointed at a different law than they claimed. The laws
+were prose; agents obeyed them when convenient; the founder repeated himself daily as the
+only enforcement mechanism on the estate. That is the founder doing a machine's job.
+
+The rule: every law carries an executable protocol — a hook, gate, test, or instrument that
+fires without a human — or names in AGENTS-FULL.md why it cannot. The registry is
+crew/science/map_covers_laws.py: it goes red when a law has no check, and red there is a P1,
+not a statistic. And the tripwire that creates new protocols: the moment the founder repeats
+an instruction he has already given — the transcripts prove he gave it — the receiving session
+ships the protocol for it the same day, so he never says it a third time.
+
+On the IMPROVE axis this is 35b: LAW 35 says get better at getting better; LAW 44 says the
+mechanism of that is protocols the founder never has to re-state. It suspends nothing above
+it — a protocol that blocks a fire-fix violates LAW 1 and gets a bypass with a receipt.
+
+You are breaking it when: you write a law, memory, or CLAUDE.md line with no check behind it;
+when you receive the same founder instruction twice and ship prose instead of a protocol;
+when map_covers_laws.py is red and your session treats that as another team's problem.
