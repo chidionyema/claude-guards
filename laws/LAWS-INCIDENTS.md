@@ -741,3 +741,40 @@ the command output was in the reply. What was missing was upstream of the proof.
 itself was never written, so any green command could be pointed at the word. LAW 5, LAW 9 and
 LAW 17 are all measured against a finish line and none of them can be judged before one exists,
 so the law that creates it has to outrank all three.
+
+---
+
+# LAW 45 — YOUR MISTAKE ENDS AS A GUARD NO SESSION CAN WALK PAST (2026-08-24)
+
+**What happened.** I typed a double hyphen inside an XML comment in
+`~/dev/code/idp/observability/clickhouse-low-memory.xml`. A double hyphen is illegal inside an
+XML comment, so ClickHouse rejected the whole file with `SAXParseException: Invalid token` and
+crash-looped with `Restarting (232)`. `langfuse-web` and `langfuse-worker` have a `depends_on`
+condition on clickhouse being healthy, so neither was ever created — `docker ps -a` showed them
+as `Created`, which reads like "not started yet" rather than "blocked by a fault upstream".
+Three hours to find.
+
+**The second failure, in the fix.** Writing the comment that explained the first double hyphen,
+I typed a second double hyphen inside the same comment, in the sentence naming the validator.
+The file broke again. That is why the validator reference now lives on a one-line comment
+reading `Validate: xmllint (noout) ...` and the actual check lives in `bin/langfuse-up`.
+
+**The third failure, which is the one the law is about.** My fix was `xmllint --noout` in
+`bin/langfuse-up`. One script, one repo, one config file. Any other session writing any other
+config file that nothing validates before a service reads it pays the same three hours. My
+memory of it dies with my context, and six sessions run on this machine without seeing each
+other's context. LAW 3 — never make the same mistake twice — binds a session's memory, and a
+session's memory is not a mechanism.
+
+**Founder's words.** "add a law if you ake a istake, you need to ensure no agent sessionn can
+ever nnake that nistake again ever a dprove it ehaustively".
+
+**Why it ranks at 3c.** It is a sharpening of LAW 3 and inherits its rank: below LAW 3, above
+LAW 4. It never suspends LAW 1 — while something is on fire you fix the instance and close the
+class afterwards. The class stays open until the sweep prints a count.
+
+**The protocol.** Resident in `~/AGENTS.md` under "Closing a mistake", because it has to be in
+front of the session that just made the mistake. Five steps: name the class not the instance;
+guard it at the width the class spans; prove it refuses the bad case and permits the good one in
+the same run; sweep every existing instance and print N; land it in a hook, a scheduled job or
+CI. Step 4 is the word "exhaustively" and it is the step that gets skipped.

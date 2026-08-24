@@ -1,0 +1,19 @@
+# Config files that were already unparseable when config-syntax-guard.py was
+# written on 2026-08-24. A file listed here is still found, still printed and
+# still counted by config-syntax-sweep.py -- the baseline changes the exit code
+# and nothing else. A broken file that is NOT on this list turns the sweep red.
+#
+# Deleting a line is how a repair gets locked in. Adding one needs the reason
+# written next to it.
+#
+# These five are JavaScript source and concatenated JSON documents saved with a
+# .json extension, in a repo whose last commit is 2023-11-23. nod_attr.json is
+# loaded by src/api/run.py:646 and src/api/auth2.py:239, so that application has
+# been broken at runtime for three years. Repairing them means choosing which of
+# the concatenated documents the application should get, which is a product call
+# in a repo nobody runs, so it is not made here.
+~/dev/code/QAlgo/src/api/data/opt_neta.json
+~/dev/code/QAlgo/src/api/data/cat.json
+~/dev/code/QAlgo/src/api/data/nod.json
+~/dev/code/QAlgo/src/api/data/nod_neta.json
+~/dev/code/QAlgo/src/api/data/nod_attr.json
