@@ -579,18 +579,30 @@ def rule_merge_red_pr(cmd: str) -> str | None:
     if m:
         pr = m.group(1) or m.group(2)    # `gh pr merge N` or `/pulls/N/merge`
     else:
+        # 2026-08-24: `gh pr merge "$PR"` — the number in a shell variable — reached this
+        # fallback, `gh pr view` returned nothing useful, and the three `return None`s below
+        # waved the merge through. PR #99 landed with its qa check unfinished; the check then
+        # concluded FAILURE on merged code. The docstring above says fails CLOSED, and these
+        # were the three paths that failed open. An unresolvable PR is now a refusal, not a
+        # pass: the fix costs the author four characters — the PR number, written literally.
+        _unresolved = ("BLOCKED by rule-guard: `gh pr merge` with no literal PR number, and "
+                       "the PR could not be resolved from the checkout.\n"
+                       "  why              a merge this guard cannot attribute is a merge it\n"
+                       "                   cannot grade; PR #99 slipped through here with its\n"
+                       "                   qa check still running (2026-08-24)\n"
+                       "  instead          name the number in the command: gh pr merge <n>")
         rc, out = _git("rev-parse", "--abbrev-ref", "HEAD")
         if rc != 0:
-            return None  # no branch to resolve a PR from; not our call to block
+            return _unresolved
         try:
             p = subprocess.run((_real_tool("gh"), "pr", "view", "--json", "number", "--jq", ".number"),
                                cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
             env=_clean_env())
         except (OSError, subprocess.SubprocessError):
-            return None
+            return _unresolved
         pr = p.stdout.strip()
         if not pr.isdigit():
-            return None
+            return _unresolved
     return _merge_verdict(pr, _pr_check_states(pr), escaped,
                           _main_red_refusal(), "main-is-red" in cmd)
 
