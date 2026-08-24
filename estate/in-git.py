@@ -46,6 +46,28 @@ def sh(args, cwd=None, t=60):
         return 127, "", f"{type(e).__name__}: {e}"
 
 
+_PORCELAIN = re.compile(r"^\s*([A-Z?!ARCMDU ]{1,2})\s+(.*)$")
+
+
+def porcelain(line):
+    """Split one `git status --porcelain` line into (code, path).
+
+    Never slice a porcelain line by column. `sh()` returns `stdout.strip()`,
+    which eats the leading space of the FIRST line, so ' M gateway/x' arrives
+    as 'M gateway/x' and a fixed `l[3:]` yields 'ateway/x'. That silently
+    defeated always_dirty for hermes-v2's gateway/restart_loop.json on
+    2026-08-24: the file was listed as noisy and still reported as a hole,
+    every hour, because the path it was compared against was off by one.
+    Swept 2026-08-24: four sites in ~/.claude/scripts column-slice porcelain;
+    the other three (tracked.py:245, guard-autocommit.py:85/211,
+    session-recorder.py:143) read raw unstripped stdout and are correct.
+    """
+    m = _PORCELAIN.match(line)
+    if not m:
+        return "", line.strip()
+    return m.group(1).strip(), m.group(2).strip()
+
+
 def _is_system(p):
     return (p.startswith(("/usr/", "/bin/", "/sbin/", "/System/", "/opt/homebrew/"))
             or os.path.basename(p) in ("python3", "python", "node", "bash", "sh",
@@ -134,8 +156,12 @@ def check_repos(d, _mm):
         # Untracked files are somebody's work in flight. Modified TRACKED files are
         # an edit to something the estate already depends on, which is the hole.
         noisy = tuple(d.get("always_dirty", {}).get("paths", []))
-        mod = [l for l in dirty if not l.startswith("??")
-               and not l[3:].strip().startswith(noisy)]
+        mod = []
+        for l in dirty:
+            code, path = porcelain(l)
+            if code == "??" or path.startswith(noisy):
+                continue
+            mod.append(l)
         sh(["git", "-C", p, "fetch", "-q", "origin"], t=90)
         # LAW 24 asks whether anything off this machine holds the commit, so
         # the measure is every remote ref, not the one branch @{u} names.
