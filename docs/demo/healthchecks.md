@@ -44,3 +44,22 @@ estate-snapshot | status: up | last ping: 2026-08-24T00:43:54+00:00
 
 If that job ever stops, your phone hears about it within about 75 minutes (its hourly
 schedule plus 15 minutes of grace).
+
+## Full coverage, 2026-08-24
+
+Every scheduled job on this Mac is now under the watch — wrapped, or excluded with a
+written reason (always-on services, Adobe/Steam vendor jobs, the Hermes reaper). The
+board, read from the monitor's own API at 02:24:
+
+```
+$ curl -s -H "X-Api-Key: ..." http://127.0.0.1:8000/api/v3/checks/ | <count by status>
+total=35  up=12  down=8  grace=1  new=14
+```
+
+The 8 downs are guards shouting about real findings (crew #80, #81), not dead
+instruments — that distinction is the whole point of the board. The 14 "new" rows are
+tonight's backups and tomorrow's calendar jobs that have not had their first scheduled
+run yet; each turns green on its first ping.
+
+Every one of these jobs also now runs at background priority (`Nice=10`,
+`ProcessType=Background`), so the watch never slows the machine you are typing on.
