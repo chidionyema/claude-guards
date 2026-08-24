@@ -215,6 +215,34 @@ def render(cache: dict, now: float) -> str:
     return "\n".join(lines)
 
 
+RULINGS = os.path.join(SCRIPTS, "rulings.json")
+
+
+def render_rulings() -> str:
+    """Standing rulings, injected forever — unlike complaints, these never age out.
+
+    2026-08-24: the founder had to repeat 'we are not going back to fly' because the
+    ruling lived in one session's memory and this relay's 6-hour window. A ruling is
+    not a complaint: it has no expiry. Read fresh each time (the file is tiny), fail
+    open like everything else here."""
+    try:
+        with open(RULINGS, encoding="utf-8") as fh:
+            rows = json.load(fh).get("rulings") or []
+    except Exception:
+        return ""
+    if not rows:
+        return ""
+    lines = ["[friction-relay] STANDING FOUNDER RULINGS. These never expire and bind",
+             "every session. Violating one, or making him repeat one, is the incident.",
+             ""]
+    for r in rows:
+        lines.append('  %s (%s): "%s"' % (r.get("id", "?"), r.get("date", "?"),
+                                          r.get("verbatim", "")))
+        if r.get("meaning"):
+            lines.append("      => %s" % r["meaning"])
+    return "\n".join(lines)
+
+
 def _kick_refresh() -> None:
     """Rebuild in the background. The hook must never make him wait for a scan.
 
@@ -250,6 +278,9 @@ def hook() -> int:
     if now - float(cache.get("built_at") or 0) > STALE:
         _kick_refresh()
     text = render(cache, now)
+    rulings = render_rulings()
+    if rulings:
+        text = (text + "\n\n" + rulings) if text else rulings
     if text:
         sys.stdout.write(text + "\n")
     return 0
@@ -285,7 +316,10 @@ def selftest() -> int:
         ck("a malformed row does not raise", True)
     except Exception:
         ck("a malformed row does not raise", False)
-    print("friction-relay selftest: %d/%d checks passed" % (9 - len(fails), 9))
+    ru = render_rulings()
+    ck("standing rulings are injected", "STANDING FOUNDER RULINGS" in ru or not os.path.exists(RULINGS))
+    ck("the fly ruling is carried verbatim", "not going back to fly" in ru or not os.path.exists(RULINGS))
+    print("friction-relay selftest: %d/%d checks passed" % (11 - len(fails), 11))
     return 1 if fails else 0
 
 

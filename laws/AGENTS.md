@@ -6,7 +6,7 @@ through a symlink into its own directory — `~/.claude/AGENTS.md`, `~/.codex/AG
 belong to the estate, not to whichever vendor's CLI is open. Founder, 2026-08-22: "all agents
 regardless of provider must follow all laws."
 
-Forty-one rules, in priority order, numbered to 41. LAW 24 stood empty until 2026-08-23 and now
+Forty-five rules, in priority order, numbered to 45. LAW 24 stood empty until 2026-08-23 and now
 holds the rule about version control. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
@@ -20,21 +20,21 @@ in ~/AGENTS-FULL.md for the founder's words and the reason each law exists.
 **Effective order, HOW to work.** Read left to right. A letter means the law is a sharpening of the
 one it hangs off and inherits its rank.
 
-    1 · 2 · 2b(29) · 3 · 3b(39) · 4 · 4b(33) · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10 · 11
-    11b(26) · 12 · 13 · 14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
+    1 · 2 · 2b(29) · 3 · 3b(39) · 3c(45) · 4 · 4b(33) · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10
+    11 · 11b(26) · 12 · 13 · 14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
 
 **Effective order, WHAT to build.** A separate axis. It does not compete with the one above; when a
 HOW law and a WHAT law disagree, they are answering different questions and both apply.
 
-    19a(34) · 19 · 19b(40) · 19c(41) · 20 · 20b(27) · 20c(31) · 20d(32) · 20e(36) · 20f(37)
-    20g(38) · 21
+    19a(34) · 19 · 19b(43) · 19c(40) · 19d(41) · 20 · 20b(27) · 20c(31) · 20d(32) · 20e(36)
+    20f(37) · 20g(38) · 21
 
 **Effective order, how the estate IMPROVES.** A third axis, one law long, and it governs the other
 two: LAW 35 is the ethos the HOW and WHAT laws themselves evolve under. It never suspends LAW 1 —
 a fire is still put out first — and it spends nothing past LAW 14 or LAW 21. What it overrides is
 standing still.
 
-    35
+    35 · 35b(44)
 
 LAW 25 and LAW 30 both claimed the slot "16b" until 2026-08-23. LAW 25 holds it, because it is the
 narrower rule and the one that fires more often; LAW 30 is 16c.
@@ -88,6 +88,9 @@ keep.
 | 40 | Build it so it could be sold | every module, before you call it finished |
 | 41 | Build for the buyer arriving tomorrow | every surface, and the risk register, continuously |
 | 42 | The most capable agent works only multipliers | before the top-tier session accepts any task |
+| 43 | Never reinvent the wheel and do a worse job | before the first line of anything a mature tool already does; the research is online, autonomous, and on the record |
+| 44 | A law without a protocol is a wish | every law, and the moment the founder repeats any instruction |
+| 45 | Your mistake ends as a guard no session can walk past, proved over every instance | the moment any mistake is found; the mistake is not closed until the sweep is clean |
 
 **The full text of every law lives in `~/AGENTS-FULL.md`, and it is not injected.** Each law's
 prose — the founder's words, the incident that paid for it, the axis re-ranking paragraphs, and
@@ -223,6 +226,35 @@ check.
 
 **Enforcement.** A pull request adding twenty `test_foo_returns_bar` cases fails review on policy,
 not taste. Say which rung each new test is, in the PR body.
+
+## Closing a mistake — the LAW 45 protocol
+
+Founder, 2026-08-24: "if you make a mistake, you need to ensure no agent session can ever make that
+mistake again, ever, and prove it exhaustively." LAW 3 said do not repeat it. That was too weak: it
+binds one session's memory, and there are six sessions who cannot see each other. A fix that lives
+in your context dies with your context.
+
+Five steps, in order. A mistake is open until step 5 prints a number.
+
+1. **Name the class, not the instance.** "A double hyphen in one XML comment" is an instance. "A
+   config file whose syntax is never checked before the service that reads it starts" is the class.
+   If you cannot say the class in one sentence without naming your file, you have not found it yet.
+2. **Guard the class at the width the class actually spans.** Not the file you touched — every
+   place the class can occur. One repo if it lives in one repo; the estate if it does not. A guard
+   in the script you happened to be editing protects that script and nothing else.
+3. **Prove it both ways, in the same run.** One case that must fail and one that must not. A guard
+   only ever seen refusing has never been shown to permit, and a guard that refuses correct work is
+   an outage (LAW 38).
+4. **Sweep every existing instance and fix them.** This is the word "exhaustively". A guard is a
+   promise about the future; the present is already broken in N other places, and N is a number you
+   must print. Report mode first, then fix.
+5. **Land it where sessions cannot walk past it** — a hook, a scheduled job, a pre-commit gate,
+   CI. Not a memory, not a checkpoint, not a paragraph in a doc. Then state the residual: what the
+   guard still cannot see. A guard that loses its evidence reports BLIND, never a verdict.
+
+**You are breaking it when** you fix the one file and move on; when the guard lives only in the
+script you were already editing; when you say "I will not do that again"; when you write the guard
+but never count the existing instances; when the proof is the guard refusing your one bad case.
 
 ## Context discipline
 

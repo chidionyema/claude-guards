@@ -1770,3 +1770,42 @@ it — a protocol that blocks a fire-fix violates LAW 1 and gets a bypass with a
 You are breaking it when: you write a law, memory, or CLAUDE.md line with no check behind it;
 when you receive the same founder instruction twice and ship prose instead of a protocol;
 when map_covers_laws.py is red and your session treats that as another team's problem.
+
+## LAW 45 — Your mistake ends as a guard no session can walk past, proved over every instance
+
+Founder, 2026-08-24, verbatim: "add a law if you ake a istake, you need to ensure no agent
+sessionn can ever nnake that nistake again ever a dprove it ehaustively".
+
+The incident that paid for it, same day, in this session. I wrote a double hyphen inside an
+XML comment in observability/clickhouse-low-memory.xml. A double hyphen is illegal there, so
+ClickHouse refused the entire file with "SAXParseException: Invalid token" and crash-looped.
+langfuse-web and langfuse-worker wait on clickhouse being healthy, so neither was ever
+started; docker ps -a showed them as Created, which reads like "not reached yet" rather than
+"blocked by a fault". Three hours. Then, writing the comment that explained the fix, I typed
+a second double hyphen inside the same comment and broke it again.
+
+My fix was to add xmllint to bin/langfuse-up. That is one script in one repo. It protects
+bin/langfuse-up and nothing else. Any other session writing any other config file that no
+tool checks before a service reads it repeats the mistake at full cost, and my memory of it
+dies when my context does. Six sessions run here and none can see each other's context.
+
+The rule: a mistake is not closed when the file works again. It is closed when the class of
+mistake has a guard at the width the class spans, the guard is proved to refuse the bad case
+and permit the good one in the same run, every existing instance across the estate has been
+counted and fixed, and the guard runs from a hook, a scheduled job or CI rather than from
+anyone remembering. The five-step protocol is resident in ~/AGENTS.md under "Closing a
+mistake" because it has to be in front of the session that just made the mistake.
+
+The word "exhaustively" is step 4, and it is the step that gets skipped. A guard is a promise
+about the future. The present is already broken in N other places, and N is a number you
+print, not a feeling you have.
+
+On the HOW axis this is 3c: LAW 3 says never make the same mistake twice, and LAW 45 is what
+"never" costs once you accept that a session's memory is not a mechanism. It ranks below
+LAW 3 and above LAW 4, and it never suspends LAW 1 — while something is on fire you fix the
+instance; the class is closed after, and it is still open until it is closed.
+
+You are breaking it when: you fix the one file and move on; when the guard lives only in the
+script you were already editing; when the closure is a sentence saying you will not do it
+again; when you write the guard and never count the existing instances; when the only proof
+is the guard refusing your one bad case, with no case it must permit.

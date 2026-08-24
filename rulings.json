@@ -1,0 +1,41 @@
+{
+  "_what": "Standing founder rulings. Durable: no time window, injected into EVERY session at SessionStart by friction-relay.py, enforced where mechanical by rule-guard.py. A ruling leaves this file only when the founder reverses it.",
+  "_why": "2026-08-24: the founder had to say 'for the last time, we are not going back to fly' because the ruling lived in one session's memory and a 6-hour complaint window. LAW 44: a repeated instruction means the protocol is missing. This file is the protocol.",
+  "rulings": [
+    {
+      "id": "R1-no-fly-revival",
+      "date": "2026-08-24",
+      "verbatim": "for the last time, we are not going back to fly",
+      "meaning": "Never pay Fly invoices, never revive suspended Fly apps, never deploy or scale on Fly. Teardown and read-only commands are fine. The exit path is crew#78 (k8s) / crew#38 (drill the exit).",
+      "enforced_by": "rule-guard.py rule_no_fly_revival"
+    },
+    {
+      "id": "R2-say-once-all-ack",
+      "date": "2026-08-24",
+      "verbatim": "if i say something, all agents need to get it and ack — all agents in estate, in any session. they need durable memory. no more things getting lost.",
+      "meaning": "A founder instruction said to ANY session binds ALL sessions. When you receive a ruling relayed from another session, act on it without making him repeat it. New standing rulings are added to this file the moment they are given.",
+      "enforced_by": "friction-relay.py (injection); this file (durability)"
+    },
+    {
+      "id": "R3-strict-bar",
+      "date": "2026-08-24",
+      "verbatim": "you need to be strict — if its not raising the bar, we dont want it — try to raise the bar or ill terminate the whole crew",
+      "meaning": "Every review grades KEEP / REWORK / NOT-RAISING-THE-BAR. Recommending removal of existing work is an expected outcome. Applies to your own work first.",
+      "enforced_by": "review protocol crew#105"
+    },
+    {
+      "id": "R5-founder-out-of-the-loop",
+      "date": "2026-08-24",
+      "verbatim": "i need to be out of the loop and things work reliably and get done — i dont need all this friction",
+      "meaning": "Nothing waits on the founder except money, identity, or an irreversible call. No approval dialogs between agents (crossSessionInbound=accept), no 'shall I' questions, no menus. If a mechanism makes him click, the mechanism is the defect.",
+      "enforced_by": "settings.json crossSessionInbound; LAW 5 / LAW 20 / LAW 27"
+    },
+    {
+      "id": "R4-investor-tomorrow",
+      "date": "2026-08-23",
+      "verbatim": "we need to think as if an investor is going to buy the platform tomorrow",
+      "meaning": "Production-ready is the only standard: no human-at-a-laptop assumptions, no half-wired instruments, everything demonstrable. Codified as LAW 41.",
+      "enforced_by": "LAW 41"
+    }
+  ]
+}
