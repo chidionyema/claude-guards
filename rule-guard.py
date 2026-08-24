@@ -909,11 +909,95 @@ def rule_no_fly_revival(cmd: str) -> str | None:
     return None
 
 
+#: A settings store printed WHOLESALE, when the same tool can print names only. Each entry is
+#: (matcher, what it dumps, the flag that answers the same question without the values).
+_VALUE_DUMP_ESCAPE = "value-dump-intended"
+
+_VALUE_DUMPS = (
+    # The 2026-08-24 incident that named this class: `docker compose config` expands env_file
+    # inline, so one command wrote every live credential into a transcript. 1,314 files carried
+    # 12,688 occurrences before it was found.
+    (re.compile(r"\bdocker\s+compose\b(?![^\n;&|]*(?:--quiet|\s-q\b|--services|--images"
+                r"|--volumes|--profiles|--hash))[^\n;&|]*\bconfig\b"),
+     "docker compose config expands every env_file value inline",
+     "docker compose config --quiet (it validates and prints nothing)"),
+    # Bare `docker inspect` prints .Config.Env, which is the container's whole environment.
+    (re.compile(r"\bdocker\s+(?:container\s+)?inspect\b(?![^\n;&|]*(?:--format|\s-f\b))"),
+     "bare docker inspect prints .Config.Env",
+     "docker inspect --format '{{.State.Running}}' (name the field you want)"),
+    # `gh api .../actions/variables` returns name AND value for every repo variable. It is how
+    # a Stripe publishable key reached a transcript on 2026-08-24 -- publishable, so nothing had
+    # to be rotated, but the next store this command opens will not be publishable.
+    (re.compile(r"\bgh\s+api\b[^\n;&|]*actions/(?:variables|secrets)\b"),
+     "gh api actions/variables returns every variable's value",
+     "add --jq '.variables[].name' (this rule passes when the command says .name and never "
+     ".value)"),
+    (re.compile(r"\bgh\s+variable\s+list\b(?![^\n;&|]*--json\s)"),
+     "gh variable list prints values in the second column",
+     "gh variable list --json name"),
+    (re.compile(r"\bkubectl\s+get\s+secrets?\b[^\n;&|]*-o(?:utput)?[= ]\s*(?:yaml|json)"),
+     "kubectl get secret -o yaml prints the base64 of every key",
+     "kubectl describe secret NAME (it prints key names and byte counts)"),
+    (re.compile(r"(?:^|[;&|]\s*)printenv\s*(?:$|[|;&\n])"),
+     "printenv with no argument prints the whole environment",
+     "printenv NAME, or test the value without printing it"),
+    (re.compile(r"(?:^|[;&|]\s*)env\s*(?:$|\|)"),
+     "env with no argument prints the whole environment",
+     "printenv NAME, or test the value without printing it"),
+)
+
+
+def rule_secret_store_dump(cmd: str) -> str | None:
+    """LAW 21: naming a secret is fine, printing it is not -- and the class is wider than secrets.
+
+    The class, stated without naming any one command: a tool that holds a store of settings
+    prints the VALUES by default, and the same tool will print only the NAMES if asked. An agent
+    reaching for the default is not choosing to publish; it is answering "what is configured
+    here?" and getting the values as a side effect it cannot take back, because the transcript
+    is written before it reads the output.
+
+    Two instances paid for this. `docker compose config` on 2026-08-24 put live credentials into
+    1,314 files, 12,688 occurrences. `gh api .../actions/variables` the same day put a Stripe
+    key into a transcript; that one was pk_live_, which is public by design and needed no
+    rotation, which is exactly why it is the useful instance -- the mistake was free once.
+
+    A `gh api` that selects `.name` and never mentions `.value` is the correct form and passes."""
+    if _VALUE_DUMP_ESCAPE in cmd:
+        return None
+    # LAW 38: a guard that refuses correct work is an outage, and the sweep that proved this rule
+    # found two shapes it would have refused wrongly. A backslash continuation puts `--format` on
+    # the NEXT line (crew/ARCHITECTURE.md:56), so join those lines before matching.
+    cmd = re.sub(r"\\\n\s*", " ", cmd)
+    for matcher, dumps, instead in _VALUE_DUMPS:
+        m = matcher.search(cmd)
+        if not m:
+            continue
+        # deploy/rehearse_cluster.sh:619 runs `docker inspect "$srv" >/dev/null 2>&1` purely to
+        # ask "does this container exist?". Nothing is printed, so nothing can be read again,
+        # which is the entire thing LAW 21 protects.
+        tail = cmd[m.end():m.end() + 60]
+        if re.match(r"[^\n;&|]*>\s*/dev/null", tail):
+            continue
+        # The whole point is that these tools CAN answer without values. A jq/format expression
+        # that asks for names and never asks for values is that answer, so let it through.
+        if ".name" in cmd and ".value" not in cmd:
+            continue
+        return ("BLOCKED by rule-guard: this prints a settings store's VALUES.\n"
+                f"  {dumps}.\n"
+                f"  Ask for names instead: {instead}\n"
+                "LAW 21: a secret value never appears anywhere it can be read again -- not a "
+                "transcript, not a log line, not a commit. Naming a secret is fine; printing "
+                "it is not."
+                + _escape(_VALUE_DUMP_ESCAPE))
+    return None
+
+
 RULES = (rule_add_all, rule_runtime_state, rule_no_verify, rule_index_lock, rule_two_dot_diff,
          rule_pr_size, rule_commit_in_shared_checkout, rule_merge_red_pr,
          rule_ci_autoscale, rule_clone_makes_a_standby,
          rule_restart_kills_a_live_build, rule_shared_stash,
-         rule_force_push, rule_no_fly_revival, rule_direct_push_main)
+         rule_force_push, rule_no_fly_revival, rule_direct_push_main,
+         rule_secret_store_dump)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
@@ -1040,6 +1124,45 @@ def selftest() -> int:
         ("flyctl logs -a prospector-engine", None),
         ("flyctl apps destroy prospector-engine --yes", None),
         ("flyctl scale count 0 -a x  # fly-revival-intended", None),
+
+        # rule_secret_store_dump. Every instance is proved BOTH ways in the same run (LAW 45
+        # step 3): the dumping form refuses, and the names-only form of the SAME tool passes.
+        # A guard only ever seen refusing has never been shown to permit.
+        ("docker compose -f deploy/compose/docker-compose.yml config",
+         "rule_secret_store_dump"),
+        ("docker compose config --quiet", None),
+        ("docker compose config -q", None),
+        ("docker compose config --services", None),
+        ("docker compose up -d", None),
+        ("docker inspect opsconsole-diag2", "rule_secret_store_dump"),
+        ("docker inspect --format '{{.State.Running}}' opsA", None),
+        ("docker container inspect x", "rule_secret_store_dump"),
+        ("docker inspect x  # value-dump-intended", None),
+        ("gh api repos/chidionyema/prospector/actions/variables",
+         "rule_secret_store_dump"),
+        ("gh api repos/chidionyema/prospector/actions/variables --jq '.variables[].name'",
+         None),
+        ("gh api repos/chidionyema/prospector/actions/variables --jq '.variables[].value'",
+         "rule_secret_store_dump"),
+        ("gh api repos/chidionyema/prospector/actions/runners", None),
+        ("gh variable list", "rule_secret_store_dump"),
+        ("gh variable list --json name", None),
+        ("gh secret list", None),
+        ("kubectl get secret prospector-engine-env -o yaml", "rule_secret_store_dump"),
+        ("kubectl get secret prospector-engine-env -o json", "rule_secret_store_dump"),
+        ("kubectl describe secret prospector-engine-env", None),
+        ("kubectl get secrets", None),
+        ("printenv", "rule_secret_store_dump"),
+        ("printenv | grep PROSPECTOR", "rule_secret_store_dump"),
+        ("printenv PROSPECTOR_STORE_DIR", None),
+        ("env", "rule_secret_store_dump"),
+        ("env | sort", "rule_secret_store_dump"),
+        ("env PROSPECTOR_STORE_DIR=/data/store python3 run.py", None),
+        ("git diff --stat  # nothing to do with env", None),
+        # The two shapes the LAW 45 sweep found that this rule would have refused WRONGLY.
+        # Both are real lines in the estate; both are correct work; both must pass.
+        ("docker inspect \"$srv\" >/dev/null 2>&1 || fail 'no server'", None),
+        ("docker inspect prospector-store-web \\\n    --format '{{.Id}}'", None),
     ]
     bad = 0
     for cmd, want in cases:
