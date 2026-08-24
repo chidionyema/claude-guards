@@ -62,6 +62,23 @@ refuse := [
 	"flyctl scale count 2 -a prospector-store-web", # rule_no_fly_revival
 	"flyctl secrets set TOKEN=x -a tie-api", # rule_no_fly_revival
 	"flyctl launch --name new-app", # rule_no_fly_revival
+	# Founder ruling R14, 2026-08-24: paid provisioning, one case per provider.
+	"hcloud server create --type cx22 --name k3s-1", # paid_hetzner
+	"hcloud volume create --size 10 --name data", # paid_hetzner
+	"doctl kubernetes cluster create prod --region lon1", # paid_digitalocean
+	"doctl compute droplet create web-1 --size s-1vcpu-1gb", # paid_digitalocean
+	"aws eks create-cluster --name prod", # paid_aws
+	"aws ec2 run-instances --image-id ami-0abc --count 1", # paid_aws
+	"gcloud container clusters create prod --zone europe-west2-a", # paid_gcp
+	"gcloud compute instances create node-1 --machine-type e2-medium", # paid_gcp
+	"az aks create --name prod -g rg-prod", # paid_azure
+	"az vm create --name node-1 -g rg-prod --image Ubuntu2204", # paid_azure
+	"linode-cli linodes create --type g6-standard-1", # paid_linode
+	"vultr-cli instance create --region lhr", # paid_vultr
+	"scw instance server create type=DEV1-S", # paid_scaleway
+	"terraform apply -auto-approve", # paid_terraform_apply
+	"tofu apply", # paid_terraform_apply
+	"pulumi up --yes", # paid_pulumi_up
 ]
 
 # Commands that must go through. A guard that refuses correct work is an
@@ -117,6 +134,24 @@ permit := [
 	"gh api --method PUT /repos/o/r/pulls/9/merge -f merge_method=squash", # allowed: not a command rule moved here
 	"gh pr list --state open", # allowed
 	"gh pr create --base main", # allowed
+	# R14's other half. The substrate itself, and every read, plan and teardown.
+	# Refusing any of these would leave the estate no way to run a cluster at all.
+	"k3d cluster create prospector-rehearsal --agents 0 --wait", # allowed: the EUR 0 substrate
+	"kind create cluster --name prospector", # allowed: the EUR 0 substrate
+	"minikube start --driver=docker", # allowed: the EUR 0 substrate
+	"kubectl create namespace prospector", # allowed: costs nothing
+	"hcloud server list", # allowed: reading costs nothing
+	"hcloud server delete 12345", # allowed: destroying saves money
+	"doctl kubernetes cluster list", # allowed: reading costs nothing
+	"aws ec2 describe-instances", # allowed: reading costs nothing
+	"gcloud container clusters list", # allowed: reading costs nothing
+	"az aks list", # allowed: reading costs nothing
+	"terraform plan -out=tfplan", # allowed: a plan provisions nothing
+	"terraform destroy -auto-approve", # allowed: destroying saves money
+	"terraform init", # allowed
+	"pulumi preview", # allowed: a preview provisions nothing
+	"oci compute instance launch --shape VM.Standard.A1.Flex", # allowed: R14 names Oracle Always Free
+	"hcloud server create --type cx22  # founder-approved-spend", # allowed: the escape hatch works
 ]
 
 test_every_refused_command_is_refused if {
