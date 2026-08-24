@@ -53,3 +53,12 @@ Every wired job keeps running unchanged; you are simply back to the old monitori
   second layer, and a watchdog for the monitor is on the list.
 - A wired job that gets slower than its schedule window will false-alarm; the fix is
   raising that check's grace time, not ignoring the alert.
+
+## Alerts (added 2026-08-24)
+
+- When any of the 35 checks goes down or recovers, a Telegram message arrives on
+  your phone. You do nothing to fetch it.
+- Turn alerts off: `docker exec estate-healthchecks python manage.py shell -c "from hc.api.models import Channel; Channel.objects.filter(kind='apprise').delete()"`
+- Turn back on: rerun the channel setup (recorded in this repo's history); the
+  container recreate command is `estate/healthchecks-run.sh`.
+- The bot token is read from ~/.config/estate/estate.env and never committed.

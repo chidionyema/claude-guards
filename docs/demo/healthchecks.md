@@ -63,3 +63,20 @@ run yet; each turns green on its first ping.
 
 Every one of these jobs also now runs at background priority (`Nice=10`,
 `ProcessType=Background`), so the watch never slows the machine you are typing on.
+
+## Alerts reach the phone, 2026-08-24
+
+Every check now alerts Telegram when it flips, through Apprise (bundled in the
+healthchecks container, enabled 2026-08-24). Wired and proven with a real flip:
+
+```
+$ docker exec estate-healthchecks python manage.py shell -c '...ch.notify(flip)...'
+flip: failover-watch down -> up at 2026-08-24 01:55:29
+test notify: SENT no error
+
+notification: 2026-08-24 01:56:13 check: failover-watch channel kind: apprise status sent: up error: ''
+```
+
+The channel is one Apprise URL (`tgram://`), so swapping Telegram for any other
+service is a config edit, not code (LAW 34). The old direct-to-Telegram scripts
+still run unchanged as fallback.
