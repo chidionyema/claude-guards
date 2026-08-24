@@ -3,7 +3,9 @@
  "not_drills": {
   "run.py": "the runner itself",
   "audit.py": "the dependency audit, which answers whether a recovery path exists at all rather than whether one works",
-  "bootstrap.sh": "the exit itself, not a test of it. rebuild/drill.sh is the drill and it runs this script against a throwaway home."
+  "bootstrap.sh": "the exit itself, not a test of it. rebuild/drill.sh is the drill and it runs this script against a throwaway home.",
+  "coverage.py": "the join between the asset list and this register. It asks which drill covers each asset, so it reports on drills rather than being one.",
+  "test_coverage.py": "the paired control for coverage.py: 13 cases, 5 that must be allowed and 8 refused. It grades that tool and recovers nothing."
  },
  "drills": [
   {

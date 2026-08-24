@@ -301,6 +301,28 @@ def main():
                  "A dependency in the tree is neither drilled nor dismissed: "
                  + " ".join(audit.stdout.split())[-400:])
 
+        # audit.py asks whether a dependency has a recovery path. coverage.py
+        # asks it of every asset the estate owns, not only the dependencies, and
+        # it asks three times: restart, rebuild, replace. Asked as one question,
+        # ai.aiden.watch read as covered because recovery-posture restarts it --
+        # and it is one of the jobs jobs.json cannot re-render, so it does not
+        # come back on a new machine at all.
+        #
+        # --gate, so a hole in the estate reaches the board as a number instead
+        # of turning this run red every night for weeks.
+        cov = subprocess.run(
+            [sys.executable, os.path.join(HERE, "coverage.py"), "--gate"],
+            capture_output=True, text=True)
+        print(cov.stdout.rstrip())
+        summary = next((l for l in cov.stdout.splitlines()
+                        if l.startswith("SUMMARY:")), "").replace("SUMMARY:", "").strip()
+        if cov.returncode != 0:
+            post("coverage-key-broken",
+                 "The drill coverage answer key is broken, so its numbers cannot be "
+                 "believed: " + " ".join(cov.stdout.split())[-400:])
+        elif summary:
+            post("coverage", "Drill coverage of the whole estate: " + summary + ".")
+
         # An unregistered drill is worse news than a failing one: a failure is
         # loud and this is silent. It goes to the board on its own line so it is
         # not buried under a green verdict.
