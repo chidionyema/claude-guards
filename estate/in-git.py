@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Everything load-bearing is in git, or this exits 1 (LAW 24).
 
-Five classes, because answering the question for one of them and calling it
+Six classes, because answering the question for one of them and calling it
 closed is how the last four holes survived:
 
   runners   every program a launchd job executes
@@ -44,6 +44,28 @@ def sh(args, cwd=None, t=60):
         return r.returncode, r.stdout.strip(), r.stderr.strip()
     except Exception as e:
         return 127, "", f"{type(e).__name__}: {e}"
+
+
+_PORCELAIN = re.compile(r"^\s*([A-Z?!ARCMDU ]{1,2})\s+(.*)$")
+
+
+def porcelain(line):
+    """Split one `git status --porcelain` line into (code, path).
+
+    Never slice a porcelain line by column. `sh()` returns `stdout.strip()`,
+    which eats the leading space of the FIRST line, so ' M gateway/x' arrives
+    as 'M gateway/x' and a fixed `l[3:]` yields 'ateway/x'. That silently
+    defeated always_dirty for hermes-v2's gateway/restart_loop.json on
+    2026-08-24: the file was listed as noisy and still reported as a hole,
+    every hour, because the path it was compared against was off by one.
+    Swept 2026-08-24: four sites in ~/.claude/scripts column-slice porcelain;
+    the other three (tracked.py:245, guard-autocommit.py:85/211,
+    session-recorder.py:143) read raw unstripped stdout and are correct.
+    """
+    m = _PORCELAIN.match(line)
+    if not m:
+        return "", line.strip()
+    return m.group(1).strip(), m.group(2).strip()
 
 
 def _is_system(p):
@@ -134,17 +156,32 @@ def check_repos(d, _mm):
         # Untracked files are somebody's work in flight. Modified TRACKED files are
         # an edit to something the estate already depends on, which is the hole.
         noisy = tuple(d.get("always_dirty", {}).get("paths", []))
-        mod = [l for l in dirty if not l.startswith("??")
-               and not l[3:].strip().startswith(noisy)]
+        mod = []
+        for l in dirty:
+            code, path = porcelain(l)
+            if code == "??" or path.startswith(noisy):
+                continue
+            mod.append(l)
         sh(["git", "-C", p, "fetch", "-q", "origin"], t=90)
-        rc, ab, _ = sh(["git", "-C", p, "rev-list", "--left-right", "--count", "HEAD...@{u}"])
-        ahead = ab.split()[0] if rc == 0 and ab else "?"
+        # LAW 24 asks whether anything off this machine holds the commit, so
+        # the measure is every remote ref, not the one branch @{u} names.
+        # Grading against @{u} reported ".claude/scripts: 27 commit(s) never
+        # pushed" on 2026-08-24 while 26 of them sat on a rescue branch that
+        # had been pushed; and it reports a hole for a detached HEAD whose
+        # commits are all on origin. Both are the same defect: a proxy for
+        # "no remote has this" that is only true when HEAD tracks a branch.
+        rcu, unre, _ = sh(["git", "-C", p, "rev-list", "--count", "HEAD",
+                           "--not", "--remotes"])
+        unreachable = unre.strip() if rcu == 0 and unre.strip() else "?"
+        nrem = sh(["git", "-C", p, "remote"])[1].strip()
         if mod:
             holes.append(f"{e['path']}: {len(mod)} tracked file(s) edited and not committed")
-        if rc != 0:
-            holes.append(f"{e['path']}: branch has no upstream, nothing off this machine holds it")
-        elif ahead not in ("0", "?"):
-            holes.append(f"{e['path']}: {ahead} commit(s) never pushed")
+        if not nrem:
+            holes.append(f"{e['path']}: no remote configured, nothing off this machine holds it")
+        elif unreachable == "?":
+            holes.append(f"{e['path']}: could not count commits against its remotes, so it is unproven")
+        elif unreachable != "0":
+            holes.append(f"{e['path']}: {unreachable} commit(s) exist only on this disk")
         # A repository holding transcripts and this machine's paths can be
         # flipped to public in one click, and nothing on this machine notices.
         # claude-guards was found public on 2026-08-23 with 48 files carrying
@@ -164,7 +201,7 @@ def check_repos(d, _mm):
                 elif out.strip() != "true":
                     holes.append(f"{m.group(1)}: PUBLIC. It holds "
                                  f"{e['why']} and anyone can read it")
-        if not mod and rc == 0 and ahead == "0":
+        if not mod and nrem and unreachable == "0":
             ok += 1
     return ok, holes
 
@@ -256,10 +293,29 @@ def check_escrow(d, _mm):
     for slug, r in sorted(last.items()):
         state = r.get("restore") or r.get("status") or "unknown"
         age_h = (now - r.get("ts", 0)) / 3600.0
+        # Age is a proxy. The question is whether the offsite copy holds what
+        # this disk holds, and the receipt already records the tip it bundled.
+        # The pusher writes a receipt only when it pushes, so a repo nobody has
+        # committed to in 26h ages past the threshold forever while its copy is
+        # complete. Measured 2026-08-24: of three slugs the age rule called
+        # stale, Documents-code-popdd-py and Documents-code-sentinel-loop had
+        # tip == local HEAD (false alarms) and .claude did not (a real hole).
+        # A guard that cannot tell those apart is LAW 28's cry-wolf.
+        tip = str(r.get("tip") or "")
+        repo = os.path.expanduser(str(r.get("repo") or ""))
+        local = ""
+        if tip and repo and os.path.isdir(os.path.join(repo, ".git")):
+            local = sh(["git", "-C", repo, "rev-parse", "HEAD"])[1]
         if state not in cfg["ok_states"]:
             holes.append("%s: last offsite copy is %s" % (slug, state))
+        elif local and tip == local:
+            ok += 1          # the copy is at this disk's commit; age is moot
+        elif local and tip != local:
+            holes.append("%s: offsite copy is at %s, this disk is at %s" %
+                         (slug, tip[:12], local[:12]))
         elif age_h > cfg["max_age_hours"]:
-            holes.append("%s: offsite copy is %.0fh old, older than %sh" %
+            holes.append("%s: offsite copy is %.0fh old, older than %sh "
+                         "(no tip recorded, so age is all this can grade)" %
                          (slug, age_h, cfg["max_age_hours"]))
         else:
             ok += 1
@@ -322,6 +378,44 @@ def deliver(holes, lines):
             f.write(str(time.time()))
 
 
+def check_parked(_d, _mm):
+    """Scheduled jobs that run code out of a checkout standing on some branch.
+
+    The sixth class, added 2026-08-24. The other five ask whether the work is
+    committed and whether a copy exists off this disk. Both can be true while
+    every scheduled job on the machine executes a branch nobody merged, because
+    a shared checkout is a mutable pointer and launchd holds no opinion about
+    which commit it is standing on.
+
+    What it cost: ~/dev/code/crew was left on feat/mature-platform-gate, the
+    hourly snapshot refused to publish to a stranded branch, and STATE.md went
+    3.9 hours stale on main while launchctl reported exit 0.
+
+    The measurement lives in launchd_drift.py, which owns this check and proves
+    it both ways in its own selftest. This class only counts it, so the alert
+    the founder already reads carries it.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import launchd_drift as ld
+    ok, holes = 0, []
+    for label in ld.loaded_labels():
+        paths = ld.loaded_paths(label)
+        if paths is None:
+            continue
+        hit = ld.parked(label, [x for x in paths if os.path.exists(x)])
+        if hit is None:
+            ok += 1
+            continue
+        repo, on, want = hit
+        if not want:
+            holes.append("%s: runs code from %s on '%s', which has no published "
+                         "branch to compare against" % (label, repo, on))
+        else:
+            holes.append("%s: runs code from %s, checked out on '%s', not '%s'"
+                         % (label, repo, on, want))
+    return ok, holes
+
+
 def check_repo_only(d, mm):
     """The part of the declaration a CI runner can honestly answer.
 
@@ -376,7 +470,10 @@ def check_repo_only(d, mm):
 
 CLASSES = [("runners", check_runners), ("declared", check_declared),
            ("repos", check_repos), ("mirrors", check_mirrors),
-           ("secrets", check_secrets), ("offsite", check_escrow)]
+           ("secrets", check_secrets), ("offsite", check_escrow),
+           #: last, because it shells out to launchctl once per loaded job and
+           #: is the slowest of the six.
+           ("parked", check_parked)]
 
 
 def main():
