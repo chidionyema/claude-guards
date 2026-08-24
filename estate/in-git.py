@@ -137,14 +137,25 @@ def check_repos(d, _mm):
         mod = [l for l in dirty if not l.startswith("??")
                and not l[3:].strip().startswith(noisy)]
         sh(["git", "-C", p, "fetch", "-q", "origin"], t=90)
-        rc, ab, _ = sh(["git", "-C", p, "rev-list", "--left-right", "--count", "HEAD...@{u}"])
-        ahead = ab.split()[0] if rc == 0 and ab else "?"
+        # LAW 24 asks whether anything off this machine holds the commit, so
+        # the measure is every remote ref, not the one branch @{u} names.
+        # Grading against @{u} reported ".claude/scripts: 27 commit(s) never
+        # pushed" on 2026-08-24 while 26 of them sat on a rescue branch that
+        # had been pushed; and it reports a hole for a detached HEAD whose
+        # commits are all on origin. Both are the same defect: a proxy for
+        # "no remote has this" that is only true when HEAD tracks a branch.
+        rcu, unre, _ = sh(["git", "-C", p, "rev-list", "--count", "HEAD",
+                           "--not", "--remotes"])
+        unreachable = unre.strip() if rcu == 0 and unre.strip() else "?"
+        nrem = sh(["git", "-C", p, "remote"])[1].strip()
         if mod:
             holes.append(f"{e['path']}: {len(mod)} tracked file(s) edited and not committed")
-        if rc != 0:
-            holes.append(f"{e['path']}: branch has no upstream, nothing off this machine holds it")
-        elif ahead not in ("0", "?"):
-            holes.append(f"{e['path']}: {ahead} commit(s) never pushed")
+        if not nrem:
+            holes.append(f"{e['path']}: no remote configured, nothing off this machine holds it")
+        elif unreachable == "?":
+            holes.append(f"{e['path']}: could not count commits against its remotes, so it is unproven")
+        elif unreachable != "0":
+            holes.append(f"{e['path']}: {unreachable} commit(s) exist only on this disk")
         # A repository holding transcripts and this machine's paths can be
         # flipped to public in one click, and nothing on this machine notices.
         # claude-guards was found public on 2026-08-23 with 48 files carrying
@@ -164,7 +175,7 @@ def check_repos(d, _mm):
                 elif out.strip() != "true":
                     holes.append(f"{m.group(1)}: PUBLIC. It holds "
                                  f"{e['why']} and anyone can read it")
-        if not mod and rc == 0 and ahead == "0":
+        if not mod and nrem and unreachable == "0":
             ok += 1
     return ok, holes
 
