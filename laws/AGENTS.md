@@ -51,7 +51,7 @@ through a symlink into its own directory — `~/.claude/AGENTS.md`, `~/.codex/AG
 belong to the estate, not to whichever vendor's CLI is open. Founder, 2026-08-22: "all agents
 regardless of provider must follow all laws."
 
-Forty-five rules, in priority order, numbered to 45. LAW 24 stood empty until 2026-08-23 and now
+Forty-six rules, in priority order, numbered to 46. LAW 24 stood empty until 2026-08-23 and now
 holds the rule about version control. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
@@ -71,7 +71,7 @@ one it hangs off and inherits its rank.
 **Effective order, WHAT to build.** A separate axis. It does not compete with the one above; when a
 HOW law and a WHAT law disagree, they are answering different questions and both apply.
 
-    19a(34) · 19 · 19b(43) · 19c(40) · 19d(41) · 20 · 20b(27) · 20c(31) · 20d(32) · 20e(36)
+    19a(34) · 19 · 19b(43) · 19c(40) · 19d(41) · 19e(46) · 20 · 20b(27) · 20c(31) · 20d(32) · 20e(36)
     20f(37) · 20g(38) · 21
 
 **Effective order, how the estate IMPROVES.** A third axis, one law long, and it governs the other
@@ -136,6 +136,7 @@ keep.
 | 43 | Never reinvent the wheel and do a worse job | before the first line of anything a mature tool already does; the research is online, autonomous, and on the record |
 | 44 | A law without a protocol is a wish | every law, and the moment the founder repeats any instruction |
 | 45 | Your mistake ends as a guard no session can walk past, proved over every instance | the moment any mistake is found; the mistake is not closed until the sweep is clean |
+| 46 | No hardcoding: a file never names where the checkout, the home directory or the machine lives | before any path, host, port, account or credential is typed as a literal |
 
 **The full text of every law lives in `~/AGENTS-FULL.md`, and it is not injected.** Each law's
 prose — the founder's words, the incident that paid for it, the axis re-ranking paragraphs, and

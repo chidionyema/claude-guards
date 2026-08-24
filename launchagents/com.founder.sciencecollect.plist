@@ -25,8 +25,33 @@
 	<string>/Users/chidionyema/.claude/state/logs/science-collect.err.log</string>
 	<key>StandardOutPath</key>
 	<string>/Users/chidionyema/.claude/state/logs/science-collect.out.log</string>
-	<key>StartInterval</key>
-	<integer>3600</integer>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict>
+			<key>Hour</key>
+			<integer>1</integer>
+			<key>Minute</key>
+			<integer>37</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>7</integer>
+			<key>Minute</key>
+			<integer>37</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>13</integer>
+			<key>Minute</key>
+			<integer>37</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>19</integer>
+			<key>Minute</key>
+			<integer>37</integer>
+		</dict>
+	</array>
 	<key>WorkingDirectory</key>
 	<string>/Users/chidionyema/dev/code/crew</string>
 </dict>

@@ -1,18 +1,49 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.plist">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>Label</key><string>ai.estate.agent-guard-lint</string>
+	<key>Label</key>
+	<string>ai.estate.agent-guard-lint</string>
+	<key>Nice</key>
+	<integer>15</integer>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/usr/local/bin/python3</string>
 		<string>/Users/chidionyema/dev/code/agent-guard/bin/launchd-lint</string>
 		<string>--broadcast-on-red</string>
 	</array>
-	<key>StartInterval</key><integer>21600</integer>
-	<key>RunAtLoad</key><false/>
-	<key>Nice</key><integer>15</integer>
-	<key>StandardOutPath</key><string>/Users/chidionyema/dev/code/agent-guard/logs/lint.log</string>
-	<key>StandardErrorPath</key><string>/Users/chidionyema/dev/code/agent-guard/logs/lint.log</string>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>StandardErrorPath</key>
+	<string>/Users/chidionyema/dev/code/agent-guard/logs/lint.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/chidionyema/dev/code/agent-guard/logs/lint.log</string>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict>
+			<key>Hour</key>
+			<integer>5</integer>
+			<key>Minute</key>
+			<integer>33</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>11</integer>
+			<key>Minute</key>
+			<integer>33</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>17</integer>
+			<key>Minute</key>
+			<integer>33</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>23</integer>
+			<key>Minute</key>
+			<integer>33</integer>
+		</dict>
+	</array>
 </dict>
 </plist>

@@ -1809,3 +1809,44 @@ You are breaking it when: you fix the one file and move on; when the guard lives
 script you were already editing; when the closure is a sentence saying you will not do it
 again; when you write the guard and never count the existing instances; when the only proof
 is the guard refusing your one bad case, with no case it must permit.
+
+## LAW 46 — No hardcoding: a file never names where the checkout, the home directory or the machine lives
+
+Founder, 2026-08-24, verbatim: "no hardcoding", then "law".
+
+The incident that paid for it, same day. 17 of the 19 scripts in idp/bin began with
+`IDP="$HOME/dev/code/idp"`. Every one of them worked on this laptop and none of them would
+work anywhere else: not in CI, not in a worktree, not on the buyer's engineer's machine, not
+on the k8s substrate the estate is moving to. The launchd plist named the same path. The
+rule-guard itself kept `REPO="/Users/chidionyema/Documents/code/prospector"` as a fallback,
+and on the same day that fallback made it read PR #6 of the wrong repository and refuse a
+green merge. A hardcoded path is a claim that the world has exactly one shape, and it is
+wrong the first time anyone else runs the file.
+
+The rule. A committed file does not contain a literal that only holds on one machine: a
+checkout path, a home directory, a username in a path, a machine-specific host or port, an
+account id or a credential. Scripts find their own repository from their own location
+(`IDP="$(cd "$(dirname "$0")/.." && pwd)"`), and anything that can differ between machines
+is an environment variable with a default derived from that, or a rendered template
+(`launchd/*.plist.tmpl` through `bin/idp-install-launchd`). Test fixtures may hold a bad
+example on purpose, and are excluded from the guard by path, never by comment.
+
+The guard, per LAW 45. `bin/idp-ci` section 1b scans every tracked file under bin, llm,
+observability, mcp and launchd for `dev/code/<repo>`, `/Users/<name>` and `/home/<name>`,
+ignoring comment lines, and proves itself both ways on `tests/fixtures/hardcoded-path.bad.sh`
+and `hardcoded-path.good.sh` in the same run. It runs in idp CI on every pull request, so
+no session can merge past it. The sweep on 2026-08-24 fixed all 17 instances in idp and
+counted 0 remaining. Residual, stated: the guard is idp-wide, not estate-wide; the count of
+instances in the other repositories under ~/dev/code is printed by the LAW 45 sweep and
+each is closed when that repository gets the same guard in its CI.
+
+On the WHAT axis this is 19e: LAW 19 says portability outranks detection, and a hardcoded
+path is the most common way a file stops being portable. It ranks below LAW 19d because a
+buyer's engineer tripping over `/Users/chidionyema` in a script is exactly what LAW 41 is
+about, and above LAW 20 because seamless on one machine is not seamless.
+
+You are breaking it when: you type `$HOME/dev/code/` in a file that will be committed; when
+a plist, unit file or cron line names an absolute path to a script instead of being
+rendered from a template; when a "temporary" fallback path is a real path on this laptop;
+when the fixture that proves the guard is excluded by a comment rather than by its
+directory; when you fix the 17 files you touched and do not print the count for the rest.
