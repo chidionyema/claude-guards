@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Everything load-bearing is in git, or this exits 1 (LAW 24).
 
-Five classes, because answering the question for one of them and calling it
+Six classes, because answering the question for one of them and calling it
 closed is how the last four holes survived:
 
   runners   every program a launchd job executes
@@ -378,6 +378,44 @@ def deliver(holes, lines):
             f.write(str(time.time()))
 
 
+def check_parked(_d, _mm):
+    """Scheduled jobs that run code out of a checkout standing on some branch.
+
+    The sixth class, added 2026-08-24. The other five ask whether the work is
+    committed and whether a copy exists off this disk. Both can be true while
+    every scheduled job on the machine executes a branch nobody merged, because
+    a shared checkout is a mutable pointer and launchd holds no opinion about
+    which commit it is standing on.
+
+    What it cost: ~/dev/code/crew was left on feat/mature-platform-gate, the
+    hourly snapshot refused to publish to a stranded branch, and STATE.md went
+    3.9 hours stale on main while launchctl reported exit 0.
+
+    The measurement lives in launchd_drift.py, which owns this check and proves
+    it both ways in its own selftest. This class only counts it, so the alert
+    the founder already reads carries it.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import launchd_drift as ld
+    ok, holes = 0, []
+    for label in ld.loaded_labels():
+        paths = ld.loaded_paths(label)
+        if paths is None:
+            continue
+        hit = ld.parked(label, [x for x in paths if os.path.exists(x)])
+        if hit is None:
+            ok += 1
+            continue
+        repo, on, want = hit
+        if not want:
+            holes.append("%s: runs code from %s on '%s', which has no published "
+                         "branch to compare against" % (label, repo, on))
+        else:
+            holes.append("%s: runs code from %s, checked out on '%s', not '%s'"
+                         % (label, repo, on, want))
+    return ok, holes
+
+
 def check_repo_only(d, mm):
     """The part of the declaration a CI runner can honestly answer.
 
@@ -432,7 +470,10 @@ def check_repo_only(d, mm):
 
 CLASSES = [("runners", check_runners), ("declared", check_declared),
            ("repos", check_repos), ("mirrors", check_mirrors),
-           ("secrets", check_secrets), ("offsite", check_escrow)]
+           ("secrets", check_secrets), ("offsite", check_escrow),
+           #: last, because it shells out to launchctl once per loaded job and
+           #: is the slowest of the six.
+           ("parked", check_parked)]
 
 
 def main():
