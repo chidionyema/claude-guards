@@ -244,12 +244,22 @@ def sync():
 
     changed = [l[3:] for l in status.splitlines()]
     git("add", "--", *paths)
+    # TOCTOU: `state/` is written continuously by other scheduled jobs, so the
+    # drift `status` just saw can self-resolve (a file settles back to what
+    # HEAD already has) before `add` reaches it. Confirmed 2026-08-24: `status`
+    # found drift, `commit` then found nothing staged and failed with an empty
+    # stderr, because git's "nothing to commit" message is on stdout, which
+    # this function never read -- so the board alert said "could not commit: "
+    # with no reason. Nothing was actually broken; check before alerting.
+    if git("diff", "--cached", "--quiet").returncode == 0:
+        return 0  # nothing actually staged: the drift self-resolved
     msg = ("LAW 24: %d load-bearing file(s) changed outside git\n\n%s\n\n"
            "Committed by the scheduled guard, not by a person.\n"
            % (len(changed), "\n".join("  " + c for c in changed)))
     c = git("commit", "-m", msg)
     if c.returncode:
-        board("guard-broken", "tracked.py could not commit: " + c.stderr.strip()[:300])
+        reason = (c.stderr.strip() or c.stdout.strip())[:300]
+        board("guard-broken", "tracked.py could not commit: " + reason)
         return 1
     p = git("push", "origin", "HEAD")
     if p.returncode:
