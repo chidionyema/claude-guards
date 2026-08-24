@@ -243,6 +243,15 @@ def evidence(local_ref, shas):
         return None
     if any(EVIDENCE_OK.search(git("show", "-s", "--format=%B", c)) for c in shas):
         return None
+    # The push that CARRIES the evidence is the one push this gate must never
+    # refuse. `pr-evidence.py attach` commits the image under docs/evidence/pr-<n>/
+    # and pushes it, and only then edits the body to link it -- so on 2026-08-24 the
+    # gate refused attach itself, and the only command that satisfies the gate could
+    # not be run. A fence that refuses correct work is an outage (LAW 38).
+    if any(path.startswith("docs/evidence/")
+           for c in shas
+           for path in git("show", "--pretty=", "--name-only", c).splitlines()):
+        return None
     if not os.path.exists(PR_EVIDENCE):
         return None
     try:
