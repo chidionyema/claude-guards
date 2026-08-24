@@ -293,10 +293,29 @@ def check_escrow(d, _mm):
     for slug, r in sorted(last.items()):
         state = r.get("restore") or r.get("status") or "unknown"
         age_h = (now - r.get("ts", 0)) / 3600.0
+        # Age is a proxy. The question is whether the offsite copy holds what
+        # this disk holds, and the receipt already records the tip it bundled.
+        # The pusher writes a receipt only when it pushes, so a repo nobody has
+        # committed to in 26h ages past the threshold forever while its copy is
+        # complete. Measured 2026-08-24: of three slugs the age rule called
+        # stale, Documents-code-popdd-py and Documents-code-sentinel-loop had
+        # tip == local HEAD (false alarms) and .claude did not (a real hole).
+        # A guard that cannot tell those apart is LAW 28's cry-wolf.
+        tip = str(r.get("tip") or "")
+        repo = os.path.expanduser(str(r.get("repo") or ""))
+        local = ""
+        if tip and repo and os.path.isdir(os.path.join(repo, ".git")):
+            local = sh(["git", "-C", repo, "rev-parse", "HEAD"])[1]
         if state not in cfg["ok_states"]:
             holes.append("%s: last offsite copy is %s" % (slug, state))
+        elif local and tip == local:
+            ok += 1          # the copy is at this disk's commit; age is moot
+        elif local and tip != local:
+            holes.append("%s: offsite copy is at %s, this disk is at %s" %
+                         (slug, tip[:12], local[:12]))
         elif age_h > cfg["max_age_hours"]:
-            holes.append("%s: offsite copy is %.0fh old, older than %sh" %
+            holes.append("%s: offsite copy is %.0fh old, older than %sh "
+                         "(no tip recorded, so age is all this can grade)" %
                          (slug, age_h, cfg["max_age_hours"]))
         else:
             ok += 1
