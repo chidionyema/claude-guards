@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Find launchd jobs whose loaded definition points at a path that is gone.
+"""Find launchd jobs whose loaded definition points at code nobody published.
+
+Two classes, one symptom: the job reports exit 0 while running the wrong code.
+
+  GONE    the path in the loaded definition no longer exists.
+  PARKED  the path exists, but it sits in a git checkout standing on some
+          session's feature branch, so the job runs whatever that session
+          left behind.
 
 Why this exists. launchctl runs the definition it loaded at bootstrap, not the
 plist sitting on disk. A `git mv` of a script leaves a job whose plist is
@@ -13,9 +20,20 @@ downshift, the spend brake, reported exit 0 and had not run once. Against a
 measured $6,048 in seven days versus a $120/day cap, the money brake was off
 and every instrument said it was on.
 
+PARKED, measured 2026-08-24 on this machine: 10 of 10 scheduled jobs whose
+program lives in a shared checkout, 8 of them on a feature branch. The one
+that cost something was com.founder.estatesnapshot: I left ~/dev/code/crew on
+feat/mature-platform-gate, the hourly snapshot correctly refused to publish to
+a stranded branch, and STATE.md - the estate's single source of truth - went
+3.9 hours stale on main while every instrument read healthy.
+
+The fix for PARKED is a dedicated worktree pinned to the published branch, so
+the job owns its checkout and no human session can move it.
+
 Read-only. Prints what it finds and exits 1 when anything is stale, so it can
 gate a move or run on a schedule. The fix it prints is the whole fix.
 """
+import os
 import re
 import subprocess
 import sys
@@ -54,8 +72,113 @@ def loaded_paths(label):
     return sorted(set(PATH_RE.findall(out)))
 
 
+# Jobs whose whole purpose IS to inspect the live working checkout. Pinning
+# these to a published branch would make them grade a tree nobody edits, which
+# is a guard that refuses correct work (LAW 38). Every entry carries its reason.
+# Anything NOT listed here is graded. An unknown job is never silently exempt.
+LIVE_TREE_OK = {
+    "com.chidionyema.guard-selftest":
+        "runs every guard's selftest against the scripts as they are being edited",
+    "ai.estate.tracked-guard":
+        "grades uncommitted work in the live checkout; a pinned tree has none",
+}
+
+
+def repo_of(path):
+    """The git checkout a path sits in, or "" if it is not in one."""
+    d = os.path.dirname(path)
+    rc = subprocess.run(["git", "-C", d, "rev-parse", "--show-toplevel"],
+                        capture_output=True, text=True)
+    return rc.stdout.strip() if rc.returncode == 0 else ""
+
+
+def published_branch(repo):
+    """The branch this repo's work is supposed to reach, or "" if unknowable.
+
+    Returning "" is not a pass. A repo whose published branch cannot be read is
+    reported as unprovable, because a guard that loses its evidence reports
+    BLIND and never a verdict.
+    """
+    out = subprocess.run(["git", "-C", repo, "symbolic-ref", "-q",
+                          "refs/remotes/origin/HEAD"],
+                         capture_output=True, text=True).stdout.strip()
+    if out:
+        return out.rsplit("/", 1)[-1]
+    for cand in ("main", "master"):
+        rc = subprocess.run(["git", "-C", repo, "rev-parse", "--verify", "-q",
+                             "refs/remotes/origin/" + cand],
+                            capture_output=True, text=True)
+        if rc.returncode == 0:
+            return cand
+    return ""
+
+
+def parked(label, paths):
+    """(repo, on, want) for the first path this job runs out of a parked checkout."""
+    if label in LIVE_TREE_OK:
+        return None
+    for path in paths:
+        repo = repo_of(path)
+        if not repo:
+            continue
+        want = published_branch(repo)
+        on = subprocess.run(["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],
+                            capture_output=True, text=True).stdout.strip()
+        if not want:
+            return (repo, on or "?", "")
+        if on != want:
+            return (repo, on, want)
+    return None
+
+
+def selftest():
+    """Prove the PARKED check both ways in one run: it flags a parked checkout
+    AND it passes a pinned one. A guard only ever seen refusing has never been
+    shown to permit, and a guard that refuses correct work is an outage."""
+    import tempfile
+    fails = []
+    with tempfile.TemporaryDirectory() as tmp:
+        origin = os.path.join(tmp, "origin.git")
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", origin], check=True)
+        for name, branch, want_flag in (("pinned", "main", False),
+                                        ("parked", "feat/left-behind", True)):
+            repo = os.path.join(tmp, name)
+            subprocess.run(["git", "clone", "-q", origin, repo], check=True)
+            g = ["git", "-C", repo]
+            subprocess.run(g + ["config", "user.email", "t@t"], check=True)
+            subprocess.run(g + ["config", "user.name", "t"], check=True)
+            script = os.path.join(repo, "job.py")
+            if not os.path.exists(script):
+                # the second clone already has it from origin
+                open(script, "w").write("#!/usr/bin/env python3\n")
+                subprocess.run(g + ["add", "job.py"], check=True)
+                subprocess.run(g + ["commit", "-qm", "job"], check=True)
+                subprocess.run(g + ["push", "-q", "origin", "main"], check=True)
+            if branch != "main":
+                subprocess.run(g + ["checkout", "-qb", branch], check=True)
+            hit = parked("test.job", [script])
+            if bool(hit) != want_flag:
+                fails.append(f"{name} on '{branch}': expected "
+                             f"{'a flag' if want_flag else 'no flag'}, got {hit!r}")
+            elif want_flag:
+                _, on, wanted = hit
+                if (on, wanted) != (branch, "main"):
+                    fails.append(f"parked: reported on={on!r} want={wanted!r}")
+        # a listed job is exempt, and only a listed one
+        if parked("ai.estate.tracked-guard", [script]) is not None:
+            fails.append("allowlisted label was still graded")
+    if fails:
+        for f in fails:
+            print("SELFTEST FAIL:", f)
+        return 1
+    print("selftest OK: PARKED flags a checkout on 'feat/left-behind', passes one "
+          "on 'main', and exempts only the listed labels")
+    return 0
+
+
 def main():
     stale = []
+    drifted = []
     unreadable = []
     checked = 0
     for label in loaded_labels():
@@ -64,17 +187,21 @@ def main():
             unreadable.append(label)
             continue
         checked += 1
-        import os
         missing = [p for p in paths if not os.path.exists(p)]
         if missing:
             stale.append((label, missing))
+            continue
+        hit = parked(label, paths)
+        if hit:
+            drifted.append((label, hit))
 
     print(f"checked {checked} loaded jobs")
     if unreadable:
         print(f"could not read {len(unreadable)}: {', '.join(unreadable)}")
 
-    if not stale:
-        print("no drift: every loaded definition points at a path that exists")
+    if not stale and not drifted:
+        print("no drift: every loaded definition points at published code "
+              "on a path that exists")
         return 0
 
     print(f"\nSTALE: {len(stale)} job(s) run a definition naming a path that is gone.")
@@ -85,8 +212,26 @@ def main():
             print(f"      MISSING {p}")
         print(f"      fix: launchctl bootout gui/{UID}/{label} && "
               f"launchctl bootstrap gui/{UID} ~/Library/LaunchAgents/{label}.plist")
+
+    if drifted:
+        print(f"\nPARKED: {len(drifted)} job(s) run code out of a checkout a "
+              f"session can move.")
+        print("These report exit 0 while running whatever branch was left behind.\n")
+        for label, (repo, on, want) in drifted:
+            if not want:
+                print(f"  {label}")
+                print(f"      UNPROVABLE {repo} on '{on}': no published branch "
+                      f"to compare against")
+                continue
+            print(f"  {label}")
+            print(f"      PARKED {repo} is on '{on}', not '{want}'")
+            print(f"      fix: give the job its own worktree pinned to {want} and "
+                  f"point WorkingDirectory at it:")
+            print(f"           git -C {repo} worktree add <runtime-path> {want}")
     return 1
 
 
 if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        sys.exit(selftest())
     sys.exit(main())
