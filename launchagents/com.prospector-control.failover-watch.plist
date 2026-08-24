@@ -9,14 +9,8 @@
 	</dict>
 	<key>Label</key>
 	<string>com.prospector-control.failover-watch</string>
-	<key>Nice</key>
-	<integer>10</integer>
-	<key>ProcessType</key>
-	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
-		<string>failover-watch</string>
 		<string>/Users/chidionyema/.prospector/bin/failover</string>
 		<string>check</string>
 	</array>

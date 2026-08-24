@@ -10,13 +10,11 @@
 	<key>Label</key>
 	<string>ai.estate.tracked-guard</string>
 	<key>Nice</key>
-	<integer>10</integer>
+	<integer>5</integer>
 	<key>ProcessType</key>
 	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
-		<string>tracked-guard</string>
 		<string>/usr/bin/python3</string>
 		<string>/Users/chidionyema/.claude/scripts/tracked.py</string>
 		<string>--sync</string>
