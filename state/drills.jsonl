@@ -50,3 +50,5 @@
 {"ts": 1787542678, "iso": "2026-08-24T03:37:58Z", "id": "telegram-delivery", "status": "PASS", "rc": 0, "seconds": 3.3, "note": "PASS: @Ottototbot authenticates and the founder's chat accepts a chat action"}
 {"ts": 1787542888, "iso": "2026-08-24T03:41:28Z", "id": "db-integrity", "status": "FAIL", "rc": 1, "seconds": 209.8, "note": "7 databases checked, 3 already ok, 0 repaired, 4 needing a person", "log": "/Users/chidionyema/.claude/state/drills/db-integrity-2026-08-24T034128Z.log"}
 {"ts": 1787542895, "iso": "2026-08-24T03:41:35Z", "id": "recovery-posture", "status": "PASS", "rc": 0, "seconds": 6.8, "note": "DRILL PASSED: every job on this Mac restarts, reschedules or is explicitly retired, and every one of them has run."}
+{"ts": 1787558023, "iso": "2026-08-24T07:53:43Z", "id": "db-integrity", "status": "PASS", "rc": 0, "seconds": 56.1, "note": "DRILL PASSED: every database this estate keeps passes integrity_check."}
+{"ts": 1787558463, "iso": "2026-08-24T08:01:03Z", "id": "key-escrow-restore", "status": "PASS", "rc": 0, "seconds": 1.0, "note": "DRILL PASSED: a new machine with the founder's Apple ID and his Cloudflare account can recover both age keys."}
