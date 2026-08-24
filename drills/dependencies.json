@@ -81,6 +81,14 @@
       "is": "where every recovery path starts",
       "covered_by": "github-gone"
     },
+    "hc-ping.com": {
+      "is": "the hosted Healthchecks ping endpoint",
+      "dismissed": "Not a dependency. The estate standard is Healthchecks self-hosted (BSD-3, docs/STANDARDS.md), and hc-wrap.sh names this host only in a comment recording that the hosted URL shape omits the /ping/ segment. If the hosted service vanished the estate would not notice. Losing our OWN receiver is the real risk, and that is what MON-1 and MON-4 in ~/.estate/REQUIREMENTS.jsonl grade hourly."
+    },
+    "healthchecks.io": {
+      "is": "the project's documentation and hosted service",
+      "dismissed": "Not a dependency. Read once on 2026-08-24 to get the ping protocol right; the URL survives in a comment as a citation. The software is BSD-3 and vendored by us, so the exit from the hosted service is the deployment we already run."
+    },
     "hermes-agent.nousresearch.com": {
       "is": "named in an archived hermes config",
       "dismissed": "hermes-v2.ARCHIVED.20260822; nothing loaded calls it"
@@ -92,6 +100,10 @@
     "mumchimp.com": {
       "is": "a domain the estate owns",
       "dismissed": "no scheduled job calls it. It belongs on the register the day something does"
+    },
+    "opencode.ai": {
+      "is": "the $schema URL in ~/.config/opencode/opencode.json and its .jsonc twin",
+      "dismissed": "a JSON Schema identifier, fetched by an editor for completion and by nothing this estate runs. opencode parses the file whether or not the host answers. Same class as the plist DTD host above."
     },
     "openrouter.ai": {
       "is": "substrate rail, proves Anthropic is replaceable",
@@ -140,14 +152,6 @@
     "www.minimax.io": {
       "is": "a marketing page",
       "dismissed": "same"
-    },
-    "hc-ping.com": {
-      "is": "the hosted Healthchecks ping endpoint",
-      "dismissed": "Not a dependency. The estate standard is Healthchecks self-hosted (BSD-3, docs/STANDARDS.md), and hc-wrap.sh names this host only in a comment recording that the hosted URL shape omits the /ping/ segment. If the hosted service vanished the estate would not notice. Losing our OWN receiver is the real risk, and that is what MON-1 and MON-4 in ~/.estate/REQUIREMENTS.jsonl grade hourly."
-    },
-    "healthchecks.io": {
-      "is": "the project's documentation and hosted service",
-      "dismissed": "Not a dependency. Read once on 2026-08-24 to get the ping protocol right; the URL survives in a comment as a citation. The software is BSD-3 and vendored by us, so the exit from the hosted service is the deployment we already run."
     }
   },
   "credentials": {
