@@ -258,8 +258,113 @@ rules := [
 			"lands it when qa and review-gate pass.",
 		]),
 	},
+	{
+		"id": "paid_hetzner",
+		"re": `\bhcloud\s+(?:server|volume|load-balancer|primary-ip|floating-ip)\s+create\b`,
+		"marker": "founder-approved-spend",
+		"must_match": "hcloud server create --type cx22 --name k3s-1",
+		"must_not_match": "hcloud server list",
+		"msg": paid_infra_msg("Hetzner Cloud"),
+	},
+	{
+		"id": "paid_digitalocean",
+		"re": `\bdoctl\s+(?:compute\s+(?:droplet|load-balancer)|databases?|kubernetes\s+cluster)\s+create\b`,
+		"marker": "founder-approved-spend",
+		"must_match": "doctl kubernetes cluster create prod --region lon1",
+		"must_not_match": "doctl kubernetes cluster list",
+		"msg": paid_infra_msg("DigitalOcean"),
+	},
+	{
+		"id": "paid_aws",
+		"re": `\baws\s+(?:ec2\s+run-instances|eks\s+create-cluster|rds\s+create-db-instance)\b`,
+		"marker": "founder-approved-spend",
+		"must_match": "aws eks create-cluster --name prod",
+		"must_not_match": "aws ec2 describe-instances",
+		"msg": paid_infra_msg("AWS"),
+	},
+	{
+		"id": "paid_gcp",
+		"re": `\bgcloud\s+(?:compute\s+instances\s+create|container\s+clusters\s+create|sql\s+instances\s+create)\b`,
+		"marker": "founder-approved-spend",
+		"must_match": "gcloud container clusters create prod --zone europe-west2-a",
+		"must_not_match": "gcloud container clusters list",
+		"msg": paid_infra_msg("Google Cloud"),
+	},
+	{
+		"id": "paid_azure",
+		"re": `\baz\s+(?:vm\s+create|aks\s+create|container\s+create)\b`,
+		"marker": "founder-approved-spend",
+		"must_match": "az aks create --name prod -g rg-prod",
+		"must_not_match": "az aks list",
+		"msg": paid_infra_msg("Azure"),
+	},
+	{
+		"id": "paid_linode",
+		"re": `\blinode-cli\s+linodes\s+create\b`,
+		"marker": "founder-approved-spend",
+		"must_match": "linode-cli linodes create --type g6-standard-1",
+		"must_not_match": "linode-cli linodes list",
+		"msg": paid_infra_msg("Linode"),
+	},
+	{
+		"id": "paid_vultr",
+		"re": `\bvultr-cli\s+instance\s+create\b`,
+		"marker": "founder-approved-spend",
+		"must_match": "vultr-cli instance create --region lhr",
+		"must_not_match": "vultr-cli instance list",
+		"msg": paid_infra_msg("Vultr"),
+	},
+	{
+		"id": "paid_scaleway",
+		"re": `\bscw\s+instance\s+server\s+create\b`,
+		"marker": "founder-approved-spend",
+		"must_match": "scw instance server create type=DEV1-S",
+		"must_not_match": "scw instance server list",
+		"msg": paid_infra_msg("Scaleway"),
+	},
+	{
+		"id": "paid_terraform_apply",
+		# A plan's cost is invisible from the command line, which is exactly why
+		# applying one is the moment to stop. Planning and destroying stay free --
+		# see must_not_match, and `terraform destroy` in permitted_commands below.
+		"re": `\b(?:terraform|tofu)\s+apply\b`,
+		"marker": "founder-approved-spend",
+		"must_match": "terraform apply -auto-approve",
+		"must_not_match": "terraform plan -out=tfplan",
+		"msg": paid_infra_msg("whatever the plan provisions"),
+	},
+	{
+		"id": "paid_pulumi_up",
+		"re": `\bpulumi\s+up\b`,
+		"marker": "founder-approved-spend",
+		"must_match": "pulumi up --yes",
+		"must_not_match": "pulumi preview",
+		"msg": paid_infra_msg("whatever the stack provisions"),
+	},
 	# make guard inserts here
 ]
+
+# Ten rules share one message, so it is written once. Ten copies of a paragraph this
+# long is nine chances for the ruling to be paraphrased into something the founder
+# did not say.
+#
+# WHAT PAID FOR THESE TEN RULES. On 2026-08-24 I told the founder a rented Hetzner
+# box at EUR 3.79/month was "the only thing between the merged manifests and a
+# cluster", and that it was his call because it was money. Both halves were wrong:
+# k3d runs a real cluster on this laptop for nothing, and he had already answered
+# the question twice. His ruling closed it, and his fourth enforcement step was
+# that the refusal be mechanical rather than remembered -- a session that has
+# already asked does not get to ask again in different words.
+paid_infra_msg(provider) := concat("", [
+	"BLOCKED by rule-guard: this provisions infrastructure that costs money (", provider, ").\n",
+	"Founder ruling R14 (2026-08-24), verbatim: \"Mac is the prove-and-build substrate. ",
+	"Full stop. NO paid infra without explicit founder sign-off. Free tier only (Oracle ",
+	"Always Free, GitHub-hosted runners, etc.). If it costs >EUR 0, it waits until after ",
+	"prove-and-build is done. Real cluster follows proof, never precedes it.\"\n",
+	"Prove it on the substrate first: deploy/rehearse_cluster.sh runs a real k3d cluster ",
+	"on this laptop for EUR 0. Reading, planning and destroying are all still allowed.\n",
+	"Standing rulings: ~/.claude/scripts/rulings.json",
+])
 
 # ---------------------------------------------------------------------------
 # The decision.
@@ -318,6 +423,55 @@ broken contains msg if {
 	msg := sprintf(
 		"rule %q still fires when its own override marker %q is present. The escape hatch its message advertises does not work.",
 		[r.id, r.marker],
+	)
+}
+
+# ---------------------------------------------------------------------------
+# THE HALF THAT MATTERS MORE. A rule's own `must_not_match` proves that ONE rule
+# permits ONE command. It cannot prove that the policy as a whole still permits
+# the work the estate is made of, because the rule that breaks that is usually a
+# different rule from the one you were editing.
+#
+# Every command below is one no session may ever be refused. `k3d cluster create`
+# is the load-bearing case: R14 makes this laptop the substrate, so a policy that
+# refused it would leave the estate with no way to run a cluster at all -- the
+# guard would have caused the outage the ruling exists to prevent (LAW 38).
+#
+# This check is not about the ten paid_* rules. It applies to all of them, and to
+# every rule added after this one, which is the point: the fence that is going to
+# refuse correct work has not been written yet.
+# ---------------------------------------------------------------------------
+
+permitted_commands := [
+	"k3d cluster create prospector-rehearsal --agents 0 --wait --timeout 900s",
+	"k3d cluster delete prospector-rehearsal",
+	"kind create cluster --name prospector",
+	"minikube start --driver=docker",
+	"kubectl create namespace prospector",
+	"kubectl apply -k deploy/k8s/overlays/staging",
+	"docker run --rm --user 10001:10001 --read-only prospector-store-api:local",
+	# R14 names Oracle Always Free as permitted, and no command line distinguishes
+	# a free ARM shape from a billable one -- so the oci CLI is deliberately not
+	# fenced, and this case is here to keep it that way.
+	"oci compute instance launch --shape VM.Standard.A1.Flex",
+	"terraform plan -out=tfplan",
+	"terraform destroy -auto-approve",
+	"hcloud server list",
+	"hcloud server delete 12345",
+	"aws ec2 describe-instances",
+	"git push origin my-branch",
+	"git fetch origin",
+	"git add -- path/one path/two",
+]
+
+broken contains msg if {
+	some cmd in permitted_commands
+	some r in rules
+	not contains(cmd, r.marker)
+	regex.match(r.re, cmd)
+	msg := sprintf(
+		"rule %q refuses %q, which is on the permitted_commands list: work the estate must always be able to do. A guard that refuses correct work is an outage (LAW 38). Narrow the pattern, or say in the pull request why that command should stop being permitted.",
+		[r.id, cmd],
 	)
 }
 
