@@ -5,3 +5,15 @@
 # and 12 workers land on top of the resident Claude sessions and Chrome.
 # CI is unaffected: it reads its own environment, not this file.
 export PYTEST_XDIST_AUTO_NUM_WORKERS=6
+
+# Nice-by-default for interactive pytest runs (crew #85 residual: "Interactive
+# sessions' heavy runs ... start at default priority"). taskpolicy -b puts the
+# process in background QoS, nice -n 10 lowers scheduling priority (measured
+# NI=15 combined, the same value the 2026-08-24 load-255 incident used by hand
+# to bring load 255 -> 152). `command pytest` bypasses this function so there
+# is no recursion, and an explicit `\pytest` or `command pytest` still runs at
+# normal priority when that is what is wanted (e.g. timing a benchmark).
+# Sourced by every zsh invocation (interactive, scripted, and every Claude/
+# agent Bash-tool call, which run via `zsh -c`), so this reaches peer sessions
+# without asking any of them to opt in.
+pytest() { taskpolicy -b nice -n 10 command pytest "$@"; }
