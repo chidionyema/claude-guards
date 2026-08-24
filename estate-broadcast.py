@@ -19,6 +19,43 @@ BOARD_LOCK = Path.home() / ".claude" / ".ESTATE_BOARD.lock"
 MAX_RETRIES = 5
 LOCK_TIMEOUT = 30
 
+# Founder, 2026-08-24: "why not just use github issues? why reinvent the wheel badly."
+# The board IS crew issue #102 — a phone can read it, nothing lives only on this laptop.
+# The JSONL above remains the offline cache the prompt hooks read at each session start.
+GH_REPO = "chidionyema/crew"
+GH_BOARD_ISSUE = "102"
+DEADLETTER = Path.home() / ".claude" / "state" / "board-deadletter.jsonl"
+
+
+def format_row(record):
+    """One board row as one GitHub comment body."""
+    text = record.get("message") or record.get("text") or json.dumps(
+        {k: v for k, v in record.items() if k not in ("ts", "from", "kind", "priority")},
+        ensure_ascii=True)
+    body = "`%s` **%s** (%s/%s): %s" % (
+        record.get("ts", "?"), record.get("from", "?"), record.get("kind", "?"),
+        record.get("priority", "info"), text)
+    return body[:60000]
+
+
+def mirror_to_github(record):
+    """Land the row on the board issue. A failed mirror is dead-lettered and loud, never silent."""
+    import subprocess
+    try:
+        subprocess.run(
+            ["gh", "issue", "comment", GH_BOARD_ISSUE, "--repo", GH_REPO,
+             "--body", format_row(record)],
+            check=True, capture_output=True, text=True, timeout=30)
+        return True
+    except Exception as e:
+        DEADLETTER.parent.mkdir(parents=True, exist_ok=True)
+        with open(DEADLETTER, "a") as f:
+            f.write(json.dumps({"record": record, "error": str(e)[:200],
+                                "ts": datetime.utcnow().isoformat() + "Z"}) + "\n")
+        print(f"[WARN] row NOT on GitHub board (crew#{GH_BOARD_ISSUE}): {e} — "
+              f"dead-lettered to {DEADLETTER}", file=sys.stderr)
+        return False
+
 
 def acquire_lock(timeout=LOCK_TIMEOUT):
     """Acquire exclusive lock on the board file."""
@@ -167,11 +204,13 @@ def main():
     
     try:
         append_broadcast(record)
-        print(f"[OK] Posted to board", file=sys.stderr)
-        return 0
     except Exception as e:
         print(f"[ERROR] {e}", file=sys.stderr)
         return 1
+    on_github = mirror_to_github(record)
+    print(f"[OK] Posted to board" + ("" if on_github else " (LOCAL ONLY — see warning)"),
+          file=sys.stderr)
+    return 0
 
 
 if __name__ == '__main__':
