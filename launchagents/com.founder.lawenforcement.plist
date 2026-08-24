@@ -11,6 +11,8 @@
 	<string>com.founder.lawenforcement</string>
 	<key>ProgramArguments</key>
 	<array>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>lawenforcement</string>
 		<string>/Users/chidionyema/.estate/guards/bin/estate-gate</string>
 		<string>com.founder.lawenforcement</string>
 		<string>/usr/bin/python3</string>

@@ -11,6 +11,8 @@
 	<string>com.founder.agentcert</string>
 	<key>ProgramArguments</key>
 	<array>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>agentcert</string>
 		<string>/Users/chidionyema/.estate/guards/bin/estate-gate</string>
 		<string>com.founder.agentcert</string>
 		<string>/usr/local/bin/python3</string>

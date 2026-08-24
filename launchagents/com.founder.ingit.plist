@@ -11,6 +11,8 @@
 	<string>com.founder.ingit</string>
 	<key>ProgramArguments</key>
 	<array>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>ingit</string>
 		<string>/Users/chidionyema/.estate/guards/bin/estate-gate</string>
 		<string>com.founder.ingit</string>
 		<string>/usr/local/bin/python3</string>

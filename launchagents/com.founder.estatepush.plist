@@ -13,6 +13,8 @@
 	<integer>5</integer>
 	<key>ProgramArguments</key>
 	<array>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>estate-push</string>
 		<string>/bin/bash</string>
 		<string>/Users/chidionyema/.claude/scripts/estate/estate_push.sh</string>
 	</array>
