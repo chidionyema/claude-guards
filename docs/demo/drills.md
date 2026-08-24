@@ -71,3 +71,55 @@ reads the skips for that, and only that:
 A wedge over an hour with nothing pushed since fails the drill. A wedge a later
 push cleared reports as history, because a check that stays red after the thing
 recovered is one people learn to ignore.
+
+## Nothing registers a drill, so nothing is allowed to miss one
+
+The register is a hand-written file. That is the honest limit: a person or an
+agent writes the drill, then types an entry naming what breaks without it, and
+no machine can write that sentence. What a machine can do is refuse to let the
+second step be forgotten, and now it does.
+
+`--check` scans `drills/` and `rebuild/` for drill-shaped scripts and compares
+them against the commands in the register. A script that no entry runs is red,
+unlike NOT WRITTEN, which is a path somebody decided not to prove yet and said
+so. The exemption list is data, in the register's `not_drills`, so a new helper
+forces somebody to say out loud that it is not a drill.
+
+Both directions of the control, run 2026-08-24:
+
+    $ /usr/bin/python3 drills/run.py --check ; echo "EXIT=$?"
+    8 passing, 0 needing a run, 5 with no drill written, 0 written but registered nowhere
+    EXIT=0
+
+    $ cp drills/check_db_integrity.py drills/check_pretend_forgotten.py
+    $ /usr/bin/python3 drills/run.py --check ; echo "EXIT=$?"
+      check_pretend_forgotten.py UNREGISTERED on disk, no register entry runs it
+    8 passing, 0 needing a run, 5 with no drill written, 1 written but registered nowhere
+    EXIT=1
+
+    $ rm drills/check_pretend_forgotten.py
+    $ /usr/bin/python3 drills/run.py --check ; echo "EXIT=$?"
+    EXIT=0
+
+## The onboarding table is rendered, not typed
+
+The table on the onboarding page said six entries and named a drill the register
+had retired. Somebody fixed the sentence. Two days later it said eleven when
+there were thirteen and still called `telegram-delivery` unwritten after it had
+been written. Somebody fixed the sentence again. Two sessions, two instances of
+one recurring issue, and neither touched the reason: a copy of the register
+maintained by hand is a second register that disagrees with the first.
+
+It is now generated between markers by `run.py --docs`, the weekly run
+regenerates it, and `--check` is red while the file on disk disagrees:
+
+    $ /usr/bin/python3 drills/run.py --docs
+    docs/onboarding/drills.md: already current
+
+    $ /usr/bin/python3 drills/run.py --docs      # run twice, on purpose
+    docs/onboarding/drills.md: already current
+
+The second run matters. The first version of this renderer appended a blank line
+every time, so the file never matched itself and the check would have been red
+forever with nothing wrong. A gate that is permanently red is a gate people stop
+reading, which is the failure the whole register exists to prevent.
