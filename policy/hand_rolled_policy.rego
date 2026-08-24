@@ -32,7 +32,9 @@
 # `legacy` is the migration completing, and it shows up as a deleted line in the
 # diff, which is what crew#126 AC6 asks each PR to print.
 #
-# The numbers are `wc -l` on the file, taken from origin/main at 8c691da.
+# The numbers are `wc -l` on the file, taken from origin/main at 8c691da,
+# except rule-guard.py: nine of its rules are Rego now, so its ceiling is the
+# post-cutover count. A ceiling only ever falls.
 #
 #   conftest test --policy policy inventory.json
 package main
@@ -44,7 +46,7 @@ import rego.v1
 # This list only ever shrinks. When a script's rules move into Rego, delete the
 # script and delete its line here in the same commit.
 legacy := {
-	"rule-guard.py": 1327,
+	"rule-guard.py": 1108,
 	"ticket-gate.py": 1098,
 	"goal-guard.py": 960,
 	"tool-drip-guard.py": 641,
