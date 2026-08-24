@@ -244,13 +244,39 @@ def sync():
 
     changed = [l[3:] for l in status.splitlines()]
     git("add", "--", *paths)
+    # TOCTOU: `state/` is written continuously by other scheduled jobs, so the
+    # drift `status` just saw can self-resolve (a file settles back to what
+    # HEAD already has) before `add` reaches it. Confirmed 2026-08-24: `status`
+    # found drift, `commit` then found nothing staged and failed with an empty
+    # stderr, because git's "nothing to commit" message is on stdout, which
+    # this function never read -- so the board alert said "could not commit: "
+    # with no reason. Nothing was actually broken; check before alerting.
+    if git("diff", "--cached", "--quiet").returncode == 0:
+        return 0  # nothing actually staged: the drift self-resolved
     msg = ("LAW 24: %d load-bearing file(s) changed outside git\n\n%s\n\n"
            "Committed by the scheduled guard, not by a person.\n"
            % (len(changed), "\n".join("  " + c for c in changed)))
     c = git("commit", "-m", msg)
     if c.returncode:
-        board("guard-broken", "tracked.py could not commit: " + c.stderr.strip()[:300])
+        reason = (c.stderr.strip() or c.stdout.strip())[:300]
+        board("guard-broken", "tracked.py could not commit: " + reason)
         return 1
+    # This checkout is shared: another session can have it on its own feature
+    # branch with commits of its own in flight. Pushing HEAD there collides
+    # with that session's own push and rewrites nothing usefully -- measured
+    # 2026-08-24, "! [rejected] HEAD -> fix/spend-sentinel-refuses-false-zero
+    # (non-fast-forward)" once and several silent "could not commit:" empty-
+    # reason failures beside it, all while a person owned that branch. The
+    # commit above already satisfies LAW 24 (it is in git, locally); only
+    # main is this job's business to push to.
+    branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    if branch != "main":
+        board("tracked",
+              "committed %d load-bearing file(s) changed outside git on '%s', "
+              "not pushed: this checkout belongs to another session while it "
+              "is off main. Push reaches origin next time this runs on main."
+              % (len(changed), branch))
+        return 0
     p = git("push", "origin", "HEAD")
     if p.returncode:
         board("guard-broken",

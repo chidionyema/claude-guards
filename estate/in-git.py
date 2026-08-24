@@ -402,17 +402,18 @@ def check_parked(_d, _mm):
         paths = ld.loaded_paths(label)
         if paths is None:
             continue
-        hit = ld.parked(label, [x for x in paths if os.path.exists(x)])
-        if hit is None:
+        hits = ld.parked(label, [x for x in paths if os.path.exists(x)],
+                         ld.loaded_workdir(label))
+        if not hits:
             ok += 1
             continue
-        repo, on, want = hit
-        if not want:
-            holes.append("%s: runs code from %s on '%s', which has no published "
-                         "branch to compare against" % (label, repo, on))
-        else:
-            holes.append("%s: runs code from %s, checked out on '%s', not '%s'"
-                         % (label, repo, on, want))
+        for repo, on, want in hits:
+            if not want:
+                holes.append("%s: runs code from %s on '%s', which has no published "
+                             "branch to compare against" % (label, repo, on))
+            else:
+                holes.append("%s: runs code from %s, checked out on '%s', not '%s'"
+                             % (label, repo, on, want))
     return ok, holes
 
 

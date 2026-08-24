@@ -79,8 +79,23 @@ refuse := [
 	"terraform apply -auto-approve", # paid_terraform_apply
 	"tofu apply", # paid_terraform_apply
 	"pulumi up --yes", # paid_pulumi_up
+	# rule_secret_store_dump, migrated from rule-guard.py on 2026-08-24. Every
+	# instance is proved BOTH ways: the dumping form here, the names-only form of
+	# the SAME tool in `permit` below. A guard only ever seen refusing has never
+	# been shown to permit.
+	"docker compose -f deploy/compose/docker-compose.yml config", # value dump
+	"docker inspect opsconsole-diag2", # value dump
+	"docker container inspect x", # value dump
+	"gh api repos/chidionyema/prospector/actions/variables", # value dump
+	"gh api repos/chidionyema/prospector/actions/variables --jq '.variables[].value'", # value dump
+	"gh variable list", # value dump
+	"kubectl get secret prospector-engine-env -o yaml", # value dump
+	"kubectl get secret prospector-engine-env -o json", # value dump
+	"printenv", # value dump
+	"printenv | grep PROSPECTOR", # value dump
+	"env", # value dump
+	"env | sort", # value dump
 ]
-
 # Commands that must go through. A guard that refuses correct work is an
 # outage (LAW 38), and half of these exist because one did.
 permit := [
@@ -152,8 +167,27 @@ permit := [
 	"pulumi preview", # allowed: a preview provisions nothing
 	"oci compute instance launch --shape VM.Standard.A1.Flex", # allowed: R14 names Oracle Always Free
 	"hcloud server create --type cx22  # founder-approved-spend", # allowed: the escape hatch works
+	# The names-only half of every value-dump rule above, plus the two shapes the
+	# LAW 45 sweep found that the rule would have refused WRONGLY. Both of those
+	# are real lines in this estate and both are correct work.
+	"docker compose config --quiet", # allowed: validates, prints nothing
+	"docker compose config -q", # allowed
+	"docker compose config --services", # allowed: names, not values
+	"docker compose up -d", # allowed
+	"docker inspect --format '{{.State.Running}}' opsA", # allowed: one field
+	"docker inspect x  # value-dump-intended", # allowed: the escape hatch works
+	"docker inspect \"$srv\" >/dev/null 2>&1 || fail 'no server'", # allowed: prints nothing
+	"docker inspect prospector-store-web \\\n    --format '{{.Id}}'", # allowed: continuation
+	"gh api repos/chidionyema/prospector/actions/variables --jq '.variables[].name'", # allowed
+	"gh api repos/chidionyema/prospector/actions/runners", # allowed: not a settings store
+	"gh variable list --json name", # allowed: names, not values
+	"gh secret list", # allowed: gh never prints secret values
+	"kubectl describe secret prospector-engine-env", # allowed: names and byte counts
+	"kubectl get secrets", # allowed: names only
+	"printenv PROSPECTOR_STORE_DIR", # allowed: one name
+	"env PROSPECTOR_STORE_DIR=/data/store python3 run.py", # allowed: sets, does not print
+	"git diff --stat  # nothing to do with env", # allowed
 ]
-
 test_every_refused_command_is_refused if {
 	every cmd in refuse {
 		count(deny) > 0 with input as {"command": cmd}

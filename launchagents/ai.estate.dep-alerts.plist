@@ -13,12 +13,8 @@
 	<true/>
 	<key>Nice</key>
 	<integer>10</integer>
-	<key>ProcessType</key>
-	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
-		<string>dep-alerts</string>
 		<string>/usr/bin/python3</string>
 		<string>/Users/chidionyema/.claude/scripts/estate/dep_alerts.py</string>
 	</array>

@@ -65,6 +65,16 @@ jobs:
       - name: nothing load-bearing is missing from the repository
         run: python3 estate/in-git.py --ci
 
+      # R2, made mechanical. A ruling binds every session forever, and its id is a
+      # hand-typed sequential number allocated by six sessions that cannot see each
+      # other. R15 collided on 2026-08-23 and R16 collided on 2026-08-24: both times
+      # two real rulings shared a number and one of them stopped being injected.
+      # This refuses the file, not the symptom. The selftest proves both directions --
+      # a collision is reported, a sound list is not -- and it reads rulings.json from
+      # beside the script, so on a runner it grades the checkout and not nothing.
+      - name: no two founder rulings share a number
+        run: python3 friction-relay.py --selftest
+
       # LAW 19, made mechanical. A vendor arrives in this estate the moment somebody writes a
       # URL or an environment variable name, and until 2026-08-23 nothing anywhere listed them:
       # 33 hosts and 19 credential names were in the tree and in no document. This refuses a

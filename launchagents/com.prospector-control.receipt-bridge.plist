@@ -11,12 +11,8 @@
 	<string>com.prospector-control.receipt-bridge</string>
 	<key>Nice</key>
 	<integer>10</integer>
-	<key>ProcessType</key>
-	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
-		<string>receipt-bridge</string>
 		<string>/usr/local/bin/python3</string>
 		<string>/Users/chidionyema/.hermes/scripts/launchd_receipt.py</string>
 		<string>--label</string>

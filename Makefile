@@ -50,3 +50,21 @@ guard:
 		echo "^ expected: the new rule does not match its own example yet."; \
 		exit 0; \
 	}
+
+.PHONY: decisions
+decisions: ## Refuse a decision record that cites nothing (R18). SCAN=<dir> to check another repo.
+	@# Built with find, grep and jq rather than a Python collector, for the same
+	@# reason .github/workflows/policy.yml builds its inventory that way: a Python
+	@# script that polices files is the habit the migration exists to break.
+	@find $(or $(SCAN),.) \( -name .git -o -name node_modules -o -name .venv \) -prune -o \
+	  -path '*/decisions/*.md' -print -o -path '*/adr*/*.md' -print 2>/dev/null \
+	  | grep -viE '/(readme|index|template)\.md$$' \
+	  | sort \
+	  | while read -r f; do \
+	      jq -n --arg p "$$f" \
+	        --argjson h "$$(grep -qiE '^#{1,6}[[:space:]]*sources\b' "$$f" && echo true || echo false)" \
+	        --argjson n "$$(grep -ohE 'https?://[^[:space:]<>)\"'"'"']+' "$$f" | sort -u | wc -l | tr -d ' ')" \
+	        '{path:$$p, has_sources_heading:$$h, source_urls:$$n}'; \
+	    done | jq -s '{decision_records: .}' > decisions.json
+	@echo "decision records found: $$(jq '.decision_records | length' decisions.json)"
+	@conftest test --policy policy --namespace hooks decisions.json

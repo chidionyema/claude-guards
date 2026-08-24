@@ -6,6 +6,8 @@
 	<string>ai.aiden.watch</string>
 	<key>LowPriorityIO</key>
 	<true/>
+	<key>Nice</key>
+	<integer>10</integer>
 	<key>ProcessType</key>
 	<string>Standard</string>
 	<key>ProgramArguments</key>

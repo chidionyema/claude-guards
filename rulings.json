@@ -24,6 +24,13 @@
       "enforced_by": "review protocol crew#105"
     },
     {
+      "id": "R4-investor-tomorrow",
+      "date": "2026-08-23",
+      "verbatim": "we need to think as if an investor is going to buy the platform tomorrow",
+      "meaning": "Production-ready is the only standard: no human-at-a-laptop assumptions, no half-wired instruments, everything demonstrable. Codified as LAW 41.",
+      "enforced_by": "LAW 41"
+    },
+    {
       "id": "R5-founder-out-of-the-loop",
       "date": "2026-08-24",
       "verbatim": "i need to be out of the loop and things work reliably and get done — i dont need all this friction",
@@ -34,15 +41,15 @@
       "id": "R6-mature-platforms-over-hand-rolled",
       "date": "2026-08-24",
       "verbatim": "anything we do ourselves is risky — we need mature proven platforms, proven. all this writing bash scripts and python scripts — we need to be in the future",
-      "meaning": "LAW 43 is the primary review axis for ALL infra/platform work. Hand-rolled bash/python that a mature, proven platform already does grades REWORK with the replacement named, or NOT-RAISING-THE-BAR. Tooling research runs autonomously (online, on the record) and lands in science/RESEARCH-LEDGER.jsonl. Source: crew#102 comment 5391796940.",
+      "meaning": "LAW 43 is the primary review axis for ALL infra/platform work. Hand-rolled bash/python that a mature, proven platform already does grades REWORK with the replacement named, or NOT-RAISING-THE-BAR. Tooling research runs autonomously (online, on the record) and lands in science/RESEARCH-LEDGER.jsonl. Source: crew#102 comment 5391796940. 2026-08-24 escalations: 'custom code in general should be a last resort. Open source. Mature. Stop writing wrappers.' and 'we need to be doing research as instinct' — research is not a step you are asked for; every build-or-adopt decision arrives with fresh online sources already on the ledger, unprompted.",
       "enforced_by": "review protocol crew#115; LAW 43"
     },
     {
       "id": "R7-unify-and-standardise",
       "date": "2026-08-24",
       "verbatim": "we need to unify our platform and stack — standardise. no excuses, i need this production ready fully. we cant be lax about infra or platform work — the headline is risk elimination",
-      "meaning": "One standard stack, not one per session. New components use the standard or the deviation is stated and reviewed. Strict review for all infra work; production-ready is the only bar. Source: crew#102 comment 5391796940.",
-      "enforced_by": "review protocol crew#115; LAW 41"
+      "meaning": "One standard stack, not one per session. New components use the standard or the deviation is stated and reviewed. Strict review for all infra work; production-ready is the only bar. Source: crew#102 comment 5391796940. 2026-08-24 escalation: 'everyone needs to focus — this is our chance to finally stop the fire fighting — we need standardisation today.' The standard is written down in crew docs/STANDARDS.md; a component not on it needs a stated, reviewed deviation.",
+      "enforced_by": "review protocol crew#115; LAW 41; crew docs/STANDARDS.md"
     },
     {
       "id": "R8-no-provider-spof-rebrand",
@@ -52,11 +59,46 @@
       "enforced_by": "LAW 34; the rebrand plan (crew issue, 2026-08-24)"
     },
     {
-      "id": "R4-investor-tomorrow",
-      "date": "2026-08-23",
-      "verbatim": "we need to think as if an investor is going to buy the platform tomorrow",
-      "meaning": "Production-ready is the only standard: no human-at-a-laptop assumptions, no half-wired instruments, everything demonstrable. Codified as LAW 41.",
-      "enforced_by": "LAW 41"
+      "id": "R9-review-proves-operational",
+      "date": "2026-08-24",
+      "verbatim": "is anything actually fully operational … the review includes getting it fully operational … add to acceptance criteria",
+      "meaning": "A review is not finished when the code is graded — it is finished when the work is proven FULLY OPERATIONAL on the live system. Every REVIEW record carries an 'Operational:' line quoting the command and its output that shows the thing running (the scheduled job green, the service serving, the gate deciding). Merged-but-not-running grades REWORK. This is an acceptance criterion on every review, additive to R3's KEEP/REWORK/NOT-RAISING-THE-BAR.",
+      "enforced_by": "review protocol crew#115; LAW 17; crew docs/STANDARDS.md acceptance criteria"
+    },
+    {
+      "id": "R10-profanity-is-red-zone",
+      "date": "2026-08-24",
+      "verbatim": "if founder uses profanity that means its red zone and high alert for crew",
+      "meaning": "Profanity in ANY founder message is an estate-wide red alert, not a mood. The session that receives it broadcasts to the crew immediately, names which laws are being broken, and stops whatever it drifted onto. It is never treated as ordinary feedback and never absorbed silently by one session.",
+      "enforced_by": "friction-relay.py injection + estate-broadcast on receipt"
+    },
+    {
+      "id": "R11-overhaul-not-firefight",
+      "date": "2026-08-24",
+      "verbatim": "that is your one job to overhaul our platform and migrate it",
+      "meaning": "Firefighting is the thing being eliminated, not the work. A top-tier session that finds a fire routes it to an operations agent and returns to the migration. Writing new bash or Python for a platform problem is a law breach (R6/LAW 43): name the mature tool you rejected and why, in the PR, or do not write it.",
+      "enforced_by": "review: any PR adding a new .py or .sh platform script must name the rejected tool"
+    },
+    {
+      "id": "R12-no-drift",
+      "date": "2026-08-24",
+      "verbatim": "i told you the priorities clearly — you drifted again — we need to eliminate this — any work you do must make us better at being better — things that move the whole platform forward",
+      "meaning": "A session works ONLY its founder-stated priority or an explicitly assigned crew item. A side-task discovered along the way gets a one-line crew note and an owner, never the session's own time. Before taking any task, the test is LAW 35/42: does this make the estate better at getting better, and does it move the whole platform. Said live to session 8ef72725 after it drifted from crew#119 into CI rehab on a repo he then deprecated. Ruling ids R10 and R11 were already taken when this landed; the relay called it R10-no-drift. Founder's mechanical spec, given 2026-08-24 after the ruling landed: 'Before every tool call, the agent checks: does this serve the ACTIVE goal? If no -> Blocked. Ticket it if needed. Stay on lane.' So the check is PreToolUse, not Stop-time.",
+      "enforced_by": "friction-relay.py injection; goal-guard.py PreToolUse gate per crew#132 (implementation claimed by session 8ef72725; report-mode first, LAW 38 escape hatch = a one-line crew note naming an owner)"
+    },
+    {
+      "id": "R13-crew-project-work-only",
+      "date": "2026-08-24",
+      "verbatim": "if any one is firefighting and not doing actual proejecty work it needs high alert / we eed on ededicated fire fighter / we have hernes agents for that / crew should only be wprking on project work, wpork that elininate firefighting. this need to be broadcat and ecforced",
+      "meaning": "Crew sessions work ONLY project work -- work that ELIMINATES firefighting (migration, standardisation, automation, guards). Fires route to the ONE dedicated firefighter: the hermes agents (~/dev/code/hermes-v2). A crew session caught firefighting instead of routing is a HIGH ALERT: broadcast to the estate board immediately, name the session and the fire, hand the fire to hermes, return to the board item. Sharpens R11: routing now has a named destination.",
+      "enforced_by": "goal-guard.py PreToolUse gate (claude-guards#26): a WRITE with no ACTIVE goal naming a board item is flagged (report mode now, deny after 24h) -- firefighting never carries a board-claimed goal, so it cannot pass the gate silently"
+    },
+    {
+      "id": "R14-mac-substrate-zero-cost",
+      "date": "2026-08-24",
+      "verbatim": "Mac is the prove-and-build substrate. Full stop. NO paid infra without explicit founder sign-off. Free tier only (Oracle Always Free, GitHub-hosted runners, etc.). If it costs >EUR 0, it waits until after prove-and-build is done. Real cluster follows proof, never precedes it. Exceptions: none until further notice.",
+      "meaning": "This laptop IS the production substrate until the founder says otherwise. Zero-cost only: GitHub-hosted runners, free tiers, and local clusters (k3d/k3s on this machine). Any proposal for a paid resource -- a rented node, a managed cluster, a paid tier, a provider invoice -- is REFUSED with 'Founder ruling R14: Mac substrate only', not escalated and not re-explained. A session that has already asked does not ask again in different words. PROOF COMES FIRST AND THE CLUSTER FOLLOWS IT: manifests, policies and drills are proved locally, and only a completed proof can justify reopening the spend question. Reverses the standing shape of crew#78, which was asking for a rented box before anything had ever been applied to a cluster.",
+      "enforced_by": "rule-guard.py PreToolUse refuses a command that provisions or pays for infrastructure (hcloud/doctl/aws/gcloud/az create, fly deploy, terraform apply against a paid provider); crew#78 is marked blocked on this ruling so the ask stops regenerating"
     },
     {
       "id": "R15-laptop-never-sleeps-local-is-prod",
@@ -70,6 +112,20 @@
       "verbatim": "Command guards are Rego under policy/. Python guards are deprecated and rejected by CI.",
       "meaning": "A refusal that can be decided from the command string is an entry in policy/command.rego with its `re`, `marker`, `msg` and the `must_match`/`must_not_match` examples that keep it honest. `make guard NAME=x` scaffolds one and the test fails until real examples replace the TODOs. Do not add a `def rule_` to rule-guard.py: the count is ratcheted and CI refuses a rise. The six that remain shell out to git or gh to ask about the live tree, which Rego cannot do; they are the backlog, not the pattern. Numbered R16 because R15 was taken by the laptop-never-sleeps ruling while this branch was open. Enacted by the cutover in PR #28, which moved nine refusals after replaying 35,705 commands through both implementations with zero disagreements.",
       "enforced_by": "policy/hand_rolled_policy.rego (rule_ceiling, policy_dir_py, legacy line ceilings), gated by .github/workflows/policy.yml"
+    },
+    {
+      "id": "R17-founder-only-declares-live",
+      "date": "2026-08-24",
+      "verbatim": "no lie is deno and onboardig founder only founder decives if sonething is live or not, no one else can nove a ticket to live core",
+      "meaning": "Only the founder marks anything live, done, core or operational. An agent may write ONLY the Observation column of ESTATE_STATE.md: what it measured, the command, the output, the timestamp. An agent writing an approval, a green tick, or the words live/done/operational about a component is a protocol violation. Observe and propose; the founder executes the approval. This is on top of the existing LAW 17 proof rule, not instead of it: proof earns a row in Observation, it does not earn the tick. Numbered R17, not R16: two sessions allocated R16 at the same time on 2026-08-24 — this ruling and R16-command-guards-are-rego — and the second one to reach main is the one that moves. friction-relay.py now refuses a rulings.json where two rulings share a number, so the next collision is caught before it is injected rather than after one ruling has quietly replaced the other.",
+      "enforced_by": "crew/ESTATE_STATE.md two-column format; pending: PR check that rejects a diff writing the Founder Approval column"
+    },
+    {
+      "id": "R18-research-before-you-choose",
+      "date": "2026-08-24",
+      "verbatim": "ok good job but alway research, it pays off all the tine",
+      "meaning": "Before choosing any tool, standard, protocol or version, search the current state of the world and cite what you read. Not memory, not what the training data believed, not what another session asserted. The incident that paid for it: on 2026-08-24 a session started building an ingress on Traefik's own Docker labels. Research showed two things it did not know -- Kubernetes SIG Network retired the ingress-nginx controller on 2026-03-24, and Gateway API core is GA at v1.6.0 with 16 conformant implementations. The real decision was the config language, not the vendor: routes written as HTTPRoute are portable, routes written as vendor labels are not. Research changed the answer, and it cost one search. This is LAW 43 with a due date: the research is online, it is the agent's job, and it goes on the record with the sources named.",
+      "enforced_by": "idp and crew: every ADR carries a Sources section with dated URLs; adr-sources-guard.py refuses a decision record that cites nothing"
     }
   ]
 }

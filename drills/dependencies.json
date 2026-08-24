@@ -85,6 +85,14 @@
       "is": "where every recovery path starts",
       "covered_by": "github-gone"
     },
+    "hc-ping.com": {
+      "is": "the hosted Healthchecks ping endpoint",
+      "dismissed": "Not a dependency. The estate standard is Healthchecks self-hosted (BSD-3, docs/STANDARDS.md), and hc-wrap.sh names this host only in a comment recording that the hosted URL shape omits the /ping/ segment. If the hosted service vanished the estate would not notice. Losing our OWN receiver is the real risk, and that is what MON-1 and MON-4 in ~/.estate/REQUIREMENTS.jsonl grade hourly."
+    },
+    "healthchecks.io": {
+      "is": "the project's documentation and hosted service",
+      "dismissed": "Not a dependency. Read once on 2026-08-24 to get the ping protocol right; the URL survives in a comment as a citation. The software is BSD-3 and vendored by us, so the exit from the hosted service is the deployment we already run."
+    },
     "hermes-agent.nousresearch.com": {
       "is": "named in an archived hermes config",
       "dismissed": "hermes-v2.ARCHIVED.20260822; nothing loaded calls it"
@@ -96,6 +104,10 @@
     "mumchimp.com": {
       "is": "a domain the estate owns",
       "dismissed": "no scheduled job calls it. It belongs on the register the day something does"
+    },
+    "opencode.ai": {
+      "is": "the $schema URL in ~/.config/opencode/opencode.json and its .jsonc twin",
+      "dismissed": "a JSON Schema identifier, fetched by an editor for completion and by nothing this estate runs. opencode parses the file whether or not the host answers. Same class as the plist DTD host above."
     },
     "openrouter.ai": {
       "is": "substrate rail, proves Anthropic is replaceable",
@@ -151,33 +163,33 @@
       "is": "the vendor every agent thinks with",
       "covered_by": "no-anthropic"
     },
+    "BLOB_KEY": {
+      "is": "the path of the escrow object inside the R2 bucket, not a credential",
+      "covered_by": "key-escrow-restore"
+    },
+    "CEREBRAS_API_KEY": {
+      "is": "substrate rail with a key and no rail in the drill",
+      "dismissed": "no scheduled job uses it. It is a spare, and a spare nobody calls is not a dependency"
+    },
     "CLAUDE_API_KEY": {
       "is": "the same vendor under a second name",
       "covered_by": "no-anthropic"
     },
-    "OPENROUTER_API_KEY": {
-      "is": "substrate rail",
-      "covered_by": "no-anthropic"
-    },
-    "GROQ_API_KEY": {
-      "is": "substrate rail",
-      "covered_by": "no-anthropic"
-    },
-    "MISTRAL_API_KEY": {
-      "is": "substrate rail and the agent rail",
-      "covered_by": "no-anthropic"
+    "CONSULT_TOKEN": {
+      "is": "auth between two local processes on this Mac",
+      "dismissed": "local, and it dies with the machine the rebuild drill already covers"
     },
     "DEEPSEEK_API_KEY": {
       "is": "substrate rail",
       "covered_by": "no-anthropic"
     },
+    "EXA_API_KEY": {
+      "is": "search",
+      "dismissed": "no scheduled job calls it"
+    },
     "GEMINI_API_KEY": {
       "is": "substrate rail",
       "covered_by": "no-anthropic"
-    },
-    "TELEGRAM_TOKEN": {
-      "is": "the only channel that reaches the founder",
-      "covered_by": "telegram-delivery"
     },
     "GH_TOKEN": {
       "is": "every push, every recovery clone",
@@ -187,29 +199,17 @@
       "is": "the same, inside Actions",
       "covered_by": "github-gone"
     },
-    "R2_ACCOUNT_ID": {
-      "is": "the offsite bundle bucket",
-      "covered_by": "offsite-backup-restore"
-    },
-    "CEREBRAS_API_KEY": {
-      "is": "substrate rail with a key and no rail in the drill",
-      "dismissed": "no scheduled job uses it. It is a spare, and a spare nobody calls is not a dependency"
-    },
-    "MINIMAX_API_KEY": {
-      "is": "spare rail",
-      "dismissed": "same"
-    },
-    "OPENAI_API_KEY": {
-      "is": "spare rail",
-      "dismissed": "same"
+    "GROQ_API_KEY": {
+      "is": "substrate rail",
+      "covered_by": "no-anthropic"
     },
     "HF_TOKEN": {
       "is": "model downloads",
       "dismissed": "build-time only"
     },
-    "EXA_API_KEY": {
-      "is": "search",
-      "dismissed": "no scheduled job calls it"
+    "ICLOUD_KEY": {
+      "is": "the path of the recovery private key in iCloud Drive; the key it names is what opens the escrow",
+      "covered_by": "key-escrow-restore"
     },
     "LANGCHAIN_API_KEY": {
       "is": "tracing",
@@ -219,21 +219,33 @@
       "is": "tracing",
       "dismissed": "same"
     },
-    "CONSULT_TOKEN": {
-      "is": "auth between two local processes on this Mac",
-      "dismissed": "local, and it dies with the machine the rebuild drill already covers"
-    },
-    "BLOB_KEY": {
-      "is": "the path of the escrow object inside the R2 bucket, not a credential",
-      "covered_by": "key-escrow-restore"
-    },
-    "ICLOUD_KEY": {
-      "is": "the path of the recovery private key in iCloud Drive; the key it names is what opens the escrow",
-      "covered_by": "key-escrow-restore"
-    },
     "LOCAL_KEY": {
       "is": "the path of the same recovery key at ~/.config/estate, the copy a scheduled job can read",
       "covered_by": "key-escrow-restore"
+    },
+    "MINIMAX_API_KEY": {
+      "is": "spare rail",
+      "dismissed": "same"
+    },
+    "MISTRAL_API_KEY": {
+      "is": "substrate rail and the agent rail",
+      "covered_by": "no-anthropic"
+    },
+    "OPENAI_API_KEY": {
+      "is": "spare rail",
+      "dismissed": "same"
+    },
+    "OPENROUTER_API_KEY": {
+      "is": "substrate rail",
+      "covered_by": "no-anthropic"
+    },
+    "R2_ACCOUNT_ID": {
+      "is": "the offsite bundle bucket",
+      "covered_by": "offsite-backup-restore"
+    },
+    "TELEGRAM_TOKEN": {
+      "is": "the only channel that reaches the founder",
+      "covered_by": "telegram-delivery"
     }
   }
 }

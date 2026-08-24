@@ -60,6 +60,28 @@ def loaded_labels():
     return labels
 
 
+def loaded_workdir(label):
+    """The working directory in the definition launchd holds, or "".
+
+    Read because a job's code does not have to arrive through a path with a
+    script extension. ai.estate.idp's whole loaded definition names one file,
+    hc-wrap.sh, and runs `idp-up` out of its working directory. Grading only
+    the extension-bearing paths graded the wrapper and never the payload,
+    which is grading a proxy.
+    """
+    try:
+        out = subprocess.run(
+            ["launchctl", "print", f"gui/{UID}/{label}"],
+            capture_output=True, text=True, timeout=20,
+        ).stdout
+    except subprocess.TimeoutExpired:
+        return ""
+    for line in out.splitlines():
+        if "working directory =" in line:
+            return line.split("=", 1)[1].strip()
+    return ""
+
+
 def loaded_paths(label):
     """Script paths inside the definition launchd actually holds in memory."""
     try:
@@ -86,7 +108,7 @@ LIVE_TREE_OK = {
 
 def repo_of(path):
     """The git checkout a path sits in, or "" if it is not in one."""
-    d = os.path.dirname(path)
+    d = path if os.path.isdir(path) else os.path.dirname(path)
     rc = subprocess.run(["git", "-C", d, "rev-parse", "--show-toplevel"],
                         capture_output=True, text=True)
     return rc.stdout.strip() if rc.returncode == 0 else ""
@@ -113,22 +135,30 @@ def published_branch(repo):
     return ""
 
 
-def parked(label, paths):
-    """(repo, on, want) for the first path this job runs out of a parked checkout."""
+def parked(label, paths, workdir=""):
+    """Every (repo, on, want) this job runs out of a parked checkout.
+
+    Every, not the first. An earlier cut returned on the first hit and
+    ai.estate.idp reported ~/.claude/scripts while hiding that ~/dev/code/idp
+    was on fix/catalog-litellm-langfuse. A job can draw code from more than one
+    checkout and each one can be parked independently.
+    """
     if label in LIVE_TREE_OK:
-        return None
-    for path in paths:
-        repo = repo_of(path)
-        if not repo:
+        return []
+    hits, seen = [], set()
+    for path in list(paths) + ([workdir] if workdir else []):
+        repo = repo_of(path if os.path.isdir(path) else os.path.dirname(path) or path)
+        if not repo or repo in seen:
             continue
+        seen.add(repo)
         want = published_branch(repo)
         on = subprocess.run(["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"],
                             capture_output=True, text=True).stdout.strip()
         if not want:
-            return (repo, on or "?", "")
-        if on != want:
-            return (repo, on, want)
-    return None
+            hits.append((repo, on or "?", ""))
+        elif on != want:
+            hits.append((repo, on, want))
+    return hits
 
 
 def selftest():
@@ -156,23 +186,36 @@ def selftest():
                 subprocess.run(g + ["push", "-q", "origin", "main"], check=True)
             if branch != "main":
                 subprocess.run(g + ["checkout", "-qb", branch], check=True)
-            hit = parked("test.job", [script])
-            if bool(hit) != want_flag:
+            hits = parked("test.job", [script])
+            if bool(hits) != want_flag:
                 fails.append(f"{name} on '{branch}': expected "
-                             f"{'a flag' if want_flag else 'no flag'}, got {hit!r}")
+                             f"{'a flag' if want_flag else 'no flag'}, got {hits!r}")
             elif want_flag:
-                _, on, wanted = hit
+                _, on, wanted = hits[0]
                 if (on, wanted) != (branch, "main"):
                     fails.append(f"parked: reported on={on!r} want={wanted!r}")
+            if name == "parked":
+                # the working directory is graded even when no script path is
+                # in it, which is how ai.estate.idp was being missed
+                if not parked("test.job", [], repo):
+                    fails.append("a parked working directory with no script "
+                                 "path in it was not flagged")
+                # both checkouts are reported, not just the first
+                pinned_script = os.path.join(tmp, "pinned", "job.py")
+                both = parked("test.job", [pinned_script], repo)
+                if len(both) != 1 or both[0][1] != branch:
+                    fails.append(f"expected the parked repo reported alongside "
+                                 f"the pinned one, got {both!r}")
         # a listed job is exempt, and only a listed one
-        if parked("ai.estate.tracked-guard", [script]) is not None:
+        if parked("ai.estate.tracked-guard", [script]):
             fails.append("allowlisted label was still graded")
     if fails:
         for f in fails:
             print("SELFTEST FAIL:", f)
         return 1
-    print("selftest OK: PARKED flags a checkout on 'feat/left-behind', passes one "
-          "on 'main', and exempts only the listed labels")
+    print("selftest OK: PARKED flags a checkout on 'feat/left-behind', passes one on "
+          "'main', grades a working directory with no script path in it, reports "
+          "every parked checkout a job draws from, and exempts only the listed labels")
     return 0
 
 
@@ -191,8 +234,7 @@ def main():
         if missing:
             stale.append((label, missing))
             continue
-        hit = parked(label, paths)
-        if hit:
+        for hit in parked(label, paths, loaded_workdir(label)):
             drifted.append((label, hit))
 
     print(f"checked {checked} loaded jobs")

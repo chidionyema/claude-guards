@@ -49,6 +49,14 @@ PATTERNS: list[tuple[str, re.Pattern[str]]] = [
     ("AWS",         re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
     ("SLACK",       re.compile(r"\bxox[abprs]-[A-Za-z0-9\-]{20,}\b")),
     ("GOOGLE",      re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b")),
+    # Added 2026-08-24, after a session ran `docker compose config` on a stack whose
+    # `env_file` is the estate .env. Compose expands every value inline, so one command put
+    # 63 occurrences of 20 live credentials into the session transcript. Each shape below is
+    # one that was in that output and that nothing here matched.
+    ("STRIPE",      re.compile(r"\b[rs]k_(?:live|test)_[A-Za-z0-9]{20,}\b")),
+    ("STRIPE_WH",   re.compile(r"\bwhsec_[A-Za-z0-9]{20,}\b")),
+    ("FLY",         re.compile(r"FlyV1 fm2_[A-Za-z0-9+/=,_\-]{40,}")),
+    ("DEEPSEEK",    re.compile(r"\bsk-[0-9a-f]{32}\b")),
 ]
 
 # Files that agents and shells write. Globs are relative to $HOME.
@@ -60,6 +68,40 @@ TARGET_GLOBS = [
     ".claude/projects/*/CHECKPOINT*.md",
     ".claude/state/logs/*.log",
 ]
+
+# The same job, for files something may be APPENDING to right now -- the session transcript
+# above all, which is the single largest thing an agent writes and was missing from the list
+# until 2026-08-24.
+#
+# They are a separate list because they cannot be rewritten the same way. `rewrite()` below
+# ends in os.replace, and a rename swaps the inode: the writer still holds a descriptor on the
+# old one, so every later line of the session goes to an unlinked file and the transcript
+# stops mid-sentence. These are patched IN PLACE instead, overwriting each match with the same
+# number of bytes, which leaves every offset and the file length untouched.
+LIVE_GLOBS = [
+    ".claude/projects/*/*.jsonl",
+    ".claude/projects/*/tool-results/*",
+]
+
+# Shapes cannot describe an opaque credential. `R2_SECRET_ACCESS_KEY` is 64 hex characters and
+# `CONTROL_CENTER_PASSWORD` is 32 of base62 -- write a pattern loose enough to catch either and
+# it eats git hashes, and a scrubber that corrupts files gets turned off (see the module note).
+#
+# So the second half of this is exact-value matching: read the .env files the estate actually
+# keeps, take every value long enough to be a credential, and delete those exact strings. No
+# false positives are possible, because the string is known to BE a live secret. This is what
+# catches the ones no shape above will ever match.
+VALUE_SOURCES = [
+    ".env",
+    "dev/code/*/.env",
+    ".config/*/secrets.sh",
+]
+MIN_VALUE_LEN = 20
+# Publishable by design -- Stripe prints them in its own docs and they ship in web bundles.
+VALUE_SKIP_PREFIXES = ("pk_live_", "pk_test_", "http://", "https://")
+SECRET_KEY_WORDS = (
+    "KEY", "SECRET", "TOKEN", "PASSWORD", "PASSWD", "PEM", "CREDENTIAL", "WEBHOOK", "DSN",
+)
 
 # Never rewritten. Order matters only for readability.
 EXCLUDE_PARTS = ("hermes-agent", "node_modules", ".git", "__pycache__", "site-packages")
@@ -85,6 +127,104 @@ def targets() -> list[pathlib.Path]:
                 continue
             out.append(p)
     return sorted(set(out))
+
+
+def live_targets() -> list[pathlib.Path]:
+    """LIVE_GLOBS, filtered the same way targets() filters TARGET_GLOBS."""
+    out: list[pathlib.Path] = []
+    for g in LIVE_GLOBS:
+        for p in HOME.glob(g):
+            if not p.is_file() or p.is_symlink():
+                continue
+            if any(part in EXCLUDE_PARTS for part in p.parts):
+                continue
+            try:
+                if p.stat().st_size > MAX_BYTES:
+                    continue
+            except OSError:
+                continue
+            out.append(p)
+    return sorted(set(out))
+
+
+def known_values() -> list[bytes]:
+    """Every live credential VALUE the estate keeps, as bytes to search for.
+
+    Reads the .env files rather than being told what to look for, so a key added tomorrow is
+    covered tomorrow with nothing to update here.
+    """
+    vals: set[bytes] = set()
+    for g in VALUE_SOURCES:
+        for p in HOME.glob(g):
+            if not p.is_file() or p.is_symlink():
+                continue
+            try:
+                text = p.read_text(errors="replace")
+            except OSError:
+                continue
+            for line in text.splitlines():
+                line = line.strip()
+                if line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k = k.replace("export ", "").strip().upper()
+                v = v.strip().strip('"').strip("'")
+                if len(v) < MIN_VALUE_LEN:
+                    continue
+                if v.startswith(VALUE_SKIP_PREFIXES):
+                    continue
+                # The KEY has to look like a credential. Without this, `RUNNER_LABELS` and
+                # every other long config value gets deleted out of transcripts too, and a
+                # scrubber that mangles ordinary text is one somebody switches off.
+                if not any(w in k for w in SECRET_KEY_WORDS):
+                    continue
+                vals.add(v.encode())
+    return sorted(vals, key=len, reverse=True)
+
+
+def patch_in_place(path: pathlib.Path, values: list[bytes], check_only: bool) -> int:
+    """Overwrite matches with the same number of bytes. Safe on a file being appended to.
+
+    Same-length is the whole point: the file's length and every byte offset in it are
+    unchanged, so a process holding it open and writing to the end never notices.
+    """
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return 0
+
+    spans: list[tuple[int, int]] = []
+    for v in values:
+        start = 0
+        while (i := data.find(v, start)) >= 0:
+            spans.append((i, len(v)))
+            start = i + len(v)
+    for _name, rx in PATTERNS:
+        for m in rx.finditer(data.decode("latin-1")):
+            spans.append((m.start(), m.end() - m.start()))
+
+    # A value match and a shape match can cover the same bytes -- `sk_live_...` is both a
+    # known value and the STRIPE pattern. Overwriting twice is harmless, but counting twice is
+    # a number that is not true, so merge overlaps before reporting one.
+    merged: list[tuple[int, int]] = []
+    for off, ln in sorted(spans):
+        if merged and off <= merged[-1][0] + merged[-1][1]:
+            prev_off, prev_ln = merged[-1]
+            merged[-1] = (prev_off, max(prev_ln, off + ln - prev_off))
+        else:
+            merged.append((off, ln))
+    spans = merged
+
+    if not spans or check_only:
+        return len(spans)
+
+    with open(path, "r+b") as f:
+        for off, ln in spans:
+            f.seek(off)
+            f.write(b"X" * ln)
+        f.flush()
+        os.fsync(f.fileno())
+    return len(spans)
 
 
 def scan_text(text: str) -> dict[str, int]:
@@ -144,6 +284,21 @@ def run(check_only: bool) -> int:
         rewrite(p, new)
         touched += 1
         print(f"scrubbed {counts} from {rel}")
+    # The append-safe half. Separate loop because these are patched in place, not rewritten.
+    values = known_values()
+    live_hits = 0
+    live_files = 0
+    for p in live_targets():
+        n = patch_in_place(p, values, check_only)
+        if not n:
+            continue
+        live_hits += n
+        live_files += 1
+        rel = str(p).replace(str(HOME), "~")
+        print(f"{'FOUND' if check_only else 'scrubbed'} {n} occurrence(s) in {rel}")
+    total += live_hits
+    touched += live_files
+
     if check_only:
         print(f"secret-scrub: {total} occurrence(s) in files that should hold none")
         return 1 if total else 0

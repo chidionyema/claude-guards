@@ -11,12 +11,8 @@
 	<string>com.chidionyema.graphify-sweep</string>
 	<key>Nice</key>
 	<integer>10</integer>
-	<key>ProcessType</key>
-	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
-		<string>graphify-sweep</string>
 		<string>/Users/chidionyema/Documents/code/prospector/.venv/bin/python</string>
 		<string>/Users/chidionyema/.hermes/scripts/launchd_receipt.py</string>
 		<string>--label</string>

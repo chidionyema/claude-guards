@@ -59,6 +59,7 @@ def sweep_queued(cwd: str) -> None:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
+            preexec_fn=lambda: os.nice(19),  # transcript mining never outranks a session; load 227 on 2026-08-24
         )
     except Exception:
         return

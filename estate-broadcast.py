@@ -12,7 +12,7 @@ import sys
 import time
 import fcntl
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 BOARD_PATH = Path.home() / ".claude" / "ESTATE_BOARD.jsonl"
 BOARD_LOCK = Path.home() / ".claude" / ".ESTATE_BOARD.lock"
@@ -51,7 +51,8 @@ def mirror_to_github(record):
         DEADLETTER.parent.mkdir(parents=True, exist_ok=True)
         with open(DEADLETTER, "a") as f:
             f.write(json.dumps({"record": record, "error": str(e)[:200],
-                                "ts": datetime.utcnow().isoformat() + "Z"}) + "\n")
+                                "ts": datetime.now(timezone.utc).replace(
+                                    tzinfo=None).isoformat() + "Z"}) + "\n")
         print(f"[WARN] row NOT on GitHub board (crew#{GH_BOARD_ISSUE}): {e} — "
               f"dead-lettered to {DEADLETTER}", file=sys.stderr)
         return False
@@ -133,7 +134,10 @@ def append_broadcast(record):
     
     # Ensure required fields
     if 'ts' not in record:
-        record['ts'] = datetime.utcnow().isoformat() + 'Z'
+        # utcnow() is deprecated and prints a DeprecationWarning on every broadcast,
+        # which puts noise on stderr in the one place a session is trying to read a
+        # receipt. Same wire format, no warning.
+        record['ts'] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + 'Z'
     if 'from' not in record:
         raise ValueError("record must have 'from' field")
     if 'kind' not in record:

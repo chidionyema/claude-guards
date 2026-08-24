@@ -13,7 +13,7 @@ import threading
 from enum import Enum, auto
 from dataclasses import dataclass, field, asdict
 from typing import Optional, Dict, List, Any, Callable, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -351,7 +351,7 @@ class SkillExecutor:
             evidence["duration_ms"] = duration_ms
 
             skill.total_uses += 1
-            skill.last_used = datetime.utcnow().isoformat()
+            skill.last_used = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
             skill.avg_duration_ms = int(
                 (skill.avg_duration_ms * (skill.total_uses - 1) + duration_ms) / skill.total_uses
             )
@@ -410,7 +410,7 @@ class Maestro:
         # the real schedule, and a first-ever run senses before it reviews itself.
         _last = self.db.kv_get("last_meta_review")
         self.last_meta_review = (
-            datetime.fromisoformat(_last) if _last else datetime.utcnow()
+            datetime.fromisoformat(_last) if _last else datetime.now(timezone.utc).replace(tzinfo=None)
         )
         self.daily_findings: List[Dict] = []
         self.daily_resolved: List[Dict] = []
@@ -425,7 +425,7 @@ class Maestro:
                 conn.execute("""
                     INSERT OR IGNORE INTO invariants (id, law_name, last_enforced)
                     VALUES (?, ?, ?)
-                """, (law, law, datetime.utcnow().isoformat()))
+                """, (law, law, datetime.now(timezone.utc).replace(tzinfo=None).isoformat()))
 
     def _board(self, fn, *args, **kwargs):
         """The board is a bus, not a dependency. A GitHub outage must not stop the deputy."""
@@ -439,8 +439,8 @@ class Maestro:
 
     def _new_intent(self, trigger: str) -> Intent:
         self.current_intent = Intent(
-            id=f"INTENT-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}-{hashlib.sha256(trigger.encode()).hexdigest()[:8]}",
-            timestamp=datetime.utcnow().isoformat(),
+            id=f"INTENT-{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y%m%d-%H%M%S')}-{hashlib.sha256(trigger.encode()).hexdigest()[:8]}",
+            timestamp=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
             trigger=trigger,
             state_transitions=["IDLE"]
         )
@@ -491,7 +491,7 @@ class Maestro:
         if self.crisis_mode:
             self._transition(State.CRISIS)
             return
-        if datetime.utcnow() - self.last_meta_review > timedelta(hours=Config.META_REVIEW_INTERVAL_HOURS):
+        if datetime.now(timezone.utc).replace(tzinfo=None) - self.last_meta_review > timedelta(hours=Config.META_REVIEW_INTERVAL_HOURS):
             self._transition(State.META_REVIEW)
             return
         self._transition(State.SENSE)
@@ -535,8 +535,8 @@ class Maestro:
                 intent.orient_analysis["shapes_matched"] += 1
             else:
                 episode = Episode(
-                    id=f"EP-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{hashlib.sha256(finding['id'].encode()).hexdigest()[:6]}",
-                    timestamp=datetime.utcnow().isoformat(),
+                    id=f"EP-{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y%m%d%H%M%S')}-{hashlib.sha256(finding['id'].encode()).hexdigest()[:6]}",
+                    timestamp=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                     lane=finding.get("lane", "estate"),
                     trigger=finding["description"],
                     action="detected",
@@ -581,7 +581,7 @@ class Maestro:
                 "tradeoffs": [{"cost": "time", "probability": 0.3, "impact": "delay"}],
                 "ripple_effects": [{"effect": "service_restart", "then": {"effect": "brief_downtime"}}],
                 "mechanism": finding.get("skill", "unknown") + " execution with verification",
-                "sources": [{"source": "estate_audit", "retrieval_date": datetime.utcnow().isoformat(), "confidence": 0.9}]
+                "sources": [{"source": "estate_audit", "retrieval_date": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), "confidence": 0.9}]
             }
 
             try:
@@ -718,8 +718,8 @@ class Maestro:
                 self._board(board.move, finding["issue"], board.DONE,
                             "Verified by re-sense. Logged to the experience graph.")
             self.db.log_episode(Episode(
-                id=f"EP-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{finding['id']}",
-                timestamp=datetime.utcnow().isoformat(),
+                id=f"EP-{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y%m%d%H%M%S')}-{finding['id']}",
+                timestamp=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 lane=finding.get("lane", "estate"),
                 trigger=finding["description"],
                 action="auto_fix",
@@ -730,8 +730,8 @@ class Maestro:
 
         for finding in self.daily_needs_human:
             self.db.log_episode(Episode(
-                id=f"EP-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{finding['id']}",
-                timestamp=datetime.utcnow().isoformat(),
+                id=f"EP-{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y%m%d%H%M%S')}-{finding['id']}",
+                timestamp=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 lane=finding.get("lane", "estate"),
                 trigger=finding["description"],
                 action="escalated",
@@ -768,8 +768,8 @@ class Maestro:
 
         for finding in p0_findings:
             self.db.log_episode(Episode(
-                id=f"CRISIS-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{finding['id']}",
-                timestamp=datetime.utcnow().isoformat(),
+                id=f"CRISIS-{datetime.now(timezone.utc).replace(tzinfo=None).strftime('%Y%m%d%H%M%S')}-{finding['id']}",
+                timestamp=datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
                 lane=finding.get("lane", "estate"),
                 trigger=finding["description"],
                 action="crisis_escalation",
@@ -785,7 +785,7 @@ class Maestro:
     def _do_meta_review(self):
         stats = self.db.get_stats()
         with sqlite3.connect(self.db.db_path) as conn:
-            yesterday = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+            yesterday = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)).isoformat()
             rows = conn.execute(
                 "SELECT * FROM episodes WHERE timestamp > ?", (yesterday,)
             ).fetchall()
@@ -812,7 +812,7 @@ class Maestro:
                 Priority.P2
             )
 
-        self.last_meta_review = datetime.utcnow()
+        self.last_meta_review = datetime.now(timezone.utc).replace(tzinfo=None)
         self.db.kv_set("last_meta_review", self.last_meta_review.isoformat())
         self._transition(State.IDLE)
 
