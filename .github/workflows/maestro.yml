@@ -63,6 +63,15 @@ jobs:
           test "${rc:-0}" -eq 2
           echo "  restart_bridge refuses an unknown bridge"
 
+      - name: no skill hard-codes a path only one machine has
+        run: |
+          # This job runs the skills on Linux so a broken one never reaches the
+          # Mac. A skill that hard-codes "/System/Volumes/Data" cannot run here
+          # at all, which turns the check into a crash: that is what kept deputy
+          # red on main from 2026-08-23 to 2026-08-24.
+          python skills/_no_machine_paths.py --selftest
+          python skills/_no_machine_paths.py
+
       - name: the deputy never executes an unvetted path
         run: |
           grep -q DANGEROUS_PATTERNS maestro.py || { echo "::error::the dangerous-pattern guard is gone"; exit 1; }
