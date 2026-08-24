@@ -13,6 +13,10 @@
 	</dict>
 	<key>Label</key>
 	<string>com.prospector.backup</string>
+	<key>Nice</key>
+	<integer>10</integer>
+	<key>ProcessType</key>
+	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>

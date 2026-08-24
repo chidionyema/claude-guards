@@ -11,6 +11,8 @@
 	<string>com.estate.bundlepush</string>
 	<key>LowPriorityIO</key>
 	<true/>
+	<key>Nice</key>
+	<integer>10</integer>
 	<key>ProcessType</key>
 	<string>Background</string>
 	<key>ProgramArguments</key>
