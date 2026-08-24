@@ -83,14 +83,7 @@ _ASSIGN = re.compile(r"""(?:^|[\n;&]\s*)(?P<name>[A-Za-z_]\w*)=(?P<val>'[^']*'|"
 
 
 def _expand(text: str, cmd: str) -> str:
-    """`$VAR` and `${VAR}` in `text`, filled from assignments made earlier in `cmd`, then
-    from the environment, then `~`.
-
-    2026-08-24: `cd ~/dev/code/idp && gh pr merge 6` was refused as "could not read the CI
-    checks for PR #6". Neither `~` nor `$HOME` was expanded, so the path was not a repo, the
-    guard fell back to REPO and read PR #6 of a different repository. Fourth variant of the
-    wrong-repo class: a path the shell would resolve and the guard would not.
-    """
+    """`$VAR`, `${VAR}` and `~` in `text`: assignments made earlier in `cmd`, then the environment. See test_incident_rule_guard_tilde_cd_graded_the_wrong_repo.py."""
     for m in _ASSIGN.finditer(cmd):
         val = m.group("val").strip("'\"")
         text = text.replace("${" + m.group("name") + "}", val).replace("$" + m.group("name"), val)
