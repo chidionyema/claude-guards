@@ -12,6 +12,11 @@
     "why": "the laws themselves, read by every agent tool through a symlink"
   },
   {
+    "live": "~/AGENTS-FULL.md",
+    "repo": "laws/AGENTS-FULL.md",
+    "why": "the body of every law: the founder's words, the incident that paid for it, and the tripwires. Split out of ~/AGENTS.md on 2026-08-24 to cut the injected context from 102,649 to about 21,000 bytes. The mirror was committed that day and then never registered here, so it went 3,781 bytes stale while still looking backed up."
+  },
+  {
     "live": "~/.claude/LAWS-INCIDENTS.md",
     "repo": "laws/LAWS-INCIDENTS.md",
     "why": "what each law cost, and why it says what it says"
