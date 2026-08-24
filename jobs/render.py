@@ -14,7 +14,7 @@ a second renderer for another platform is a small job rather than a rewrite.
 launchctl runs the definition it loaded at bootstrap, not the file on disk, so
 writing a plist changes nothing until the job is booted out and back in.
 """
-import argparse, json, os, plistlib, sys
+import argparse, json, os, plistlib, re, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MANIFEST = os.path.join(HERE, "jobs.json")
@@ -57,10 +57,45 @@ def resolve(job, plat):
     return d
 
 
+PLACEHOLDER = re.compile(r"\{[A-Z0-9_]+\}")
+
+
+def unresolved(label, v, path=""):
+    """Every {PLACEHOLDER} left in a rendered job, as (label, path, token).
+
+    2026-08-24. A job was declared as ["/bin/sh", "-c", "{PYTHON3_SYSTEM} ..."].
+    resolve() substitutes a program placeholder only when it is the WHOLE
+    argument (see prog(), which requires startswith('{') and endswith('}')), so a
+    placeholder inside a longer string is copied out literally. launchd then runs
+    a command that begins with the characters '{PYTHON3_SYSTEM}', the shell
+    reports command not found, and the job exits non-zero every interval while
+    looking installed. Nothing checked, because a plist is valid XML either way.
+
+    So this fails the render instead. The check is over the rendered output, not
+    over the manifest, which means it holds for any placeholder any future
+    platform adds without this function being told about it."""
+    out = []
+    if isinstance(v, str):
+        out += [(label, path, m) for m in PLACEHOLDER.findall(v)]
+    elif isinstance(v, list):
+        for i, x in enumerate(v): out += unresolved(label, x, f"{path}[{i}]")
+    elif isinstance(v, dict):
+        for k, x in v.items(): out += unresolved(label, x, f"{path}.{k}")
+    return out
+
+
 def render(job, home):
     job = resolve(job, "launchd")
     d = {k: fill(v, home) for k, v in job.items() if k != "label"}
     d["Label"] = job["label"]
+    left = unresolved(job["label"], d)
+    if left:
+        raise ValueError(
+            f"{job['label']}: {len(left)} placeholder(s) survived rendering: "
+            + ", ".join(f"{p or '<root>'}={t}" for _, p, t in left)
+            + ". A placeholder is substituted only when it is the whole value of "
+              "an argument, so move it out of the surrounding string. If this job "
+              "needs a shell, give it a real script file instead of an inline -c.")
     return d
 
 

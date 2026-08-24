@@ -34,15 +34,24 @@ gets locked in.
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config_syntax import checker_for, problem, read_text  # noqa: E402
+from config_syntax import (  # noqa: E402
+    ParserUnavailable, checker_for, problem, read_text,
+)
 
 DEFAULT_ROOTS = [Path.home() / "dev" / "code", Path.home() / ".claude" / "scripts"]
 BASELINE = Path(__file__).resolve().parent / "config-syntax-baseline.txt"
+BROADCAST = Path(__file__).resolve().parent / "estate-broadcast.py"
+#: What the last --broadcast-on-red run reported. A scheduled sweep that posts
+#: the same red set every six hours is noise, and noise is an instrument nobody
+#: reads (LAW 28), so it posts only when the set changes.
+LAST_RED = Path.home() / ".claude" / "state" / "config-syntax-last-red.json"
 
 #: Build output, dependencies, virtualenvs and runtime state. Not this estate's
 #: files to fix, and they swamp the count.
@@ -80,7 +89,13 @@ def sweep(roots: list[Path]) -> tuple[int, list[tuple[Path, str]], list[tuple[Pa
                 # returning a verdict.
                 blind.append((path, f"{type(exc).__name__}: {exc}"))
                 continue
-            why = problem(path, content)
+            try:
+                why = problem(path, content)
+            except ParserUnavailable as exc:
+                # No parser installed for this format. Not a verdict about the
+                # file, so it must not be counted as broken.
+                blind.append((path, str(exc)))
+                continue
             if why:
                 broken.append((path, why))
     return checked, broken, blind
@@ -100,7 +115,11 @@ def check_files(paths: list[Path]) -> tuple[int, list[tuple[Path, str]], list[tu
         except (OSError, UnicodeDecodeError) as exc:
             blind.append((path, f"{type(exc).__name__}: {exc}"))
             continue
-        why = problem(path, content)
+        try:
+            why = problem(path, content)
+        except ParserUnavailable as exc:
+            blind.append((path, str(exc)))
+            continue
         if why:
             broken.append((path, why))
     return checked, broken, blind
@@ -116,6 +135,62 @@ def load_baseline(path: Path) -> set[str]:
         if line:
             out.add(str(Path(line).expanduser()))
     return out
+
+
+def broadcast_red(new: list[tuple[Path, str]]) -> str:
+    """Post a red sweep to the estate board. Returns what it did, for printing.
+
+    A scheduled job whose only output is a log file nobody opens has not
+    reported anything (LAW 28). This puts a red sweep in front of whichever
+    session is next to read the board.
+
+    It posts only when the set of broken paths changes. Six-hourly repetition of
+    an already-reported file trains every reader to skip the message, which is
+    the same failure as not sending it. A repair followed by a regression posts
+    again, because the set changed twice.
+    """
+    paths = sorted(str(p) for p, _ in new)
+    try:
+        seen = json.loads(LAST_RED.read_text(encoding="utf-8")) if LAST_RED.exists() else []
+    except (OSError, ValueError):
+        seen = []
+    if paths == seen:
+        return f"broadcast=skipped (same {len(paths)} path(s) as the last red run)"
+
+    listed = "; ".join(paths[:5]) + ("" if len(paths) <= 5 else f"; +{len(paths) - 5} more")
+    message = (
+        f"config-syntax-sweep is RED: {len(paths)} config file(s) the service that "
+        f"reads them cannot parse. {listed}. A service refuses the whole file at "
+        f"startup and anything waiting on its health is never created, which reads "
+        f"as 'not started yet' rather than as a fault. "
+        f"Run: python3 ~/.claude/scripts/config-syntax-sweep.py"
+    )
+    try:
+        r = subprocess.run(
+            [sys.executable, str(BROADCAST), "--from", "config-syntax-sweep",
+             "--kind", "alert", "--priority", "high", "--message", message],
+            capture_output=True, text=True, timeout=120,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        # The sweep's verdict does not depend on the broadcast working. It still
+        # exits 1; it just says the alert did not leave the machine.
+        return f"broadcast=FAILED ({type(exc).__name__}: {exc})"
+    if r.returncode != 0:
+        return f"broadcast=FAILED (exit {r.returncode}: {r.stderr.strip()[:200]})"
+    try:
+        LAST_RED.parent.mkdir(parents=True, exist_ok=True)
+        LAST_RED.write_text(json.dumps(paths), encoding="utf-8")
+    except OSError as exc:
+        return f"broadcast=posted, but the state file was not written ({exc})"
+    return f"broadcast=posted ({len(paths)} path(s))"
+
+
+def clear_red_state() -> None:
+    """A green run forgets the last red set, so a regression alerts again."""
+    try:
+        LAST_RED.unlink(missing_ok=True)
+    except OSError:
+        pass
 
 
 def selftest() -> int:
@@ -165,6 +240,8 @@ def main() -> int:
                     help="exit 1 on every broken file, baselined or not")
     ap.add_argument("--files", action="store_true",
                     help="treat the arguments as files, not trees (used by the git hook)")
+    ap.add_argument("--broadcast-on-red", action="store_true",
+                    help="post a red result to the estate board (used by the scheduled job)")
     args = ap.parse_args()
     if args.selftest:
         return selftest()
@@ -185,6 +262,11 @@ def main() -> int:
         print(f"KNOWN   {path}\n        {why[:200]}")
     for path, why in blind:
         print(f"BLIND   {path}\n        {why[:200]}")
+
+    if args.broadcast_on_red:
+        print(broadcast_red(new) if new else "broadcast=not needed (green)")
+        if not new:
+            clear_red_state()
     return 1 if new else 0
 
 
