@@ -168,8 +168,7 @@
     "StandardOutPath": "{HOME}/.claude/logs/drills.log",
     "StartCalendarInterval": {
       "Hour": 4,
-      "Minute": 30,
-      "Weekday": 1
+      "Minute": 30
     },
     "WorkingDirectory": "{HOME}/.claude/scripts",
     "label": "ai.estate.drills"

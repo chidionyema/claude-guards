@@ -1556,10 +1556,66 @@ def collect_founder_requests() -> list[Row]:
     return rows
 
 
+def collect_drills() -> list[Row]:
+    """Which recovery paths have actually been taken, and how long ago.
+
+    The drills ran, passed and posted to ESTATE_BOARD.jsonl, which is the channel
+    agent sessions read. Nothing put them in front of the founder. He asked on
+    2026-08-24 whether they were visible; they were visible to the machines and
+    not to him, which is the half that does not count.
+
+    The status rules are imported from drills/run.py rather than reimplemented
+    here. Two copies of "is this drill stale" would drift, and the copy on the
+    board is the one he would believe.
+    """
+    reg_path = os.path.join(SCRIPTS, "drills", "register.json")
+    if not os.path.exists(reg_path):
+        return [_unknown("Recovery drills", f"no register at {reg_path}")]
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_drills_run", os.path.join(SCRIPTS, "drills", "run.py"))
+        run = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(run)
+        reg = run.load()
+    except Exception as e:                        # noqa: BLE001 -- never report zero
+        return [_unknown("Recovery drills", f"{type(e).__name__}: {e}")]
+
+    rows, bad_ids, written = [], [], 0
+    for d in reg["drills"]:
+        if not d.get("cmd"):
+            continue
+        written += 1
+        st, detail = run.status_of(d, reg)
+        if st != "PASS":
+            bad_ids.append(d["id"])
+            rows.append(Row(BAD if st == "FAIL" else WARN,
+                            f"— {d['id']}", st, detail[:110],
+                            f"drills/run.py --run {d['id']}"))
+    unproven = [d["id"] for d in reg["drills"] if not d.get("cmd")]
+    stray = [n for n, _ in run.orphans(reg)]
+
+    rows.insert(0, Row(
+        BAD if bad_ids else GOOD,
+        "Ways back that have actually been taken",
+        f"{written - len(bad_ids)} of {written} green",
+        (f"{len(bad_ids)} need a run: " + ", ".join(bad_ids) if bad_ids
+         else "every written drill passed inside its own staleness bar")
+        + f". {len(unproven)} more paths have no drill at all: "
+        + ", ".join(unproven),
+        "drills/run.py --check"))
+    if stray:
+        rows.append(Row(BAD, "— drills nothing runs", str(len(stray)),
+                        "written, never registered, so they prove nothing: "
+                        + ", ".join(stray), "drills/run.py --check"))
+    return rows
+
+
 COLLECTORS = [
     ("Is the machine able to work?", collect_machine),
     ("Money", collect_spend),
     ("Can we get the data back?", collect_backup),
+    ("Ways back, proved rather than believed", collect_drills),
     ("Your requests, closed with proof", collect_founder_requests),
     ("What you said, and whether it landed", collect_founder_friction),
     ("Work in flight", collect_prs),
