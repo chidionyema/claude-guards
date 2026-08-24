@@ -5,7 +5,7 @@
 	<key>EnvironmentVariables</key>
 	<dict>
 		<key>PATH</key>
-		<string>/Users/chidionyema/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+		<string>/usr/local/bin:/usr/bin:/bin</string>
 	</dict>
 	<key>Label</key>
 	<string>com.chidionyema.graphify-sweep</string>
@@ -13,22 +13,44 @@
 	<integer>10</integer>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/Documents/code/prospector/.venv/bin/python</string>
-		<string>/Users/chidionyema/.hermes/scripts/launchd_receipt.py</string>
-		<string>--label</string>
-		<string>com.chidionyema.graphify-sweep</string>
-		<string>--</string>
-		<string>/Users/chidionyema/Documents/code/prospector/.venv/bin/python</string>
-		<string>/Users/chidionyema/Documents/code/prospector/scripts/graphify_sweep.py</string>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>graphify-sweep</string>
+		<string>/usr/local/bin/python3</string>
+		<string>/Users/chidionyema/dev/code/prospector-main/scripts/graphify_sweep.py</string>
 		<string>--fix</string>
+		<string>--root</string>
+		<string>/Users/chidionyema/dev/code</string>
 	</array>
-	<key>RunAtLoad</key>
-	<false/>
 	<key>StandardErrorPath</key>
-	<string>/Users/chidionyema/.claude/graphify-refresh.log</string>
+	<string>/Users/chidionyema/.claude/state/graphify-sweep.log</string>
 	<key>StandardOutPath</key>
-	<string>/Users/chidionyema/.claude/graphify-refresh.log</string>
-	<key>StartInterval</key>
-	<integer>1800</integer>
+	<string>/Users/chidionyema/.claude/state/graphify-sweep.log</string>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict>
+			<key>Hour</key>
+			<integer>1</integer>
+			<key>Minute</key>
+			<integer>57</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>7</integer>
+			<key>Minute</key>
+			<integer>57</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>13</integer>
+			<key>Minute</key>
+			<integer>57</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>19</integer>
+			<key>Minute</key>
+			<integer>57</integer>
+		</dict>
+	</array>
 </dict>
 </plist>

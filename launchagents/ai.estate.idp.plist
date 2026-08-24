@@ -7,30 +7,101 @@
 		<key>HOME</key>
 		<string>/Users/chidionyema</string>
 		<key>PATH</key>
-		<string>/Users/chidionyema/.nvm/versions/node/v22.13.1/bin:/Users/chidionyema/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+		<string>/usr/local/bin:/System/Cryptexes/App/usr/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/usr/local/share/dotnet:~/.dotnet/tools:/Library/Frameworks/Mono.framework/Versions/Current/Commands:/Users/chidionyema/.kimi-code/bin:/Users/chidionyema/.local/bin:/usr/local/opt/node@20/bin:/Users/chidionyema/anaconda3/bin:/Users/chidionyema/anaconda3/condabin:/Users/chidionyema/.cargo/bin:/Users/chidionyema/.rvm/bin</string>
 	</dict>
 	<key>Label</key>
 	<string>ai.estate.idp</string>
 	<key>LowPriorityIO</key>
 	<true/>
 	<key>Nice</key>
-	<integer>10</integer>
-	<key>ProcessType</key>
-	<string>Background</string>
+	<integer>5</integer>
 	<key>ProgramArguments</key>
 	<array>
 		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
-		<string>idp</string>
+		<string>estate-idp</string>
 		<string>/Users/chidionyema/dev/code/idp/bin/idp-up</string>
 	</array>
 	<key>RunAtLoad</key>
-	<false/>
+	<true/>
 	<key>StandardErrorPath</key>
 	<string>/Users/chidionyema/dev/code/idp/logs/launchd.log</string>
 	<key>StandardOutPath</key>
 	<string>/Users/chidionyema/dev/code/idp/logs/launchd.log</string>
-	<key>StartInterval</key>
-	<integer>3600</integer>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict>
+			<key>Hour</key>
+			<integer>0</integer>
+			<key>Minute</key>
+			<integer>59</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>2</integer>
+			<key>Minute</key>
+			<integer>59</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>4</integer>
+			<key>Minute</key>
+			<integer>59</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>6</integer>
+			<key>Minute</key>
+			<integer>59</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>8</integer>
+			<key>Minute</key>
+			<integer>59</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>10</integer>
+			<key>Minute</key>
+			<integer>59</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>12</integer>
+			<key>Minute</key>
+			<integer>59</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>14</integer>
+			<key>Minute</key>
+			<integer>59</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>16</integer>
+			<key>Minute</key>
+			<integer>59</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>18</integer>
+			<key>Minute</key>
+			<integer>59</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>20</integer>
+			<key>Minute</key>
+			<integer>59</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>22</integer>
+			<key>Minute</key>
+			<integer>59</integer>
+		</dict>
+	</array>
 	<key>WorkingDirectory</key>
 	<string>/Users/chidionyema/dev/code/idp</string>
 </dict>

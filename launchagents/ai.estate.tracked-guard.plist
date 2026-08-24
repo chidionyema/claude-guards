@@ -26,7 +26,7 @@
 	<key>StandardOutPath</key>
 	<string>/Users/chidionyema/.claude/state/logs/tracked-guard.out.log</string>
 	<key>StartInterval</key>
-	<integer>1800</integer>
+	<integer>1783</integer>
 	<key>WorkingDirectory</key>
 	<string>/Users/chidionyema/.claude/scripts</string>
 </dict>

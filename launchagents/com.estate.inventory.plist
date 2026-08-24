@@ -1,58 +1,61 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!--
-  The estate inventory, scheduled and DELIVERED. LAW 39 + LAW 28.
-
-  This exists because the working inventory was scheduled by nothing. Measured 2026-08-24:
-  `grep -l "estate/scripts/inventory.py" ~/Library/LaunchAgents/*.plist` returned nothing,
-  while `com.prospector.estate-inventory` ran hourly against a DIFFERENT script of the same
-  name in ~/Documents/code/prospector-live, exited 1 every hour on
-  "getcwd: Operation not permitted" because macOS TCC blocks ~/Documents, and wrote its log
-  into that same blocked directory. So the estate had two inventories: one that worked and
-  nobody ran, and one that ran and could not work.
-
-  That older job is left alone on purpose. It inventories cloud resources, which is a
-  different question, and repointing it would silently delete a job somebody wants. It is
-  ticketed instead.
-
-  StandardOutPath is under ~/.estate, NOT ~/Documents, for the reason above.
--->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>/Users/chidionyema</string>
+		<key>PATH</key>
+		<string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>Label</key>
+	<string>com.estate.inventory</string>
 	<key>Nice</key>
 	<integer>10</integer>
-  <key>Label</key>
-  <string>com.estate.inventory</string>
-
-  <key>ProgramArguments</key>
-  <array>
-    <string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
-    <string>estate-inventory-real</string>
-    <string>/usr/local/bin/python3</string>
-    <string>/Users/chidionyema/.estate/scripts/inventory.py</string>
-    <string>--deliver</string>
-    <string>--duplicates</string>
-  </array>
-
-  <key>StartInterval</key>
-  <integer>3600</integer>
-
-  <key>RunAtLoad</key>
-  <false/>
-
-  <key>WorkingDirectory</key>
-  <string>/Users/chidionyema/.estate</string>
-
-  <key>StandardOutPath</key>
-  <string>/Users/chidionyema/.estate/state/logs/inventory.log</string>
-  <key>StandardErrorPath</key>
-  <string>/Users/chidionyema/.estate/state/logs/inventory.log</string>
-
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>HOME</key>
-    <string>/Users/chidionyema</string>
-    <key>PATH</key>
-    <string>/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-  </dict>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>estate-inventory-real</string>
+		<string>/usr/local/bin/python3</string>
+		<string>/Users/chidionyema/.estate/scripts/inventory.py</string>
+		<string>--deliver</string>
+		<string>--duplicates</string>
+	</array>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>StandardErrorPath</key>
+	<string>/Users/chidionyema/.estate/state/logs/inventory.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/chidionyema/.estate/state/logs/inventory.log</string>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict>
+			<key>Hour</key>
+			<integer>1</integer>
+			<key>Minute</key>
+			<integer>13</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>7</integer>
+			<key>Minute</key>
+			<integer>13</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>13</integer>
+			<key>Minute</key>
+			<integer>13</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>19</integer>
+			<key>Minute</key>
+			<integer>13</integer>
+		</dict>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/chidionyema/.estate</string>
 </dict>
 </plist>

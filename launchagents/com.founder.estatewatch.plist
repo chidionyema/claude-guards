@@ -18,6 +18,6 @@
 	<key>StandardOutPath</key>
 	<string>/Users/chidionyema/.claude/state/logs/estate-watch.out.log</string>
 	<key>StartInterval</key>
-	<integer>1800</integer>
+	<integer>1811</integer>
 </dict>
 </plist>

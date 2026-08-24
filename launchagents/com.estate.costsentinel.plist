@@ -26,6 +26,6 @@
 	<key>StandardOutPath</key>
 	<string>/Users/chidionyema/.claude/logs/cost-sentinel.log</string>
 	<key>StartInterval</key>
-	<integer>900</integer>
+	<integer>877</integer>
 </dict>
 </plist>

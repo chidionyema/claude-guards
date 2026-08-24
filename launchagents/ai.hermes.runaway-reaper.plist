@@ -32,7 +32,7 @@
 	<key>StandardOutPath</key>
 	<string>/Users/chidionyema/.hermes/logs/runaway-reaper.out.log</string>
 	<key>StartInterval</key>
-	<integer>300</integer>
+	<integer>307</integer>
 	<key>WorkingDirectory</key>
 	<string>/Users/chidionyema/.hermes</string>
 </dict>

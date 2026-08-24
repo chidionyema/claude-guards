@@ -18,8 +18,33 @@
 	<string>/Users/chidionyema/.claude/state/logs/config-syntax-sweep.err.log</string>
 	<key>StandardOutPath</key>
 	<string>/Users/chidionyema/.claude/state/logs/config-syntax-sweep.out.log</string>
-	<key>StartInterval</key>
-	<integer>21600</integer>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict>
+			<key>Hour</key>
+			<integer>2</integer>
+			<key>Minute</key>
+			<integer>17</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>8</integer>
+			<key>Minute</key>
+			<integer>17</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>14</integer>
+			<key>Minute</key>
+			<integer>17</integer>
+		</dict>
+		<dict>
+			<key>Hour</key>
+			<integer>20</integer>
+			<key>Minute</key>
+			<integer>17</integer>
+		</dict>
+	</array>
 	<key>_why_user_python</key>
 	<string>PYTHON3_SYSTEM is /usr/bin/python3, which is 3.9.6 on this Mac and has no tomllib (stdlib from 3.11). The module now degrades to BLIND rather than crashing, but BLIND on every .toml file is not the job. 3.14.6 is at /usr/local/bin/python3.</string>
 </dict>

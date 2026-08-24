@@ -30,6 +30,6 @@
 	<key>StandardOutPath</key>
 	<string>/Users/chidionyema/.prospector/logs/com.prospector-control.receipt-bridge.log</string>
 	<key>StartInterval</key>
-	<integer>900</integer>
+	<integer>919</integer>
 </dict>
 </plist>
