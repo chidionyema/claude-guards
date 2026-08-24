@@ -59,7 +59,8 @@
       "xbuild*",
       "uv/uv-receipt.json",
       "browser-harness/version-cache.json",
-      "*.example"
+      "*.example",
+      "estate/recovery-key.txt"
     ],
     "why": "per-tool configuration: gh, git, rclone, uv, fish, and this estate's own tools"
   },
