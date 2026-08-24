@@ -992,12 +992,83 @@ def rule_secret_store_dump(cmd: str) -> str | None:
     return None
 
 
+_PAID_INFRA_ESCAPE = "founder-approved-spend"
+
+#: One provider CLI plus a verb that CREATES a billable thing. Read the second column as the
+#: invoice that arrives. Nothing here matches a list, a describe, a delete or a plan, because
+#: reading costs nothing and destroying saves money -- see the ALLOW cases in selftest().
+_PAID_PROVISION = (
+    (re.compile(r"\bhcloud\s+(?:server|volume|load-balancer|primary-ip|floating-ip)\s+create\b"),
+     "Hetzner Cloud"),
+    (re.compile(r"\bdoctl\s+(?:compute\s+(?:droplet|load-balancer)|databases?|kubernetes\s+cluster)"
+                r"\s+create\b"), "DigitalOcean"),
+    (re.compile(r"\baws\s+(?:ec2\s+run-instances|eks\s+create-cluster|rds\s+create-db-instance)\b"),
+     "AWS"),
+    (re.compile(r"\bgcloud\s+(?:compute\s+instances\s+create|container\s+clusters\s+create"
+                r"|sql\s+instances\s+create)\b"), "Google Cloud"),
+    (re.compile(r"\baz\s+(?:vm\s+create|aks\s+create|container\s+create)\b"), "Azure"),
+    (re.compile(r"\blinode-cli\s+linodes\s+create\b"), "Linode"),
+    (re.compile(r"\bvultr-cli\s+instance\s+create\b"), "Vultr"),
+    (re.compile(r"\bscw\s+instance\s+server\s+create\b"), "Scaleway"),
+    # A plan's cost is invisible from the command line, which is exactly why applying one is the
+    # moment to stop. If the plan provisions nothing billable, the escape marker says so in one line.
+    (re.compile(r"\b(?:terraform|tofu)\s+apply\b"), "whatever the plan provisions"),
+    (re.compile(r"\bpulumi\s+up\b"), "whatever the stack provisions"),
+)
+
+
+def rule_paid_infra(cmd: str) -> str | None:
+    """Founder ruling R14, 2026-08-24: "Mac is the prove-and-build substrate. Full stop."
+
+    His words, in full: "NO paid infra without explicit founder sign-off. Free tier only (Oracle
+    Always Free, GitHub-hosted runners, etc.). If it costs >EUR 0, it waits until after
+    prove-and-build is done. Real cluster follows proof, never precedes it. Exceptions: none
+    until further notice."
+
+    WHAT PAID FOR IT. On 2026-08-24 I told him a rented Hetzner box at EUR 3.79/month was "the
+    only thing between the merged manifests and a cluster", and that it was his call because it
+    was money. Both halves were wrong. The manifests had never been applied to any API server, so
+    the box would have been rented to find out whether the work was correct; and a session that
+    turns a question it can answer locally into a spend decision is putting the founder in a loop
+    R5 already took him out of. crew#78 had been carrying that ask since before anything was ever
+    applied to a cluster.
+
+    WHAT IT DOES NOT REFUSE, and this half matters more (LAW 38). `k3d cluster create`, `kind
+    create cluster` and `minikube start` are the substrate itself and must never be refused --
+    deploy/rehearse_cluster.sh:176 is the one tracked file in this estate that runs one, measured
+    2026-08-24. Neither is `hcloud server list`, `terraform plan`, `aws s3 ls` or any delete:
+    reading costs nothing and destroying saves money.
+
+    RESIDUAL, stated because a guard that hides what it cannot see is worse than none. It reads
+    one command at a time, so it cannot see a paid resource created through a web console, a
+    Makefile target that shells out, or a provider SDK called from Python. And it deliberately
+    lets the `oci` CLI through, because R14 names Oracle Always Free as permitted and no command
+    line distinguishes a free shape from a billable one. rulings.json holds R14."""
+    if _PAID_INFRA_ESCAPE in cmd:
+        return None
+    for matcher, provider in _PAID_PROVISION:
+        if not matcher.search(cmd):
+            continue
+        return ("BLOCKED by rule-guard: this provisions infrastructure that costs money "
+                f"({provider}).\n"
+                'Founder ruling R14 (2026-08-24), verbatim: "Mac is the prove-and-build '
+                'substrate. Full stop. NO paid infra without explicit founder sign-off. Free '
+                'tier only (Oracle Always Free, GitHub-hosted runners, etc.). If it costs >EUR '
+                '0, it waits until after prove-and-build is done. Real cluster follows proof, '
+                'never precedes it."\n'
+                "Prove it on the substrate first: deploy/rehearse_cluster.sh runs a real k3d "
+                "cluster on this laptop for EUR 0, and reading, planning and destroying are all "
+                "still allowed. Standing rulings: ~/.claude/scripts/rulings.json"
+                + _escape(_PAID_INFRA_ESCAPE))
+    return None
+
+
 RULES = (rule_add_all, rule_runtime_state, rule_no_verify, rule_index_lock, rule_two_dot_diff,
          rule_pr_size, rule_commit_in_shared_checkout, rule_merge_red_pr,
          rule_ci_autoscale, rule_clone_makes_a_standby,
          rule_restart_kills_a_live_build, rule_shared_stash,
          rule_force_push, rule_no_fly_revival, rule_direct_push_main,
-         rule_secret_store_dump)
+         rule_secret_store_dump, rule_paid_infra)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
@@ -1124,6 +1195,52 @@ def selftest() -> int:
         ("flyctl logs -a prospector-engine", None),
         ("flyctl apps destroy prospector-engine --yes", None),
         ("flyctl scale count 0 -a x  # fly-revival-intended", None),
+
+        # rule_paid_infra. Founder ruling R14: the Mac is the substrate and nothing above EUR 0
+        # gets provisioned. Every provider is proved BOTH ways in the same run (LAW 45 step 3),
+        # because a guard only ever seen refusing has never been shown to permit -- and the half
+        # that would hurt is the ALLOW half: refusing `k3d cluster create` would take away the
+        # only substrate the estate has.
+        ("hcloud server create --type cx22 --image ubuntu-24.04 --name k3s-1", "rule_paid_infra"),
+        ("hcloud server list", None),
+        ("hcloud server delete 12345", None),
+        ("doctl compute droplet create prod --size s-2vcpu-4gb", "rule_paid_infra"),
+        ("doctl kubernetes cluster create prod --region lon1", "rule_paid_infra"),
+        ("doctl compute droplet list", None),
+        ("aws ec2 run-instances --image-id ami-0abc --count 1", "rule_paid_infra"),
+        ("aws eks create-cluster --name prod --role-arn arn:aws:iam::1:role/x", "rule_paid_infra"),
+        ("aws ec2 describe-instances", None),
+        ("aws ec2 terminate-instances --instance-ids i-0abc", None),
+        ("gcloud container clusters create prod --zone europe-west2-a", "rule_paid_infra"),
+        ("gcloud compute instances create node-1 --machine-type e2-medium", "rule_paid_infra"),
+        ("gcloud container clusters list", None),
+        ("az aks create -g rg -n prod --node-count 1", "rule_paid_infra"),
+        ("az vm create -g rg -n vm1 --image Ubuntu2404", "rule_paid_infra"),
+        ("az aks list", None),
+        ("linode-cli linodes create --type g6-standard-2", "rule_paid_infra"),
+        ("vultr-cli instance create --region lhr --plan vc2-1c-1gb", "rule_paid_infra"),
+        ("scw instance server create type=DEV1-S", "rule_paid_infra"),
+        # A plan's cost is invisible from the command line. Applying is where it stops; planning,
+        # reading and destroying are not spend.
+        ("terraform apply -auto-approve", "rule_paid_infra"),
+        ("tofu apply", "rule_paid_infra"),
+        ("terraform plan -out=tfplan", None),
+        ("terraform destroy -auto-approve", None),
+        ("terraform init", None),
+        ("pulumi up --yes", "rule_paid_infra"),
+        ("pulumi preview", None),
+        # THE ALLOW HALF THAT MATTERS. This is the substrate R14 names, and it is EUR 0. The one
+        # tracked file in the estate that runs it is deploy/rehearse_cluster.sh:176, measured
+        # 2026-08-24; a guard that refused this line would leave nowhere to prove anything.
+        ("k3d cluster create prospector-rehearsal --agents 0 --wait", None),
+        ("kind create cluster --name prospector", None),
+        ("minikube start --driver=docker", None),
+        ("kubectl create namespace prospector", None),
+        ("docker run -d --name engine prospector-engine:latest", None),
+        # Oracle Always Free is named as permitted in the ruling itself, and no command line
+        # separates a free shape from a billable one. Stated as a residual in the docstring.
+        ("oci compute instance launch --shape VM.Standard.A1.Flex", None),
+        ("hcloud server create --type cx22  # founder-approved-spend", None),
 
         # rule_secret_store_dump. Every instance is proved BOTH ways in the same run (LAW 45
         # step 3): the dumping form refuses, and the names-only form of the SAME tool passes.
