@@ -1,0 +1,82 @@
+# Policy as code, applied to this repository's own policy code.
+#
+# `guards.yml` proves every Python file compiles. That is a floor, and it says
+# nothing about whether the file should exist. This job answers the question the
+# founder actually asked on 2026-08-24 -- "policcy as code", after "we need to be
+# deleting pything scripts tbh" -- by refusing the next hand-rolled guard instead
+# of asking a reviewer to notice it.
+#
+# The rules are in policy/hand_rolled_policy.rego and are evaluated by OPA
+# through conftest. Nothing here is a bespoke checker; the whole gate is a data
+# file, a Rego policy and two fixtures.
+#
+# WHY IT PROVES ITSELF BOTH WAYS. A gate only ever seen refusing has never been
+# shown to permit, and a gate that refuses correct work is an outage (LAW 38).
+# So every run evaluates two fixtures as well as the tree: one that must fail and
+# one that must pass. If either fixture stops behaving, this job fails even when
+# the tree is clean.
+name: policy
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hand-rolled-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      CONFTEST_VERSION: "0.69.0"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: install conftest
+        run: |
+          curl -sSfL "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz" \
+            | tar -xz conftest
+          sudo mv conftest /usr/local/bin/
+          conftest --version
+
+      # The inventory is two facts per guard: how many lines it is, and whether
+      # anything in this repository runs it. Built with find and jq rather than a
+      # script, because a Python script that polices Python scripts is the habit
+      # this job exists to break.
+      #
+      # Hyphenated names only. This estate's convention is that an executable is
+      # `some-guard.py` and a library is `guard_report.py`; guard_report.py is
+      # imported by 22 files and is not a guard.
+      - name: build the inventory
+        run: |
+          find . -maxdepth 2 \
+               \( -name '*-guard*.py' -o -name '*-gate*.py' -o -name '*-fence*.py' -o -name 'guard-*.py' \) \
+               -not -name 'test_*' -not -name '*.bak*' \
+            | sed 's|^\./||' | sort > guards.txt
+          while read -r f; do
+            printf '{"path":"%s","lines":%s}\n' "$f" "$(wc -l < "$f" | tr -d ' ')"
+          done < guards.txt | jq -s '{guards: .}' > guards.json
+          grep -ohE '[A-Za-z0-9_.-]+\.py' settings/settings.json jobs/jobs.json \
+            | sort -u | jq -R -s 'split("\n") | map(select(length > 0))' > wired.json
+          jq -s '{guards: .[0].guards, wired: .[1]}' guards.json wired.json > inventory.json
+          echo "guards found: $(jq '.guards | length' inventory.json)"
+
+      - name: the policy must refuse a new hand-rolled guard
+        run: |
+          if conftest test --policy policy policy/fixtures/must_deny.json; then
+            echo "::error::the policy permitted a case it must refuse -- the gate is not enforcing"
+            exit 1
+          fi
+          echo "correct: refused"
+
+      - name: the policy must permit a shrinking guard
+        run: conftest test --policy policy policy/fixtures/must_allow.json
+
+      # Warnings are printed and do not fail. They name guards that are wired to
+      # nothing; see the comment on the `warn` rule for why that is not yet a
+      # denial and what promotes it.
+      - name: the tree itself
+        run: conftest test --policy policy inventory.json

@@ -1,0 +1,8 @@
+{
+  "_comment": "Must pass. A legacy guard that shrank, and one at exactly its ceiling. Migration and refactoring are never blocked; only new hand-rolled policy and growth are.",
+  "guards": [
+    {"path": "scope-guard.py", "lines": 40},
+    {"path": "rule-guard.py", "lines": 1327}
+  ],
+  "wired": ["scope-guard.py", "rule-guard.py"]
+}
