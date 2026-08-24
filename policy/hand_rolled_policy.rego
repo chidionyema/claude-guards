@@ -63,6 +63,37 @@ legacy := {
 	"canonical-root-guard.py": 133,
 }
 
+# How many command refusals each guard still implements in Python. Same direction
+# as `legacy`: it only ever falls.
+#
+# The line ceiling alone does not catch the reversion the founder named. A session
+# can add a tenth rule function and delete a comment block to stay under it, and
+# the diff reads as a shrink. This counts the thing itself. The six left in
+# rule-guard.py are the ones that shell out to git or gh to ask about the live
+# tree, which Rego cannot do.
+rule_ceiling := {"rule-guard.py": 6}
+
+deny contains msg if {
+	some g in input.guards
+	ceiling := rule_ceiling[g.path]
+	g.rules > ceiling
+	msg := sprintf(
+		"%s implements %d command refusals in Python, up from %d. A refusal is an entry in policy/command.rego with its must_match and must_not_match examples -- `make guard NAME=...` scaffolds one. If it genuinely has to ask git or gh a live question, say so in the PR and raise the number in `rule_ceiling`.",
+		[g.path, g.rules, ceiling],
+	)
+}
+
+# policy/ holds Rego. A Python file under it is the old habit finding a new home,
+# and that is not hypothetical: policy/differential.py lived there for the length
+# of one migration and had to be deleted by hand when it was done.
+deny contains msg if {
+	some f in input.policy_dir_py
+	msg := sprintf(
+		"%s is Python under policy/. That directory is Rego, which OPA already evaluates. Put the rule in policy/command.rego and its cases in policy/command_test.rego.",
+		[f],
+	)
+}
+
 deny contains msg if {
 	some g in input.guards
 	not legacy[g.path]

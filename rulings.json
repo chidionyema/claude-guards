@@ -57,6 +57,13 @@
       "verbatim": "we need to think as if an investor is going to buy the platform tomorrow",
       "meaning": "Production-ready is the only standard: no human-at-a-laptop assumptions, no half-wired instruments, everything demonstrable. Codified as LAW 41.",
       "enforced_by": "LAW 41"
+    },
+    {
+      "id": "R15-command-guards-are-rego",
+      "date": "2026-08-24",
+      "verbatim": "Command guards are Rego under policy/. Python guards are deprecated and rejected by CI.",
+      "meaning": "A refusal that can be decided from the command string is an entry in policy/command.rego with its `re`, `marker`, `msg` and the `must_match`/`must_not_match` examples that keep it honest. `make guard NAME=x` scaffolds one and the test fails until real examples replace the TODOs. Do not add a `def rule_` to rule-guard.py: the count is ratcheted and CI refuses a rise. The six that remain shell out to git or gh to ask about the live tree, which Rego cannot do; they are the backlog, not the pattern. Enacted by the cutover in PR #28, which moved nine refusals after replaying 35,705 commands through both implementations with zero disagreements.",
+      "enforced_by": "policy/hand_rolled_policy.rego (rule_ceiling, policy_dir_py, legacy line ceilings), gated by .github/workflows/policy.yml"
     }
   ]
 }

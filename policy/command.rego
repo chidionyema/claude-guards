@@ -258,6 +258,7 @@ rules := [
 			"lands it when qa and review-gate pass.",
 		]),
 	},
+	# make guard inserts here
 ]
 
 # ---------------------------------------------------------------------------
