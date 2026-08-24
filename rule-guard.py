@@ -30,9 +30,13 @@ is wrong, and then it protects nothing.
 
 ADDING A RULE
 -------------
-Add a function to RULES. It takes the command string and returns a refusal message or None.
-Then add a case to selftest(). `python3 rule-guard.py --selftest` must pass before wiring.
-A rule with no selftest case is not a rule; it is a comment.
+In Rego, in policy/command.rego, not here. Add an entry to `rules` with its `re`,
+`marker`, `msg`, and the `must_match` / `must_not_match` examples that keep it
+honest, then `opa test policy/command.rego policy/command_test.rego`.
+
+The six rules still written in Python below are the ones Rego cannot express: each
+one shells out to git or gh to ask a question about the live tree. They are the
+backlog, not the pattern.
 """
 from __future__ import annotations
 
@@ -167,61 +171,6 @@ def _escape(marker: str) -> str:
 
 
 # ---------------------------------------------------------------- rules
-
-_ADD_ALL_RE = re.compile(r"\bgit\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*add\s+(?:-A\b|--all\b|\.(?:\s|$))")
-
-
-def rule_add_all(cmd: str) -> str | None:
-    """`store/` and `storage/` are TRACKED runtime state that pytest writes to.
-
-    `git add -A` here stages whatever the test suite happened to leave behind. The rule has
-    been in CLAUDE.md for months and is restated in every handoff, which is how we know
-    restating it does not work."""
-    if "add-all-intended" in cmd:
-        return None
-    if _ADD_ALL_RE.search(cmd):
-        return ("BLOCKED by rule-guard: `git add -A` / `git add .` in this estate.\n"
-                "store/ and storage/ are tracked runtime state that pytest writes to, so this "
-                "stages another process's test output.\n"
-                "Stage explicit paths instead:  git add -- path/one path/two"
-                + _escape("add-all-intended"))
-    return None
-
-
-# `[^|;&]*` also crosses NEWLINES, so in a multi-line script it scanned past the end of the
-# commit and matched a `-n` on any later line — `rg -n`, `tail -n`, `sort -n`. Measured
-# 2026-08-19: a `git commit` followed three lines later by `rg -n` was refused as
-# `--no-verify`. A guard that blocks correct commands is a guard sessions learn to route
-# around, so the line terminators are excluded too.
-_NO_VERIFY_RE = re.compile(r"\bgit\s+commit\b[^|;&\n\r]*(?:--no-verify\b|\s-n\b)")
-
-
-def rule_no_verify(cmd: str) -> str | None:
-    """Skipping the gate is a decision, not a convenience."""
-    if "no-verify-intended" in cmd:
-        return None
-    if _NO_VERIFY_RE.search(cmd):
-        return ("BLOCKED by rule-guard: `git commit --no-verify`.\n"
-                "The permission classifier has refused this twice already. Use the isolated "
-                "worktree, or state why the gate must be skipped."
-                + _escape("no-verify-intended"))
-    return None
-
-
-_LOCK_RE = re.compile(r"\brm\b[^|;&]*index\.lock")
-
-
-def rule_index_lock(cmd: str) -> str | None:
-    """That lock is another session's live commit, not litter."""
-    if "lock-removal-intended" in cmd:
-        return None
-    if _LOCK_RE.search(cmd):
-        return ("BLOCKED by rule-guard: removing .git/index.lock.\n"
-                "Sessions share one index here. That lock is another session's commit in "
-                "progress; deleting it corrupts their commit. Queue and wait."
-                + _escape("lock-removal-intended"))
-    return None
-
 
 _DIFF_RE = re.compile(r"\bgit\s+diff\b([^|;&]*)")
 #: A word that could be a ref. Naming specific branches here made the rule expire with them, so
@@ -609,99 +558,6 @@ def rule_merge_red_pr(cmd: str) -> str | None:
 
 #: Rules that REFUSE the command. Each one matches on what the command does — a flag, a path — so
 #: it stays true whatever the repo's branches are called.
-# --- CI autoscale: switched OFF on 2026-08-19 by founder decision, and kept off ------------
-#
-# WHY. `.github/workflows/ci-autoscale.yml` landed on main as dad8cb7c (#396) at 13:15Z. It
-# calls `deploy/runners.sh autoscale`, whose scale-down loop reads the GitHub busy-runner list
-# with `|| true`. secrets.GITHUB_TOKEN cannot read that endpoint (it needs repo ADMIN), so the
-# list came back EMPTY, every started machine read as idle, and the loop stopped machines that
-# were mid-build. Measured: machine 8ee06eb7701628 got `stop stopping` at 14:50:51Z and
-# `crash stopped requested_stop=True` at 14:51:58Z while it was 15 minutes into PR #425's python
-# job. Nine PRs died the same way (#383 #387 #390 #391 #407 #414 #424 #427 #431), each with
-# step 6 concluding `null` and the annotation "The self-hosted runner lost communication with
-# the server" — which is indistinguishable from a failing test unless you read the annotation.
-# #396's OWN merge commit was one of the casualties, so main went red on the commit that
-# introduced the autoscaler and stayed red.
-#
-# Founder, 2026-08-19: "we cant have autoscaling until we are confident that machines that are
-# spun up are reliable" and "ensure it cant be reenabled by accident".
-#
-# The workflow is disabled at GitHub (`gh workflow disable 337731742`) and deleted from the
-# repo. This rule is the third layer: a machine refusal that reaches every agent on this box,
-# because the first two live in places a single command can undo.
-_AUTOSCALE_ENABLE_RE = re.compile(
-    r"\bgh\s+workflow\s+enable\b[^|;&\n]*(?:337731742|ci-autoscale|CI\s+autoscale)")
-_AUTOSCALE_RUN_RE = re.compile(r"runners\.sh\s+autoscale\b")
-_FLY_STOP_CI_RE = re.compile(r"\bfly\s+machine[s]?\s+stop\b[^|;&\n]*prospector-ci")
-
-
-def rule_ci_autoscale(cmd: str) -> str | None:
-    """CI autoscaling killed nine builds mid-run. It stays off until the fleet is proven."""
-    if "autoscale-intended" in cmd:
-        return None
-    if _AUTOSCALE_ENABLE_RE.search(cmd):
-        return ("BLOCKED by rule-guard: re-enabling the CI autoscale workflow.\n"
-                "It was turned off on 2026-08-19 by founder decision after it stopped Fly "
-                "machines mid-build and killed nine PRs, including its own merge commit.\n"
-                "It may only come back when the busy-runner read is proven (needs a repo-admin "
-                "PAT secret) AND the founder says the fleet is reliable."
-                + _escape("autoscale-intended"))
-    if _AUTOSCALE_RUN_RE.search(cmd):
-        return ("BLOCKED by rule-guard: `deploy/runners.sh autoscale`.\n"
-                "Its scale-down reads the busy-runner list with `|| true`; when that read fails "
-                "the list is empty, every machine reads as idle, and it stops runners that are "
-                "mid-build. That is what killed PRs #383 #387 #390 #391 #407 #414 #424 #427 "
-                "#431 on 2026-08-19.\n"
-                "Scale by hand with `fly machine start`, or fix the fail-open read first."
-                + _escape("autoscale-intended"))
-    if _FLY_STOP_CI_RE.search(cmd):
-        return ("BLOCKED by rule-guard: stopping a machine in the CI fleet `prospector-ci`.\n"
-                "A stopped runner mid-job fails as \"The self-hosted runner lost communication "
-                "with the server\", which reads as a failing test and costs a session to "
-                "diagnose. Check the GitHub busy list first, then re-run with the marker."
-                + _escape("autoscale-intended"))
-    return None
-
-
-# --- a CLONED runner machine is a spare tyre, not a worker ----------------------------------
-#
-# WHY. `fly machine clone` on an app with no services makes the clone a STANDBY of its source:
-# `config.standbys = ["<source id>"]`. A standby is meant to sit stopped and take over only if
-# its source's host fails, so Fly stops it again whenever something starts it -- through the
-# Machines API, which the machine event log records as `stop | user`, indistinguishable from a
-# person or a script.
-#
-# Measured 2026-08-19: 10 of prospector-ci's 12 machines were standbys cloned from
-# 8e4530a7712248. `fly machine list` said 12 machines, `fly status` said 12, and GitHub said 11
-# registered runners. The number that could actually hold a build was 2. The standbys DID
-# register as runners and DID take jobs, then Fly stopped them mid-build, which surfaces as
-# "The self-hosted runner lost communication with the server" and reads as a failing test.
-#
-# THE CLASS: an action whose result looks like capacity on every instrument and is not. Grow a
-# runner fleet with `fly scale count`, which makes real machines.
-_FLY_CLONE_RE = re.compile(r"\bfly\s+m(?:achine)?s?\s+clone\b")
-
-
-def rule_clone_makes_a_standby(cmd: str) -> str | None:
-    """A cloned machine in a service-less app is a standby and can never hold a CI job."""
-    if "clone-standby-intended" in cmd:
-        return None
-    if _FLY_CLONE_RE.search(cmd):
-        return ("BLOCKED by rule-guard: `fly machine clone`.\n"
-                "On an app with no services -- prospector-ci and hermes-ci are both service-less "
-                "by design -- a clone is created as a STANDBY of its source (`config.standbys`). "
-                "Fly stops a started standby on purpose, so it registers as a GitHub runner, "
-                "takes a job, and dies mid-build as \"The self-hosted runner lost communication "
-                "with the server\".\n"
-                "Measured 2026-08-19: 10 of 12 prospector-ci machines were clones. Real capacity "
-                "was 2 while every count on every screen said 12.\n"
-                "Grow the fleet with `fly scale count <n> -a <app>`, which makes real machines. "
-                "Repair an existing clone with "
-                "`fly machine update <id> -a <app> --standby-for \"\" --yes`."
-                + _escape("clone-standby-intended"))
-    return None
-
-
 # --- a machine repair restarts the machine, and a build was on it ---------------------------
 #
 # WHY. On 2026-08-19 at 20:26–20:32Z I repaired 10 standby machines with
@@ -775,189 +631,139 @@ def rule_restart_kills_a_live_build(cmd: str) -> str | None:
             + _escape("runner-busy-intended"))
 
 
-# --- the stash stack is SHARED, and it is not yours -----------------------------------------
-#
-# WHY. `git stash` writes to `refs/stash` in the COMMON git dir. Every worktree of this repo
-# shares it, so `git stash pop` in one session takes the top entry off another session's stack.
-# Measured 2026-08-19: a `git stash -u` on an already-clean tree created nothing, and the
-# matching `git stash pop` popped `stash@{0}: WIP on fix/home-row-us-rules-chip-overflow` --
-# a different branch, a different session -- and conflicted in
-# store_platform/src/Store.Web/src/pages/index.tsx.
-#
-# It has happened before. `stash@{2}` in this repo is literally labelled
-# "On main: unrelated edits (restored by Claude 2026-08-07 after an accidental drop)".
-# Twice is a class, so this is a refusal rather than a third note.
-#
-# `git stash list` and `git stash show` are reads and stay allowed. `git stash push` is allowed
-# too: pushing only ever ADDS an entry, and the damage is in taking one off.
-_STASH_TAKE_RE = re.compile(r"\bgit\s+stash\s+(pop|apply|drop|clear)\b")
-
-
-def rule_shared_stash(cmd: str) -> str | None:
-    """Popping a stash in a shared checkout takes another session's work."""
-    if "stash-intended" in cmd:
-        return None
-    mm = _STASH_TAKE_RE.search(cmd)
-    if mm:
-        return (f"BLOCKED by rule-guard: `git stash {mm.group(1)}`.\n"
-                "refs/stash lives in the COMMON git dir, so every worktree and every concurrent "
-                "session shares one stack. The top entry is very likely not yours.\n"
-                "On 2026-08-19 this popped another branch's WIP into a detached worktree and "
-                "conflicted; on 2026-08-07 it dropped an entry that had to be recovered.\n"
-                "Read it first:  git stash list && git stash show -p stash@{0}\n"
-                "To save your own work, commit on a branch instead of stashing."
-                + _escape("stash-intended"))
-    return None
-
-
-# A bare force-push destroys whatever the remote gained since you last looked, and on this repo
-# the remote gains things by itself. `.github/workflows/automerge.yml` on main says so in its own
-# header: "this workflow now refuses to merge a PR that sits behind main. It updates the branch
-# instead and dispatches CI on it". So every time main moves, that workflow pushes a
-# `Merge branch 'main' into <branch>` commit onto every open PR branch, mine included.
-#
-# Measured 2026-08-19: two of my branches gained such a commit while I worked --
-# `fix/ci-autoscale-trigger` gained c2a85a4c and `ci/runner-carries-its-tools` gained 6534d51c.
-# Both of my pushes were rejected as non-fast-forward. That rejection is the ONLY thing that
-# stopped the branch being reset to a behind-main state, which would have restarted the whole
-# update-and-retest cycle and thrown away a CI run nobody would have known was lost.
-#
-# The class is: an agent action that silently destroys work the agent did not know existed.
-# git's own non-fast-forward rejection guards it, and `--force` is exactly the flag that turns
-# that guard off. So the bare flag is refused and the safe form is named.
-#
-# `--force-with-lease` stays ALLOWED: it compares against the remote-tracking ref and refuses
-# when the remote moved, which is the same protection by a different route. `--force-if-includes`
-# likewise. A leading `+` on a refspec is the same force, spelled differently, so it is caught.
-_FORCE_PUSH_RE = re.compile(
-    r"\bgit\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*push\b[^|;&\n]*?"
-    r"(?:(?P<flag>--force(?!-with-lease|-if-includes)\b|-f\b)"
-    r"|\s(?P<plus>\+(?:refs/)?[\w.][\w./\-]*:))")
-
-
-def rule_force_push(cmd: str) -> str | None:
-    """A bare force-push overwrites commits the remote gained while you were not looking."""
-    if "force-push-intended" in cmd:
-        return None
-    mm = _FORCE_PUSH_RE.search(cmd)
-    if mm:
-        what = mm.group("flag") or ("refspec " + (mm.group("plus") or "").strip())
-        return (f"BLOCKED by rule-guard: force-push ({what}).\n"
-                "The remote moves on its own here. automerge.yml updates every open PR branch "
-                "whenever main moves, so your branch very likely has a commit you have not "
-                "fetched -- measured twice on 2026-08-19 (c2a85a4c, 6534d51c).\n"
-                "git's non-fast-forward rejection is what catches that, and --force is the flag "
-                "that switches it off.\n"
-                "Do this instead:  git fetch origin && git merge origin/<branch>\n"
-                "If you truly must rewrite, use the form that still refuses a moved remote:\n"
-                "  git push --force-with-lease origin <branch>"
-                + _escape("force-push-intended"))
-    return None
-
-
-_FLY_REVIVE_RE = re.compile(
-    r"\bfly(?:ctl)?\s+(?:apps\s+restart|machines?\s+(?:start|run|clone|restart|update)"
-    r"|deploy\b|launch\b|scale\s|secrets\s+(?:set|import)|resume\b"
-    r"|volumes\s+create|ips\s+allocate|certs\s+add|postgres\s+create)")
-
-
-def rule_no_fly_revival(cmd: str) -> str | None:
-    """Founder ruling R1, 2026-08-24, his words: "for the last time, we are not going back to fly".
-
-    He had already ruled this once and a session still put "pay the Fly invoices" in front of
-    him, which is exactly the repeat this guard exists to prevent. Reviving anything on Fly —
-    deploy, launch, scale, starting machines, setting secrets — is refused. Teardown
-    (destroy, suspend) and read-only commands (status, list, logs) pass, because the ruled
-    path is the EXIT: crew#78 (k8s) and crew#38 (drill the exit). rulings.json holds R1."""
-    if "fly-revival-intended" in cmd:
-        return None
-    if _FLY_REVIVE_RE.search(cmd):
-        return ("BLOCKED by rule-guard: this revives something on Fly.\n"
-                'Founder ruling R1 (2026-08-24), verbatim: "for the last time, we are not '
-                'going back to fly".\n'
-                "Teardown and read-only Fly commands pass. The work goes to the exit instead: "
-                "crew#78 (k8s) / crew#38 (drill the exit). Standing rulings: "
-                "~/.claude/scripts/rulings.json"
-                + _escape("fly-revival-intended"))
-    return None
-
-
-RULES = (rule_add_all, rule_runtime_state, rule_no_verify, rule_index_lock, rule_two_dot_diff,
-         rule_pr_size, rule_commit_in_shared_checkout, rule_merge_red_pr,
-         rule_ci_autoscale, rule_clone_makes_a_standby,
-         rule_restart_kills_a_live_build, rule_shared_stash,
-         rule_force_push, rule_no_fly_revival)
+RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
+         rule_commit_in_shared_checkout, rule_merge_red_pr,
+         rule_restart_kills_a_live_build)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
 WARN_RULES: tuple = ()
 
 
+# ------------------------------------------------------------- the Rego policy
+
+#: Nine of the fifteen refusals are data in policy/command.rego now. `opa eval` answered
+#: in 0.04s against rule-guard.py's 0.14-0.41s over 8 runs each, so this is not a tax.
+POLICY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "policy")
+
+#: Loading the directory means a new .rego file is live the moment it lands. Tests,
+#: fixtures and this script are not policy, so they are not loaded as data -- the
+#: fixtures in particular are conftest INPUTS and collide with each other as data.
+_OPA_IGNORE = ("*_test.rego", "*.json", "*.py")
+
+_OPA_QUERY = '{"deny": data.command.deny, "broken": data.command.broken}'
+
+
+def normalise(cmd: str) -> str:
+    """What every rule judges. Not the raw command.
+
+    This function exists because on 2026-08-24 there were two of it. selftest() applied
+    strip_commit_messages and main() did not, so `git commit -m 'never git add -A'` was
+    asserted to pass by a green selftest and refused in production. A test that grades a
+    different code path than the hook is not a test of the hook.
+    """
+    return strip_commit_messages(strip_heredocs(cmd))
+
+
+def opa_ask(cmd: str) -> tuple[list[str], list[str], str | None]:
+    """Ask policy/*.rego about one command. Returns (denials, broken, error)."""
+    opa = shutil.which("opa")
+    if not opa:
+        return [], [], "opa is not on PATH"
+    argv = [opa, "eval", "--strict-builtin-errors", "--format", "json",
+            "--data", POLICY_DIR, "--stdin-input", _OPA_QUERY]
+    for pat in _OPA_IGNORE:
+        argv[3:3] = ["--ignore", pat]
+    try:
+        out = subprocess.run(argv, input=json.dumps({"command": cmd}),
+                             capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return [], [], f"opa eval did not run: {exc}"
+    if out.returncode != 0:
+        return [], [], f"opa eval exited {out.returncode}: {out.stderr.strip()[:400]}"
+    try:
+        v = json.loads(out.stdout)["result"][0]["expressions"][0]["value"]
+    except (ValueError, KeyError, IndexError):
+        return [], [], f"opa eval returned no verdict: {out.stdout.strip()[:200]}"
+    return list(v.get("deny") or []), list(v.get("broken") or []), None
+
+
+#: Rules whose answer depends on the tree this process is standing on, or on GitHub, rather
+#: than on the command string. selftest() cannot judge them from a literal, so it names them
+#: here and covers them separately against explicit inputs.
+STATEFUL = ("rule_pr_size", "rule_commit_in_shared_checkout",
+            "rule_merge_red_pr", "rule_restart_kills_a_live_build")
+
+
+def decide(cmd: str, skip: tuple[str, ...] = ()) -> tuple[str, str] | None:
+    """The single decision path: Rego first, then the Python rules Rego cannot express.
+
+    Returns (source, message) for the first refusal, where source is "policy" or the rule's
+    function name, or None to let the command through. main() and selftest() both call this,
+    which is the whole point of it existing.
+    """
+    cmd = normalise(cmd)
+    denials, broken, err = opa_ask(cmd)
+    if broken:
+        # A regex OPA cannot compile makes regex.match UNDEFINED, which makes the rule body
+        # fail, which makes the rule PERMIT everything it was written to refuse -- and a
+        # broken guard prints exactly what a clean run prints. So a broken policy refuses
+        # rather than warns. It is a property of the file and not of the command, `opa test`
+        # in CI catches it before it can ship, and the refusal names its own fix.
+        return "policy", (
+            "BLOCKED: the command policy disagrees with its own examples, so it cannot be "
+            "trusted to refuse anything.\n" + "\n".join(broken)
+            + "\n\nFix policy/command.rego, then:  "
+              "opa test policy/command.rego policy/command_test.rego")
+    if err:
+        # Environmental, not a policy failure: OPA missing or unrunnable. Fail open like every
+        # other path in this file, but say so on every single command until somebody fixes it.
+        sys.stderr.write(f"[rule-guard] command policy NOT ENFORCED: {err}\n")
+    if denials:
+        return "policy", denials[0]
+    for rule in RULES:
+        if rule.__name__ in skip:
+            continue
+        try:
+            reason = rule(cmd)
+        except Exception:
+            continue  # fail open, always
+        if reason:
+            return rule.__name__, reason
+    return None
+
+
+
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
     cases = [
-        # (command, rule that must fire or None)
-        ("gh workflow enable 337731742", "rule_ci_autoscale"),
-        ("gh workflow enable ci-autoscale.yml", "rule_ci_autoscale"),
         ("gh workflow enable 337731742  # autoscale-intended", None),
         ("gh workflow disable 337731742", None),
-        ("bash deploy/runners.sh autoscale", "rule_ci_autoscale"),
-        ("./deploy/runners.sh autoscale --dry-run", "rule_ci_autoscale"),
         ("bash deploy/runners.sh scale 12", None),
-        ("fly machine stop 8ee06eb7701628 -a prospector-ci", "rule_ci_autoscale"),
-        ("fly machines stop abc -a prospector-ci", "rule_ci_autoscale"),
         ("fly machine stop abc -a prospector-engine", None),
-        # Superseded 2026-08-24 by founder ruling R1 ("we are not going back to fly"):
-        # starting, scaling and standby-restoring Fly machines were legitimate CI operations
-        # when these cases were written; they are revivals now and must be refused.
-        ("fly machine start 8ee06eb7701628 -a prospector-ci", "rule_no_fly_revival"),
-        ("fly machine clone 8e4530a7712248 -a prospector-ci", "rule_clone_makes_a_standby"),
-        # rule_restart_kills_a_live_build reads GitHub, so the harness skips it above and it is
-        # proved against a stubbed busy list further down.
-        ("fly machines clone abc --region lhr", "rule_clone_makes_a_standby"),
-        ("fly m clone abc -a hermes-ci", "rule_clone_makes_a_standby"),
-        # clone-standby-intended escapes the standby rule, but under R1 a clone is still a
-        # revival; only fly-revival-intended lets it through now, stated out loud.
-        ("fly machine clone abc  # clone-standby-intended", "rule_no_fly_revival"),
-        ("fly scale count 12 -a prospector-ci", "rule_no_fly_revival"),
-        ("fly machine update abc -a prospector-ci --standby-for \"\" --yes",
-         "rule_no_fly_revival"),
-        ("git push --force origin my-branch", "rule_force_push"),
-        ("git push -f origin my-branch", "rule_force_push"),
-        ("git push origin +main:main", "rule_force_push"),
-        ("git push origin +refs/heads/x:refs/heads/x", "rule_force_push"),
         ("git push --force origin b  # force-push-intended", None),
         ("git push --force-with-lease origin my-branch", None),
         ("git push --force-if-includes origin my-branch", None),
         ("git push origin my-branch", None),
-        ("git push --follow-tags origin main", None),
+        # Was None until 2026-08-24. A peer session added a direct-push-to-main refusal
+        # (a110a9f) after an ungraded commit reached crew main; policy/command.rego
+        # carries that decision, so the newer answer is the live one.
+        ("git push --follow-tags origin main", "policy"),
         ("git push", None),
         ("grep -f patterns.txt file.txt", None),
-        ("git stash pop", "rule_shared_stash"),
         ("git stash pop  # stash-intended", None),
-        ("git stash drop stash@{0}", "rule_shared_stash"),
-        ("git stash clear", "rule_shared_stash"),
-        ("git stash apply stash@{1}", "rule_shared_stash"),
         ("git stash list", None),
         ("git stash show -p stash@{0}", None),
         ("git stash -u", None),
         ("git stash push -m wip", None),
-        ("git add -A", "rule_add_all"),
-        ("git add --all", "rule_add_all"),
-        ("git add .", "rule_add_all"),
         ("git add -A  # add-all-intended", None),
         ("git add -- scripts/ops_status.py", None),
         ("git add -p", None),
-        ("git commit --no-verify -m x", "rule_no_verify"),
-        ("git commit -n -m x", "rule_no_verify"),
         ("git commit -m 'no-verify is bad'", None),
         ("git commit -m x\nrg -n PATTERN docs/", None),          # -n on a LATER line
         ("git commit -m x && tail -n 5 log", None),               # -n after a separator
-        ("git add -- x\ngit commit -n -m x", "rule_no_verify"),   # still caught
 
-        ("rm -f .git/index.lock", "rule_index_lock"),
-        ("rm /Users/x/.git/worktrees/w/index.lock", "rule_index_lock"),
         ("git diff --stat origin/main HEAD", "rule_two_dot_diff"),
         # Two BRANCH-shaped refs, not a branch-and-HEAD. This used to name
         # `origin/pr/shelf-copy-glossary`, which has since been deleted from origin — so
@@ -970,7 +776,6 @@ def selftest() -> int:
         ("git diff --stat origin/main HEAD  # raw-diff-intended", None),
         ("git diff -- prospector/config.py", None),
         ("git diff HEAD~1", None),
-        ("echo git add -A is banned", "rule_add_all"),  # substring match is acceptable here
         ("git add store/catalog.sqlite3", "rule_runtime_state"),
         ("git commit --only -m x -- prospector/run.py store/index.json", "rule_runtime_state"),
         ("git add .popdd/last_verify.json", "rule_runtime_state"),
@@ -989,17 +794,7 @@ def selftest() -> int:
          None),
         ("git commit -m 'the rule is: git add -A is banned'", None),
         ('git commit --message="never git add -A"', None),
-        # The quotes end where they end. A real violation chained after a commit still blocks.
-        ('git commit -m "docs" && git add -A', "rule_add_all"),
         ("python3 - <<'PY'\nprint('the git add -A rule')\nPY\n", None),
-        # ...unless a shell is reading it, because then the body executes.
-        ("bash <<EOF\ngit add -A\nEOF\n", "rule_add_all"),
-        # Founder ruling R1: nothing is revived on Fly. Teardown and read-only pass.
-        ("flyctl deploy --app prospector-engine", "rule_no_fly_revival"),
-        ("fly machine start 17811953 -a prospector-engine", "rule_no_fly_revival"),
-        ("flyctl scale count 2 -a prospector-store-web", "rule_no_fly_revival"),
-        ("flyctl secrets set TOKEN=x -a tie-api", "rule_no_fly_revival"),
-        ("flyctl launch --name new-app", "rule_no_fly_revival"),
         ("flyctl apps list", None),
         ("flyctl status -a prospector-store-web", None),
         ("flyctl logs -a prospector-engine", None),
@@ -1008,18 +803,8 @@ def selftest() -> int:
     ]
     bad = 0
     for cmd, want in cases:
-        got = None
-        cmd = strip_commit_messages(strip_heredocs(cmd))
-        for rule in RULES:
-            if rule.__name__ in ("rule_pr_size", "rule_commit_in_shared_checkout",
-                                 "rule_merge_red_pr", "rule_restart_kills_a_live_build"):
-                # These read live state -- the branch this process is standing on, or GitHub --
-                # so their answer here depends on where the selftest was launched, not on `cmd`.
-                # Covered separately below, against explicit inputs.
-                continue
-            if rule(cmd):
-                got = rule.__name__
-                break
+        verdict = decide(cmd, skip=STATEFUL)
+        got = verdict[0] if verdict else None
         if got != want:
             bad += 1
             print(f"  FAIL  {cmd!r}\n        wanted {want}, got {got}")
@@ -1296,15 +1081,11 @@ def main() -> int:
         return 0
     global _ACTIVE_REPO
     _ACTIVE_REPO = _repo_for(cmd, payload.get("cwd"))
-    cmd = strip_heredocs(cmd)
-    for rule in RULES:
-        try:
-            reason = rule(cmd)
-        except Exception:
-            continue  # fail open, always
-        if reason:
-            sys.stderr.write(reason + "\n")
-            return 2
+    verdict = decide(cmd)
+    if verdict:
+        sys.stderr.write(verdict[1] + "\n")
+        return 2
+    cmd = normalise(cmd)
     for rule in WARN_RULES:
         try:
             note = rule(cmd)
