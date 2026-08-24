@@ -157,7 +157,8 @@
       "state/",
       "agent-cert/",
       "logs/",
-      "gateway/restart_loop.json"
+      "gateway/restart_loop.json",
+      "plugins/known_marketplaces.json"
     ]
   },
   "escrow": {
