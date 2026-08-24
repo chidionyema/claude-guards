@@ -43,6 +43,14 @@ CACHE = os.path.join(HOME, ".claude", "state", "friction-relay.json")
 PROJECTS = os.path.join(HOME, ".claude", "projects")
 SCRIPTS = os.path.join(HOME, ".claude", "scripts")
 
+#: The directory this file is committed in. friction-relay.py, founder_board.py and
+#: rulings.json travel together in one repository, so this finds them on the Mac AND in
+#: a clone. SCRIPTS is a hardcoded home path and stays only for CACHE, which really is
+#: machine state. Reading the other two through SCRIPTS made two selftest checks pass on
+#: a runner by finding nothing -- CI caught "lexicon is borrowed, not copied" the first
+#: time the selftest was actually gated.
+HERE = os.path.dirname(os.path.abspath(__file__))
+
 WINDOW = 6 * 3600          # how far back a complaint still counts
 MAX_SHOWN = 6              # a wall of text is ignored; six is a glance
 STALE = 15 * 60            # older than this and the hook kicks a background refresh
@@ -56,6 +64,12 @@ STALE = 15 * 60            # older than this and the hook kicks a background ref
 TAIL_BYTES = 40_000_000
 
 
+#: Used only when founder_board.py cannot be read. Named so the selftest can tell a
+#: borrowed lexicon from a degraded one instead of counting words.
+_FALLBACK_WORDS = ("fuck", "shit", "wtf", "still not", "i said", "i told you", "i asked",
+                   "frustrat", "annoying", "tired of", "no progress", "asap", "too slow")
+
+
 def _friction_words() -> tuple:
     """Borrow the lexicon from founder_board rather than keeping a second copy.
 
@@ -64,10 +78,10 @@ def _friction_words() -> tuple:
     relay still works with a degraded vocabulary rather than reporting a clean estate.
     """
     try:
-        sys.path.insert(0, SCRIPTS)
+        sys.path.insert(0, HERE)
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "_fb", os.path.join(SCRIPTS, "founder_board.py"))
+            "_fb", os.path.join(HERE, "founder_board.py"))
         fb = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(fb)
         words = tuple(getattr(fb, "FRICTION", ()))
@@ -75,8 +89,7 @@ def _friction_words() -> tuple:
             return words
     except Exception:
         pass
-    return ("fuck", "shit", "wtf", "still not", "i said", "i told you", "i asked",
-            "frustrat", "annoying", "tired of", "no progress", "asap", "too slow")
+    return _FALLBACK_WORDS
 
 
 _SKIP = re.compile(r"^\s*(<|\[|\{|Caveat:|This session is being continued)")
@@ -219,7 +232,7 @@ def render(cache: dict, now: float) -> str:
 #: rulings.json are committed in the same directory of the same repository, so this is
 #: where the file is on the Mac AND in a clone. The hardcoded path made the two selftest
 #: checks below pass on a runner by finding nothing, which is how a gate grades a proxy.
-RULINGS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rulings.json")
+RULINGS = os.path.join(HERE, "rulings.json")
 
 
 def ruling_problems(rows) -> list[str]:
@@ -348,7 +361,11 @@ def selftest() -> int:
     o2 = render(many, now)
     ck("it caps the wall of text", o2.count("  - ") == MAX_SHOWN)
     ck("it says how many it hid", "and 6 more" in o2)
-    ck("lexicon is borrowed, not copied", len(_friction_words()) > 13)
+    # Grades the borrowed list, not the fallback. len() > 13 was satisfiable by the
+    # 13-word fallback plus nothing, and on a runner SCRIPTS did not exist so that is
+    # what it graded. Ask founder_board.FRICTION directly instead.
+    ck("lexicon is borrowed from founder_board, not copied",
+       set(_friction_words()) != set(_FALLBACK_WORDS) and len(_friction_words()) > 13)
     ck("a tool_result row is not a complaint",
        _SKIP.match("<system-reminder>") is not None)
     bad = {"complaints": [{"text": "no timestamp key"}]}
