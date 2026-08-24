@@ -99,6 +99,26 @@ ROOTS=("$HOME/.estate" "$HOME/.claude" "$HOME/.maestro" "$HOME/Documents/code" "
 #: No silent caps (LAW 28): a skip prints and lands in the receipt.
 MAX_MB=${ESTATE_BUNDLE_MAX_MB:-250}
 
+#: WEEKLY FULL ESCROW.
+#: Everything else in this script bundles only what a remote does not already have.
+#: That is the right hourly trade and it is NOT an escrow of GitHub -- the header
+#: above says so: "restoring one of those incremental bundles needs the remote as well
+#: as the bundle." Worse, a repo whose remote holds every commit is skipped outright by
+#: the `[ "${n:-0}" -gt 0 ] || continue` below, so it produces no bundle at all.
+#: Measured 2026-08-24 by drills/check_github_gone.py: of five declared load-bearing
+#: repos, R2 held a standalone copy of two. The other three -- ~/.claude/scripts,
+#: hermes-v2 and crew -- would have been lost with GitHub.
+#: So once every FULL_DAYS each DECLARED repo is bundled with --all regardless of what
+#: the remote holds, and that bundle is cloned back standalone before the receipt is
+#: written. Declared, not every repo: a full pass over all 30 checkouts on this machine
+#: is 2.4 GB and most of it is dead client work. The declared twelve are ~500 MB.
+FULL_DAYS=${ESTATE_BUNDLE_FULL_DAYS:-7}
+#: A full bundle of prospector is 350 MB against an incremental one's kilobytes, so the
+#: hourly ceiling would silently skip exactly the repos that matter most. R2 storage is
+#: cheap and a silent skip is not (LAW 28).
+FULL_MAX_MB=${ESTATE_BUNDLE_FULL_MAX_MB:-2048}
+DECLARED_JSON="$HOME/.claude/scripts/estate/load-bearing.json"
+
 log() { printf '%s %s\n' "$(date -u +%FT%TZ)" "$*"; }
 ask_remote() {
   GIT_TERMINAL_PROMPT=0 GIT_ASKPASS=/usr/bin/true \
@@ -245,6 +265,35 @@ if [ "${UNCOVERED_N:-0}" -gt 0 ]; then
   #: in the log and in the summary line, where it is read without masking anything.
 fi
 
+# --- which declared repos are overdue a standalone escrow -------------------
+# Read from the receipts, not a second state file: the receipt already records the
+# mode and the restore verdict per slug, and a state file that drifts from the
+# receipts would be a second answer to one question.
+: > "$WORK/full-fresh.txt"; : > "$WORK/declared.txt"
+python3 - "$RECEIPTS" "$FULL_DAYS" "$DECLARED_JSON" "$WORK/full-fresh.txt" "$WORK/declared.txt" <<'PYFRESH' || log "escrow planning unavailable, falling back to incremental only"
+import json, os, sys, time
+receipts, days, declared_p, fresh_p, declared_out = sys.argv[1], float(sys.argv[2]), sys.argv[3], sys.argv[4], sys.argv[5]
+try:
+    declared = [os.path.realpath(os.path.expanduser(e["path"]))
+                for e in json.load(open(declared_p))["repos"]]
+except Exception as exc:
+    print(f"[escrow] cannot read {declared_p}: {exc!r}", file=sys.stderr); raise SystemExit(1)
+open(declared_out, "w").write("\n".join(declared) + "\n")
+cut, fresh = time.time() - days * 86400, set()
+try:
+    for line in open(receipts):
+        line = line.strip()
+        if not line: continue
+        try: r = json.loads(line)
+        except Exception: continue
+        if (str(r.get("mode", "")).startswith("full") and r.get("restore") == "clone-ok"
+                and float(r.get("ts", 0)) > cut and r.get("slug")):
+            fresh.add(r["slug"])
+except FileNotFoundError:
+    pass
+open(fresh_p, "w").write("\n".join(sorted(fresh)) + "\n")
+PYFRESH
+
 : > "$WORK/plan.tsv"
 seen_common=""
 while read -r d; do
@@ -284,6 +333,17 @@ while read -r d; do
     n=$(gplan "$d" rev-list --count --all 2>/dev/null || echo 0)
     mode=full
   fi
+  # A declared repo with no standalone bundle newer than FULL_DAYS is planned full,
+  # whatever the remote holds. This is the only line that makes R2 a GitHub escrow.
+  if grep -qxF "$(cd "$d" && pwd -P)" "$WORK/declared.txt" 2>/dev/null; then
+    probe=$(printf %s "${d#$HOME/}" | tr '/' '-' | tr -cd 'A-Za-z0-9._-')
+    if ! grep -qxF "$probe" "$WORK/full-fresh.txt" 2>/dev/null; then
+      n=$(gplan "$d" rev-list --count --all 2>/dev/null || echo 0)
+      mode=full-escrow
+      log "escrow due: $(basename "$d") has no standalone bundle in R2 newer than ${FULL_DAYS}d, planning --all"
+    fi
+  fi
+
   #: A repo whose git call timed out has no honest commit count, so it is never
   #: planned on a made-up zero. It is already on the stall list and the run goes RED.
   if cut -f1 "$WORK/stalled.tsv" 2>/dev/null | grep -qxF "$d"; then continue; fi
@@ -345,8 +405,15 @@ while IFS=$'\t' read -r d mode n remote; do
   [ -s "$bundle" ] || { log "FAILED $slug — git bundle produced nothing"; FAILED=$((FAILED+1)); continue; }
 
   bytes=$(stat -f %z "$bundle")
-  if [ "$bytes" -gt $((MAX_MB * 1048576)) ]; then
-    log "SKIPPED $slug — bundle is $((bytes/1048576)) MB, over the ${MAX_MB} MB ceiling. Raise ESTATE_BUNDLE_MAX_MB or push the branch."
+  # A full escrow is meant to be big; judging it by the incremental ceiling would skip
+  # every repo the escrow exists for.
+  # Only the declared escrow gets the bigger ceiling. full-unreachable-remote fires on
+  # thirteen dead client repos under ~/code, one of them 7,454 commits, and raising
+  # their ceiling would quietly start paying to store a former client's history.
+  ceiling=$MAX_MB; ceiling_var=ESTATE_BUNDLE_MAX_MB
+  case "$mode" in full-escrow) ceiling=$FULL_MAX_MB; ceiling_var=ESTATE_BUNDLE_FULL_MAX_MB ;; esac
+  if [ "$bytes" -gt $((ceiling * 1048576)) ]; then
+    log "SKIPPED $slug — bundle is $((bytes/1048576)) MB, over the ${ceiling} MB ceiling. Raise $ceiling_var or push the branch."
     SKIPPED=$((SKIPPED+1)); rm -f "$bundle"; continue
   fi
 
@@ -359,6 +426,12 @@ while IFS=$'\t' read -r d mode n remote; do
     || { log "FAILED $slug — dated upload failed"; FAILED=$((FAILED+1)); rm -f "$bundle"; continue; }
   rclone copyto "$bundle" ":s3:$R2_BUCKET/$key/latest.bundle" --s3-no-check-bucket 2>/dev/null \
     || { log "FAILED $slug — latest upload failed"; FAILED=$((FAILED+1)); rm -f "$bundle"; continue; }
+  # latest.bundle is whatever ran most recently, and next hour that is an incremental
+  # one. The standalone copy therefore needs its own key or the escrow lasts an hour.
+  if case "$mode" in full*) true ;; *) false ;; esac; then
+    rclone copyto "$bundle" ":s3:$R2_BUCKET/$key/full-latest.bundle" --s3-no-check-bucket 2>/dev/null \
+      || { log "FAILED $slug — full-latest upload failed"; FAILED=$((FAILED+1)); rm -f "$bundle"; continue; }
+  fi
 
   # Angle two: the bytes come back identical.
   local_sha=$(shasum -a 256 "$bundle" | cut -d' ' -f1)
