@@ -254,7 +254,32 @@ def ledger(entry: dict) -> None:
         except Exception: pass
 
 
-def walk_back(st: dict, lane_name: str, limit: int) -> str:
+def graph_lines(session: str) -> str:
+    """The goal net's half of the walk-back, or "" when this session has no net.
+
+    Fail-open in every direction. goal_graph.py sits beside this file so the import is
+    sys.path[0], but if it is missing, unreadable, or throws on a hand-edited store, this
+    guard still fires with the one-sentence goal it has always had. A hook that can wedge
+    a session is worse than a hook that says less (LAW 38).
+    """
+    try:
+        import goal_graph
+        g = goal_graph.load(session)
+        if not g["nodes"]:
+            return ""
+        out = ["  WALK BACK", goal_graph.render_path(g)]
+        stack = [f for f in g.get("stack", []) if isinstance(f, dict)]
+        if stack:
+            out.append("  PARKED at a context switch, finish or drop these:")
+            out.append(goal_graph.render_stack(g))
+            out.append(f"  Return with: goal_graph.py --resume    "
+                       f"(goes back to {stack[-1].get('node')})")
+        return "\n".join(out)
+    except Exception:
+        return ""
+
+
+def walk_back(st: dict, lane_name: str, limit: int, session: str = "") -> str:
     """The message that returns a drifted session to its objective.
 
     Three things, because a reminder with no resume point only restates the problem: the
@@ -263,6 +288,12 @@ def walk_back(st: dict, lane_name: str, limit: int) -> str:
     """
     goal = st.get("goal") or "(none on disk -- goal-guard.py --set-goal '...')"
     last = st.get("last_progress") or "(nothing has changed state this session)"
+    # The goal net, when the session has one. `goal` above is a single sentence, so
+    # walking back to it is the whole of what this guard could offer until 2026-08-24:
+    # measured on session 8ef72725 the same day, fired=34 with goal="", so 34 walk-backs
+    # printed "(none on disk)" and pointed nowhere. `net` below is the structure, so the
+    # message can say what the current node serves and what is parked behind it.
+    net = graph_lines(session)
     ago = ""
     if st.get("last_progress_at"):
         mins = int((time.time() - st["last_progress_at"]) / 60)
@@ -272,6 +303,8 @@ def walk_back(st: dict, lane_name: str, limit: int) -> str:
         f"nothing has changed state in that time (lane limit {limit}).\n"
         f"  GOAL      {goal}\n"
         f"  LAST MOVE {last}{ago}\n"
+        + (net + "\n" if net else "")
+        +
         f"  A long read-only run is often CORRECT and this is not an accusation. "
         f"LAW 2 requires reading the data before acting, and LAW 1 says that while the "
         f"critical path is waiting, waiting is the work. If either is why the count is "
@@ -325,14 +358,25 @@ def handle(payload: dict) -> int:
     # Fire at the limit, then every half-limit past it. Firing on every call beyond the
     # threshold would make the guard itself the noise it exists to reduce.
     if limit and st["run"] >= limit and (st["run"] - limit) % max(1, limit // 2) == 0:
-        msg = walk_back(st, lane_name, limit)
+        msg = walk_back(st, lane_name, limit, session)
         st["fired"] = st.get("fired", 0) + 1
         ledger({"t": int(time.time()), "kind": "goal_drift", "session": session[:12],
                 "lane": lane_name, "run": st["run"], "limit": limit,
                 "has_goal": bool(st.get("goal"))})
 
+    # The goal net advances one tick per tool call. Ticks, not seconds, are the unit:
+    # a session waiting on a 20-minute CI run is not drifting (LAW 1), and a wall clock
+    # cannot tell those apart. safe_nudge rate limits itself, returns "" when there is no
+    # net or no drift, and never raises.
+    net_msg = ""
+    try:
+        import goal_graph
+        net_msg = goal_graph.safe_nudge(session)
+    except Exception:
+        net_msg = ""
+
     write_state(session, st)
-    both = "\n".join(m for m in (target_msg, msg) if m)
+    both = "\n".join(m for m in (target_msg, msg, net_msg) if m)
     if both:
         json.dump({"systemMessage": both}, sys.stdout)
     return 0
@@ -379,6 +423,17 @@ def inject(payload: dict) -> int:
                      f"is none. Write it before the next tool call:\n"
                      f"  python3 ~/.claude/scripts/goal-guard.py --set-goal '<the objective, "
                      f"with a number in it>'")
+    # The net, when there is one. A compaction takes the goal graph out of the window the
+    # same way it takes the goal sentence, and the parked stack is the part that matters
+    # most here: work parked at a context switch before a compaction is work nothing else
+    # on this machine remembers (LAW 25).
+    try:
+        import goal_graph
+        status = goal_graph.safe_status(session)
+    except Exception:
+        status = ""
+    if status:
+        parts.append(status)
     prac = practices(lane)
     if prac:
         parts.append(f"[goal-guard/{lane_name}] WHAT NOT TO DO IN THIS LANE. Each line is a "
@@ -409,6 +464,14 @@ def selftest() -> int:
     global STATE_DIR, LEDGER, LANES_FILE
     tmp = Path(tempfile.mkdtemp())
     STATE_DIR, LEDGER, LANES_FILE = tmp / "goal", tmp / "led.jsonl", tmp / "lanes.json"
+    # goal_graph writes too, now that the three hook points call it. Point its store at the
+    # same temp dir or a selftest run leaves nine fake sessions in the live one.
+    try:
+        import goal_graph
+        goal_graph.STATE_DIR = tmp / "goals"
+        goal_graph.LEDGER = tmp / "goal-net.jsonl"
+    except Exception:
+        pass
 
     def call(tool, cmd=None, sess="s1", fp=None):
         p = {"session_id": sess, "tool_name": tool, "tool_input": {}}
@@ -602,6 +665,72 @@ def selftest() -> int:
     ck("a lane can turn it off",
        not any("ATTEMPT" in call("Bash", "python3 /tmp/c.py", sess="rh3") for _ in range(4)))
     LANES_FILE.write_text(json.dumps({"lanes": {}}))
+
+    print("the goal net -- the wiring, and that a broken net cannot wedge a session")
+    import goal_graph as gg
+
+    # No net at all. This is every session that has never run goal_graph.py, so it is the
+    # case that must stay exactly as it was before the wiring existed.
+    ck("with no net, the walk-back is silent about it",
+       "WALK BACK" not in walk_back(read_state("gn0"), "default", 16, "gn0"))
+    ck("with no net, SessionStart says nothing about it", gg.safe_status("gn0") == "")
+    ck("with no net, the nudge is empty", gg.safe_nudge("gn0") == "")
+
+    # A net with parked work: the founder's own ask, "go back and complete what you were
+    # doing before context switched", is only served if the walk-back names it.
+    g = gg.empty_graph("gn1")
+    core = gg.add(g, "retire fly io", kind="core")
+    a = gg.add(g, "move dns off fly", parents=[core])
+    b = gg.add(g, "price a linux box", parents=[core])
+    gg.activate(g, a)
+    gg.activate(g, b, reason="dns needs a decision",
+                checkpoint={"next": "ask about the A record"})
+    gg.save(g)
+    line = walk_back(read_state("gn1"), "default", 16, "gn1")
+    ck("the walk-back now carries the path up to core", "retire fly io" in line)
+    ck("the walk-back names the PARKED node, not just the current one",
+       "move dns off fly" in line and "PARKED" in line)
+    ck("it says how to go back", "--resume" in line)
+    ck("SessionStart re-injects the net after a compaction",
+       "[goal-net]" in gg.safe_status("gn1"))
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        inject({"session_id": "gn1", "hook_event_name": "PostCompact"})
+    ck("and it arrives through the hook, not just the function",
+       "[goal-net]" in buf.getvalue())
+
+    # LAW 38: the half nobody tests. A guard is finished when it has been SHOWN to allow
+    # the good case, and here the good case is a session with a healthy net getting on
+    # with its work in silence.
+    g2 = gg.empty_graph("gn2")
+    c2 = gg.add(g2, "ship the thing", kind="core")
+    gg.activate(g2, gg.add(g2, "write the test", parents=[c2]))
+    gg.save(g2)
+    ck("a healthy net produces NO nudge -- a guard that talks over correct work is an "
+       "outage", gg.safe_nudge("gn2") == "")
+
+    # Every way the store can be wrong. None of them may reach the session.
+    (gg.STATE_DIR).mkdir(parents=True, exist_ok=True)
+    (gg.STATE_DIR / "gn3.json").write_text("{not json at all")
+    ck("a truncated store is silent, not an exception", gg.safe_nudge("gn3") == "")
+    ck("and the walk-back survives it too",
+       isinstance(walk_back(read_state("gn3"), "default", 16, "gn3"), str))
+    (gg.STATE_DIR / "gn4.json").write_text('{"nodes": "not a dict"}')
+    ck("a hand-edited store of the wrong shape is silent", gg.safe_status("gn4") == "")
+    ck("a hostile session id cannot reach outside the store",
+       gg.state_path("../../etc/passwd").parent == gg.STATE_DIR)
+
+    # The import itself failing is the case that would have wedged every tool call on this
+    # machine, so it is tested by breaking the import rather than by trusting the try.
+    real = sys.modules.pop("goal_graph")
+    sys.modules["goal_graph"] = None  # type: ignore[assignment]
+    try:
+        ck("a goal_graph that cannot even be imported still lets the tool call through",
+           call("Read", fp="/tmp/x", sess="gn5") is not None)
+        ck("and the walk-back degrades to the one-sentence goal it always had",
+           "WALK BACK" not in walk_back(read_state("gn1"), "default", 16, "gn1"))
+    finally:
+        sys.modules["goal_graph"] = real
 
     print("\n  %d/%d checks passed" % (total[0] - bad[0], total[0]))
     return 1 if bad[0] else 0
