@@ -45,6 +45,10 @@
       "is": "a dashboard a person opens",
       "dismissed": "same"
     },
+    "claude.ai": {
+      "is": "the vendor surface policy/hooks.rego refuses to publish founder-facing pages to",
+      "dismissed": "losing it costs nothing by construction. The only reference in this tree is the refusal text naming it, and the rule's whole point is that the founder's board is http://127.0.0.1:8787/, served by board_serve.py from a file on this machine. The one time a session did publish there he opened the link and got a 404, which is the incident the rule exists for."
+    },
     "cloud.cerebras.ai": {
       "is": "a dashboard a person opens",
       "dismissed": "same"

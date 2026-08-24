@@ -87,8 +87,18 @@ jobs:
             | sort -u | jq -R -s 'split("\n") | map(select(length > 0))' > wired.json
           git ls-files 'policy/*.py' \
             | jq -R -s 'split("\n") | map(select(length > 0))' > policy_py.json
-          jq -s '{guards: .[0].guards, wired: .[1], policy_dir_py: .[2]}' \
-            guards.json wired.json policy_py.json > inventory.json
+          # Every hook command in settings/settings.json runs
+          # $HOME/.claude/scripts/<name>, and that directory IS this repository's
+          # checkout. So a hook name that is not a tracked file here is a hook
+          # that cannot run. Matched on the prefix and not on a bare `.py` grep,
+          # because settings.json also holds permission globs like `Read(**/.py`.
+          grep -ohE '\$HOME/\.claude/scripts/[A-Za-z0-9_.-]+\.py' settings/settings.json \
+            | sed 's|.*/||' | sort -u \
+            | jq -R -s 'split("\n") | map(select(length > 0))' > hooks_wired.json
+          git ls-files '*.py' | sed 's|.*/||' | sort -u \
+            | jq -R -s 'split("\n") | map(select(length > 0))' > tracked_py.json
+          jq -s '{guards: .[0].guards, wired: .[1], policy_dir_py: .[2], hooks_wired: .[3], tracked_py: .[4]}' \
+            guards.json wired.json policy_py.json hooks_wired.json tracked_py.json > inventory.json
           echo "guards found: $(jq '.guards | length' inventory.json)"
 
       # Every rule in policy/*.rego is a unit test away from silently permitting
@@ -122,6 +132,18 @@ jobs:
       # denial and what promotes it.
       - name: the tree itself
         run: conftest test --policy policy inventory.json
+
+      # R18, "always research, it pays off all the time". A decision record that
+      # cites nothing is a decision nobody can check. The rule is in
+      # policy/hooks.rego and its cases run in `the rego unit tests` above
+      # (conftest verify); this step exercises the find/grep/jq collector that
+      # feeds it, and stops an uncited record landing in THIS repo.
+      #
+      # Residual, stated rather than implied: it sees this repo only. idp, crew
+      # and prospector-main hold the estate's 15 decision records and are not
+      # gated yet -- run `make decisions SCAN=<repo>` there until they are.
+      - name: a decision record cites its sources
+        run: make decisions
 
       # The hook's own cases, run the way the hook runs: this is what proves the
       # nine migrated refusals still refuse through opa, on a machine that is not

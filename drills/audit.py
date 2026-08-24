@@ -44,6 +44,21 @@ REPOS = os.path.join(HERE, "repos.json")
 HOST = re.compile(rb"https?://([a-zA-Z0-9.-]+\.[a-z]{2,})")
 CRED = re.compile(rb"\b([A-Z][A-Z0-9]*_(?:API_KEY|TOKEN|SECRET|KEY|ACCOUNT_ID|PASSWORD))\b")
 SKIP_DIRS = {".git", "__pycache__", "node_modules", ".venv", "venv"}
+# RFC 2606 and RFC 6761 reserved names. They are guaranteed never to resolve to
+# anybody, so they can never be a dependency, and a drill for one is meaningless.
+# This exists because the audit refused a push over `https://a.example/x`, which was
+# a placeholder inside a guard's own selftest. A guard that refuses correct work is
+# an outage (LAW 38), and the workaround it forced -- dismissing a.example in writing
+# -- would have taught every later session that a dismissal can be noise.
+RESERVED = re.compile(r"(?:^|\.)(?:example|test|invalid|localhost)$"
+                      r"|^example\.(?:com|net|org)$", re.I)
+
+
+def is_real_host(name):
+    """False for a name that cannot belong to anyone."""
+    return not RESERVED.search(name)
+
+
 BINARY = (".pyc", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".pdf", ".gz",
           ".zip", ".tar", ".woff", ".woff2", ".ttf", ".so", ".dylib")
 
@@ -105,7 +120,8 @@ def discover(root, deps_path, exclude):
                 blob = fh.read(2_000_000)
         except OSError:
             return
-        hosts.update(m.decode() for m in HOST.findall(blob))
+        hosts.update(h for h in (m.decode() for m in HOST.findall(blob))
+                     if is_real_host(h))
         creds.update(m.decode() for m in CRED.findall(blob))
 
     if tracked is not None:

@@ -172,3 +172,36 @@ warn contains msg if {
 		[g.path, g.target],
 	)
 }
+
+# A hook wired to a file that does not exist.
+#
+# THE MISTAKE, 2026-08-24, mine. I repointed the Artifact PreToolUse hook at
+# opa-hook.py in the live ~/.claude/settings.json while opa-hook.py existed only
+# on a branch. ~/.claude/scripts IS this repository's checkout, so the file was
+# not there. Every Artifact call then exited 2 -- publish AND read -- because
+# python3 exits 2 on "can't open file". A guard that refuses correct work is an
+# outage (LAW 38), and this one refused everything, silently, until a selftest
+# happened to print the errno. Measured: publish -> 2, read -> 2, want 2 and 0.
+#
+# THE CLASS: settings.json names a hook command whose file is not in the tree
+# that CI checks out. Wiring lands in one commit and the file in another, or in
+# no commit at all. Nothing checked the two agreed.
+#
+# WIDTH. Every hook in settings/settings.json, not the one I touched. It is
+# deliberately NOT extended to jobs/jobs.json: those name absolute paths in other
+# repositories -- launchd_receipt.py lives in the hermes tree, backup_store.py and
+# five others in prospector-main -- and denying them here would fail this repo for
+# another repo's layout. Measured on this tree: 7 such names, 0 of them hooks.
+#
+# DENY AND NOT WARN. Unlike the two warns above, there is no judgement call and no
+# other repository involved: the file is either in `git ls-files` or the hook
+# cannot run. Sweep at the time of writing: 20 hook names, 20 tracked, 0 failures,
+# so this passes today and would have refused my commit.
+deny contains msg if {
+	some name in input.hooks_wired
+	not name in input.tracked_py
+	msg := sprintf(
+		"settings/settings.json wires a hook to %s, which is not a tracked file in this repository. ~/.claude/scripts IS this checkout, so python3 exits 2 on every matching tool call -- the hook refuses reads as well as writes. Commit the file in the same change as the wiring, or revert the wiring (LAW 38).",
+		[name],
+	)
+}
