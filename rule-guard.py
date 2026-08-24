@@ -855,11 +855,38 @@ def rule_force_push(cmd: str) -> str | None:
     return None
 
 
+_FLY_REVIVE_RE = re.compile(
+    r"\bfly(?:ctl)?\s+(?:apps\s+restart|machines?\s+(?:start|run|clone|restart|update)"
+    r"|deploy\b|launch\b|scale\s|secrets\s+(?:set|import)|resume\b"
+    r"|volumes\s+create|ips\s+allocate|certs\s+add|postgres\s+create)")
+
+
+def rule_no_fly_revival(cmd: str) -> str | None:
+    """Founder ruling R1, 2026-08-24, his words: "for the last time, we are not going back to fly".
+
+    He had already ruled this once and a session still put "pay the Fly invoices" in front of
+    him, which is exactly the repeat this guard exists to prevent. Reviving anything on Fly —
+    deploy, launch, scale, starting machines, setting secrets — is refused. Teardown
+    (destroy, suspend) and read-only commands (status, list, logs) pass, because the ruled
+    path is the EXIT: crew#78 (k8s) and crew#38 (drill the exit). rulings.json holds R1."""
+    if "fly-revival-intended" in cmd:
+        return None
+    if _FLY_REVIVE_RE.search(cmd):
+        return ("BLOCKED by rule-guard: this revives something on Fly.\n"
+                'Founder ruling R1 (2026-08-24), verbatim: "for the last time, we are not '
+                'going back to fly".\n'
+                "Teardown and read-only Fly commands pass. The work goes to the exit instead: "
+                "crew#78 (k8s) / crew#38 (drill the exit). Standing rulings: "
+                "~/.claude/scripts/rulings.json"
+                + _escape("fly-revival-intended"))
+    return None
+
+
 RULES = (rule_add_all, rule_runtime_state, rule_no_verify, rule_index_lock, rule_two_dot_diff,
          rule_pr_size, rule_commit_in_shared_checkout, rule_merge_red_pr,
          rule_ci_autoscale, rule_clone_makes_a_standby,
          rule_restart_kills_a_live_build, rule_shared_stash,
-         rule_force_push)
+         rule_force_push, rule_no_fly_revival)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
@@ -881,15 +908,21 @@ def selftest() -> int:
         ("fly machine stop 8ee06eb7701628 -a prospector-ci", "rule_ci_autoscale"),
         ("fly machines stop abc -a prospector-ci", "rule_ci_autoscale"),
         ("fly machine stop abc -a prospector-engine", None),
-        ("fly machine start 8ee06eb7701628 -a prospector-ci", None),
+        # Superseded 2026-08-24 by founder ruling R1 ("we are not going back to fly"):
+        # starting, scaling and standby-restoring Fly machines were legitimate CI operations
+        # when these cases were written; they are revivals now and must be refused.
+        ("fly machine start 8ee06eb7701628 -a prospector-ci", "rule_no_fly_revival"),
         ("fly machine clone 8e4530a7712248 -a prospector-ci", "rule_clone_makes_a_standby"),
         # rule_restart_kills_a_live_build reads GitHub, so the harness skips it above and it is
         # proved against a stubbed busy list further down.
         ("fly machines clone abc --region lhr", "rule_clone_makes_a_standby"),
         ("fly m clone abc -a hermes-ci", "rule_clone_makes_a_standby"),
-        ("fly machine clone abc  # clone-standby-intended", None),
-        ("fly scale count 12 -a prospector-ci", None),
-        ("fly machine update abc -a prospector-ci --standby-for \"\" --yes", None),
+        # clone-standby-intended escapes the standby rule, but under R1 a clone is still a
+        # revival; only fly-revival-intended lets it through now, stated out loud.
+        ("fly machine clone abc  # clone-standby-intended", "rule_no_fly_revival"),
+        ("fly scale count 12 -a prospector-ci", "rule_no_fly_revival"),
+        ("fly machine update abc -a prospector-ci --standby-for \"\" --yes",
+         "rule_no_fly_revival"),
         ("git push --force origin my-branch", "rule_force_push"),
         ("git push -f origin my-branch", "rule_force_push"),
         ("git push origin +main:main", "rule_force_push"),
@@ -961,6 +994,17 @@ def selftest() -> int:
         ("python3 - <<'PY'\nprint('the git add -A rule')\nPY\n", None),
         # ...unless a shell is reading it, because then the body executes.
         ("bash <<EOF\ngit add -A\nEOF\n", "rule_add_all"),
+        # Founder ruling R1: nothing is revived on Fly. Teardown and read-only pass.
+        ("flyctl deploy --app prospector-engine", "rule_no_fly_revival"),
+        ("fly machine start 17811953 -a prospector-engine", "rule_no_fly_revival"),
+        ("flyctl scale count 2 -a prospector-store-web", "rule_no_fly_revival"),
+        ("flyctl secrets set TOKEN=x -a tie-api", "rule_no_fly_revival"),
+        ("flyctl launch --name new-app", "rule_no_fly_revival"),
+        ("flyctl apps list", None),
+        ("flyctl status -a prospector-store-web", None),
+        ("flyctl logs -a prospector-engine", None),
+        ("flyctl apps destroy prospector-engine --yes", None),
+        ("flyctl scale count 0 -a x  # fly-revival-intended", None),
     ]
     bad = 0
     for cmd, want in cases:
