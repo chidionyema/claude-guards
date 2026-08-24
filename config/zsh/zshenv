@@ -1,0 +1,7 @@
+. "$HOME/.cargo/env"
+
+# Cap pytest-xdist "-n auto" on this 6-physical-core / 16 GB laptop.
+# Without this, xdist falls through to os.cpu_count() = 12 (psutil is not in the venvs)
+# and 12 workers land on top of the resident Claude sessions and Chrome.
+# CI is unaffected: it reads its own environment, not this file.
+export PYTEST_XDIST_AUTO_NUM_WORKERS=6
