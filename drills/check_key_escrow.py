@@ -29,6 +29,17 @@ def main():
                        capture_output=True, text=True)
     out = (p.stdout + p.stderr).strip()
     print(out if out else "(the escrow script said nothing)")
+    # rc 2 is "I could not see one of the things I check", not "it is broken".
+    # Reported as a failure on 2026-08-23/24 it read as "the estate is
+    # unrecoverable", and three sessions moved to repair an escrow that was intact.
+    # A drill that has lost its evidence says so and stays non-zero, because
+    # unverified is not the same as verified either.
+    if p.returncode == 2:
+        print("DRILL BLIND: the R2 half was proved, the iCloud half could not be "
+              "looked at from this process. This is NOT evidence the escrow is "
+              "broken. Re-run by hand for a verdict:")
+        print("  /usr/bin/python3 %s" % os.path.abspath(__file__))
+        return 2
     if p.returncode != 0:
         print("DRILL FAILED: the two age keys and the R2 credentials cannot be "
               "recovered without this laptop.")
