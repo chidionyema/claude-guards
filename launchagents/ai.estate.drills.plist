@@ -15,6 +15,8 @@
 	<integer>10</integer>
 	<key>ProgramArguments</key>
 	<array>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>drills</string>
 		<string>/usr/bin/python3</string>
 		<string>/Users/chidionyema/.claude/scripts/drills/run.py</string>
 		<string>--all</string>

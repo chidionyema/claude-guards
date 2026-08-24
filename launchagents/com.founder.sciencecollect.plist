@@ -2,40 +2,28 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key>
-  <string>com.founder.sciencecollect</string>
-
-  <!-- Rebuilds crew/science/warehouse.db from the estate's 18 data stores, and
-       collects what the estate shipped, so the spend row in STATE.md and the
-       usd_per_commit view are never more than an hour stale. The founder never
-       runs this. LAW 31. Turn it off with:
-         launchctl bootout gui/$(id -u)/com.founder.sciencecollect -->
-  <key>ProgramArguments</key>
-  <array>
-    <string>/Users/chidionyema/dev/code/crew/scripts/science-collect</string>
-  </array>
-
-  <key>WorkingDirectory</key>
-  <string>/Users/chidionyema/dev/code/crew</string>
-
-  <!-- Hourly, at :20, so it lands between com.founder.estatepush (:00) and
-       com.founder.estatesnapshot, and the snapshot reads a warehouse this job
-       has already rebuilt rather than one from the previous hour. -->
-  <key>StartInterval</key>
-  <integer>3600</integer>
-
-  <key>RunAtLoad</key>
-  <true/>
-
-  <key>StandardOutPath</key>
-  <string>/Users/chidionyema/.claude/state/logs/science-collect.out.log</string>
-  <key>StandardErrorPath</key>
-  <string>/Users/chidionyema/.claude/state/logs/science-collect.err.log</string>
-
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>PATH</key>
-    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-  </dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>PATH</key>
+		<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+	</dict>
+	<key>Label</key>
+	<string>com.founder.sciencecollect</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>sciencecollect</string>
+		<string>/Users/chidionyema/dev/code/crew/scripts/science-collect</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/chidionyema/.claude/state/logs/science-collect.err.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/chidionyema/.claude/state/logs/science-collect.out.log</string>
+	<key>StartInterval</key>
+	<integer>3600</integer>
+	<key>WorkingDirectory</key>
+	<string>/Users/chidionyema/dev/code/crew</string>
 </dict>
 </plist>
