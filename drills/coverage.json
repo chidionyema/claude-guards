@@ -1,0 +1,95 @@
+{
+  "_why": "The answer key for coverage.py. Every asset the estate owns has to say, for each way it could be lost, either which drill rehearses getting it back or why losing it cannot stop us. Anything with neither is red, and that is the whole point: an asset nobody has decided about is the state Aiden was sitting in on 2026-08-24, which is why nobody could answer whether it was drilled.",
+
+  "_how_to_read_it": "A rule matches on the fields the inventory already computes, and the first matching rule in this file wins. An entry under `assets` beats every rule, because a rule is a generalisation and an entry is somebody looking at the one thing. A slot with no rule and no entry is unclassified, and unclassified is the finding.",
+
+  "_the_three_slots": "restart -- it stops and comes back on this machine. rebuild -- this Mac dies and it comes back on a new one. replace -- the vendor behind it is gone and the estate still works. Asking all three separately is the change: asked as one question, Aiden and the Kimi bridge both read as covered, because recovery-posture passes and it grades every job on this Mac.",
+
+  "_what_is_deliberately_left_red": "Three groups, and none of them is an oversight. 58 ledgers and 9 data trees that no offsite copy carries. 21 guards that only fire inside Claude Code, which is LAW 34's exact concern and already has a number on it (issue #53). 12 scheduled jobs that jobs/jobs.json cannot re-render, so they do not exist on a new machine. Writing a dismissal for any of those would turn a real hole into a green line, which is the failure this file exists to stop.",
+
+  "rules": [
+    {
+      "name": "every launchd job is graded for restart",
+      "kind": "scheduled_job",
+      "when": {},
+      "restart": {"covered_by": "recovery-posture"},
+      "why": "recovery-posture walks every plist on this Mac and fails any job that cannot get another turn. That is exactly the restart question and it is measured, not assumed."
+    },
+    {
+      "name": "a job jobs.json can re-render survives this laptop",
+      "kind": "scheduled_job",
+      "when": {"rendered": true},
+      "rebuild": {"covered_by": "rebuild"},
+      "why": "The rebuild drill stands the estate up from the remotes and renders the plists from jobs/jobs.json. A job in that file gets written onto the new machine pointing at the new home. A job that is not in it does not come back at all, so it is left unclassified rather than covered."
+    },
+    {
+      "name": "a job with a vendor behind it rides on the vendor drill",
+      "kind": "scheduled_job",
+      "when": {"coupling": "anthropic"},
+      "replace": {"covered_by": "no-anthropic"},
+      "why": "no-anthropic is the drill that asks what still runs with Anthropic gone. A job the inventory has coupled to Anthropic is one of the things that drill is about."
+    },
+    {
+      "name": "a job with no vendor has no vendor to lose",
+      "kind": "scheduled_job",
+      "when": {"coupling": "none"},
+      "replace": {"dismissed": "nothing outside this estate runs it: it is our own code on our own machine, so there is no supplier whose withdrawal could take it away"},
+      "why": "The inventory computes coupling by reading what the program actually calls. A job that calls nobody cannot be taken away by anybody."
+    },
+
+    {
+      "name": "guards in the claude-guards checkout come back with the checkout",
+      "kind": "guard",
+      "when": {"root": "~/.claude"},
+      "rebuild": {"covered_by": "rebuild"},
+      "why": "Every guard here is a file in a repository with a remote, and the rebuild drill clones the remotes into a throwaway home. If the guard is in the tree, it arrives."
+    },
+    {
+      "name": "guards in the estate root come back with the estate root",
+      "kind": "guard",
+      "when": {"root": "~/.estate"},
+      "rebuild": {"covered_by": "rebuild"},
+      "why": "Same reason, different repository."
+    },
+    {
+      "name": "a guard with no vendor has no vendor to lose",
+      "kind": "guard",
+      "when": {"coupling": "none"},
+      "replace": {"dismissed": "it is a script this estate wrote and this estate runs; no supplier can withdraw it"},
+      "why": "A guard that shells out to nothing external keeps working whoever leaves."
+    },
+
+    {
+      "name": "a repo with an offsite bundle has a way back",
+      "kind": "repo",
+      "when": {"offsite": true},
+      "rebuild": {"covered_by": "estate-bundle-restore"},
+      "why": "estate-bundle-restore takes a bundle out of the offsite bucket and checks a working tree comes out of it. A repo the inventory finds in that bundle set has had that path proved."
+    },
+    {
+      "name": "a repo hosted on GitHub falls with GitHub",
+      "kind": "repo",
+      "when": {"remote": {"prefix": "https://github.com/"}},
+      "replace": {"covered_by": "github-gone"},
+      "why": "github-gone is on the register and is NOT WRITTEN, so this reads as covered on paper only and the report says so in those words. That is the honest state: the drill is named, nobody has run it."
+    },
+
+    {
+      "name": "a ledger the backup collects has a way back",
+      "kind": "ledger",
+      "when": {"collected": true},
+      "rebuild": {"covered_by": "offsite-backup-restore"},
+      "why": "offsite-backup-restore pulls the offsite copy down and checks the rows are readable. A ledger inside that copy is covered by it. A ledger outside it has no second copy anywhere and is left red."
+    },
+    {
+      "name": "a data tree the backup collects has a way back",
+      "kind": "data",
+      "when": {"collected": true},
+      "rebuild": {"covered_by": "offsite-backup-restore"},
+      "why": "Same mechanism, same proof."
+    }
+  ],
+
+  "assets": {
+  }
+}

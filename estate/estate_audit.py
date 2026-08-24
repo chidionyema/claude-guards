@@ -222,33 +222,118 @@ def c_sessions() -> list[dict]:
                 "Each session bills independently and cannot see the others' work.")]
 
 
+#: Label prefixes belonging to this estate. Steam's cleanup job exits 78 every
+#: run and no agent here will ever fix it; grading it critical makes a red that
+#: cannot go green, and a gate that is red forever gets ignored.
+OURS = ("com.prospector", "com.estate", "com.founder", "com.chidionyema", "ai.")
+
+#: Jobs whose exit 1 means "I found something", not "I crashed". Report-mode jobs
+#: on this estate exit non-zero when they have findings, so the exit code cannot
+#: tell a working instrument from a dead one. Every entry below was verified on
+#: 2026-08-24 by reading the job's own last output, quoted in the reason.
+#:
+#: The excuse covers exit status "1" ONLY. A declared job that dies on a signal or
+#: any other code is still a crash, so this list cannot quietly swallow the failure
+#: of the job it names.
+FINDING_EXIT = {
+    "com.chidionyema.guard-selftest":
+        "exit 1 = guards with no selftest. Last run 2026-08-23 19:17 printed "
+        "'no selftest (45): aiden/aiden.py, ...'. That is a census, not a crash.",
+    "com.estate.costsentinel":
+        "exit 1 = spend over cap. Last run 2026-08-24 01:22 printed 'Claude spend "
+        "2026-08-24: $129.86 of $120 cap (904 requests)' and '[sentinel] WARN "
+        "delivered: 13168'. It exits non-zero BECAUSE it worked and delivered.",
+    "com.founder.sciencecollect":
+        "exit 1 = stale science inputs. Last run 2026-08-24 01:11 printed 'needs "
+        "attention: would_have_fired STALE 51h, decisions STALE 55h'.",
+    "com.prospector.estate-inventory":
+        "exit 1 = undescribed resources. Last run printed '38 resources, 28 "
+        "undescribed, 0 admitted, 8 classes not probed.'",
+    "com.prospector.launchd-held":
+        "exit 1 = jobs declared but not held. Last run 2026-08-24 01:12 printed "
+        "'LAUNCHD HELD FAIL 7 finding(s) (not-held=7, ...)'.",
+}
+
+
+def grade_launchd(jobs: list[tuple[str, str, str]]) -> dict[str, list[str]]:
+    """Split launchd jobs by what their last exit actually MEANS.
+
+    Three different facts used to be collapsed into one number here, and the
+    number was wrong in the founder's face every hour.
+
+    A job with a live pid is running RIGHT NOW, so its recorded exit code
+    describes a process launchd has already replaced. Measured 2026-08-24: five
+    of the ten jobs this check called failing were alive, including
+    ai.architect.gateway (pid 60261, answering Telegram) and com.chidionyema.maestro
+    itself (pid 79018) -- maestro's own audit was counting maestro as a failed job
+    while maestro was the process running the audit. The pid was in column 1 of
+    the same launchctl output this function already parsed, and it was discarded.
+
+    A report-mode job exits non-zero when it FINDS something. Exit code cannot
+    tell that from a crash, so those are declared in FINDING_EXIT with the line
+    they printed, and they are reported as findings rather than as failures.
+
+    Everything left is a real crash and is still graded critical, INCLUDING a job
+    nobody has declared. An allow-list whose unknown branch falls through quietly
+    is how ten criticals went missing here for 18 hours.
+    """
+    buckets: dict[str, list[str]] = {"notloaded": [], "running": [],
+                                     "findings": [], "crashed": [], "foreign": []}
+    for label, pid, status in jobs:
+        if status == "notloaded":
+            buckets["notloaded"].append(label)
+        elif pid not in ("-", ""):
+            buckets["running"].append(label)          # exit code is history
+        elif status == "0":
+            pass                                       # exited clean, nothing to say
+        elif not label.startswith(OURS):
+            buckets["foreign"].append(f"{label}({status})")
+        elif status == "1" and label in FINDING_EXIT:
+            buckets["findings"].append(label)
+        else:
+            buckets["crashed"].append(f"{label}({status})")
+    return buckets
+
+
 def c_launchd() -> list[dict]:
     # launchctl list is the expensive call -- make it ONCE, then join in awk.
+    # Column 1 is the pid and it is the whole difference between "this job is
+    # running" and "this job died"; it must come back with the status.
     script = r"""
 launchctl list 2>/dev/null > /tmp/.ea_lc.$$
 for p in ~/Library/LaunchAgents/*.plist; do
   lbl=$(/usr/libexec/PlistBuddy -c "Print :Label" "$p" 2>/dev/null) || continue
   [ -z "$lbl" ] && continue
+  pid=$(awk -v l="$lbl" '$3==l{print $1; exit}' /tmp/.ea_lc.$$)
   st=$(awk -v l="$lbl" '$3==l{print $2; exit}' /tmp/.ea_lc.$$)
   [ -z "$st" ] && st="notloaded"
-  echo "$lbl|$st"
+  [ -z "$pid" ] && pid="-"
+  echo "$lbl|$pid|$st"
 done
 rm -f /tmp/.ea_lc.$$
 """
     rc, o = sh(script, timeout=25)
-    jobs = [l.split("|") for l in o.splitlines() if "|" in l]
-    total = len(jobs)
-    notloaded = [j[0] for j in jobs if j[1] == "notloaded"]
-    failing = [f"{j[0]}({j[1]})" for j in jobs if j[1] not in ("0", "notloaded")]
-    out = [row("sched", "launchd jobs installed", str(total), WARN,
+    jobs = [tuple(l.split("|", 2)) for l in o.splitlines() if l.count("|") == 2]
+    b = grade_launchd(jobs)  # type: ignore[arg-type]
+    out = [row("sched", "launchd jobs installed", str(len(jobs)), WARN,
                "PlistBuddy Print :Label over ~/Library/LaunchAgents/*.plist",
                "Every one of these runs with no session attached and no human watching.")]
-    if failing:
-        out.append(row("sched", "launchd jobs whose last run exited non-zero", str(len(failing)),
-                       CRIT, "launchctl list", ", ".join(sorted(failing))))
-    if notloaded:
-        out.append(row("sched", "launchd jobs installed but never loaded", str(len(notloaded)),
-                       WARN, "launchctl list", ", ".join(sorted(notloaded))))
+    if b["crashed"]:
+        out.append(row("sched", "launchd jobs that crashed and are not running", str(len(b["crashed"])),
+                       CRIT, "launchctl list, joining pid and exit status",
+                       "Not running, exited non-zero, and not declared as a report job: "
+                       + ", ".join(sorted(b["crashed"]))))
+    if b["findings"]:
+        out.append(row("sched", "Report jobs with open findings", str(len(b["findings"])),
+                       WARN, "launchctl list, joining pid and exit status; FINDING_EXIT",
+                       "These exited 1 because they FOUND something, which is them working: "
+                       + ", ".join(sorted(b["findings"]))))
+    if b["foreign"]:
+        out.append(row("sched", "Third-party launchd jobs failing", str(len(b["foreign"])),
+                       WARN, "launchctl list", "Not ours to fix: " + ", ".join(sorted(b["foreign"]))))
+    if b["notloaded"]:
+        out.append(row("sched", "launchd jobs installed but never loaded", str(len(b["notloaded"])),
+                       WARN, "launchctl list", ", ".join(sorted(b["notloaded"]))))
     return out
 
 
@@ -961,7 +1046,10 @@ def c_disaster_recovery() -> list[dict]:
     if not missing and not stale and not unknown:
         ages = ", ".join(f"{r['what']} {r['age']}" for r in d["rows"] if r["where"].startswith("r2:"))
         detail += "All off-machine copies are current: " + ages + "."
-    out.append(row("backup", "Copies of the money data that survive losing Fly", value, sev,
+    # "backup" is not a declared domain, so this row rendered into no section at all:
+    # the one row that says whether the money data survives losing Fly was invisible on
+    # the page while still being counted. Its four sibling backup rows all use "sched".
+    out.append(row("sched", "Copies of the money data that survive losing Fly", value, sev,
                    f"deploy/stack.sh recover --json in {repo}", detail))
 
     # --- can each component run anywhere ------------------------------------------------
@@ -1235,6 +1323,34 @@ def selftest() -> int:
         fails.append("a two-hour-old build did not render as STALE")
     if "STALE" in render_html(data):
         fails.append("a fresh build rendered as STALE")
+    # LAW 38: a guard is not finished when it refuses the bad case -- that was never
+    # in doubt. It is finished when it has been SHOWN to allow the good one. Both
+    # directions, one fixture, so a future edit cannot quietly turn either off.
+    fixture = [
+        ("com.chidionyema.maestro",      "79018", "-15"),       # alive, exit is history
+        ("ai.architect.gateway",         "60261", "1"),         # alive, exit is history
+        ("com.prospector.launchd-held",  "-",     "1"),         # declared report job
+        ("com.valvesoftware.steamclean", "-",     "78"),        # not ours to fix
+        ("com.founder.board",            "-",     "0"),         # exited clean
+        ("com.founder.parked",           "-",     "notloaded"),
+        ("com.estate.somethingnew",      "-",     "1"),         # UNDECLARED -> crash
+        ("com.estate.killed",            "-",     "-9"),        # signal -> crash
+        ("com.prospector.launchd-held",  "-",     "-9"),        # declared, wrong code -> crash
+    ]
+    want = {
+        "running":   {"com.chidionyema.maestro", "ai.architect.gateway"},
+        "findings":  {"com.prospector.launchd-held"},
+        "foreign":   {"com.valvesoftware.steamclean(78)"},
+        "notloaded": {"com.founder.parked"},
+        "crashed":   {"com.estate.somethingnew(1)", "com.estate.killed(-9)",
+                      "com.prospector.launchd-held(-9)"},
+    }
+    got = grade_launchd(fixture)
+    for bucket, expected in want.items():
+        if set(got[bucket]) != expected:
+            fails.append(f"grade_launchd {bucket}: got {sorted(set(got[bucket]))}, "
+                         f"want {sorted(expected)}")
+
     if fails:
         print("selftest FAILED:")
         for f in fails:
@@ -1242,7 +1358,8 @@ def selftest() -> int:
         return 1
     print(f"PASS: {len(data['rows'])} rows in {data['duration_s']}s, "
           f"{data['counts'][CRIT]} critical; no credential value in the page; "
-          "staleness renders in both directions.")
+          "staleness renders in both directions; a live job is not counted failed "
+          "and an undeclared non-zero exit still is.")
     return 0
 
 

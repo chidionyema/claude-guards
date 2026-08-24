@@ -2,23 +2,26 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>ai.aiden.watch</string>
-  <key>ProgramArguments</key>
-  <array>
-    <!-- Plain python3, deliberately. estate-runner is a signed copy of bash and
-         it fed this file to the shell. The TCC problem it exists to solve does
-         not apply here anyway: Aiden reads ~/.claude/projects and ~/.claude/state
-         and never touches ~/Documents, ~/Desktop or ~/Downloads, which are the
-         only trees macOS gates by executable identity. -->
-    <string>/usr/bin/python3</string>
-    <string>/Users/chidionyema/.claude/scripts/aiden/tick.py</string>
-  </array>
-  <key>StartInterval</key><integer>300</integer>
-  <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>/Users/chidionyema/.claude/state/aiden-watch.log</string>
-  <key>StandardErrorPath</key><string>/Users/chidionyema/.claude/state/aiden-watch.log</string>
-  <key>ProcessType</key><string>Background</string>
-  <key>LowPriorityIO</key><true/>
-  <key>Nice</key><integer>10</integer>
+	<key>Label</key>
+	<string>ai.aiden.watch</string>
+	<key>LowPriorityIO</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Standard</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>watch</string>
+		<string>/usr/bin/python3</string>
+		<string>/Users/chidionyema/.claude/scripts/aiden/tick.py</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/chidionyema/.claude/state/aiden-watch.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/chidionyema/.claude/state/aiden-watch.log</string>
+	<key>StartInterval</key>
+	<integer>300</integer>
 </dict>
 </plist>

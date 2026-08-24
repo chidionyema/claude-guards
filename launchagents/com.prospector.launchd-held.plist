@@ -13,10 +13,14 @@
 	</dict>
 	<key>Label</key>
 	<string>com.prospector.launchd-held</string>
+	<key>Nice</key>
+	<integer>10</integer>
+	<key>ProcessType</key>
+	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/.estate/guards/bin/estate-gate</string>
-		<string>com.prospector.launchd-held</string>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>launchd-held</string>
 		<string>/Users/chidionyema/Documents/code/prospector/.venv/bin/python</string>
 		<string>/Users/chidionyema/.hermes/scripts/launchd_receipt.py</string>
 		<string>--label</string>

@@ -9,8 +9,14 @@
 	</dict>
 	<key>Label</key>
 	<string>com.chidionyema.guard-selftest</string>
+	<key>Nice</key>
+	<integer>10</integer>
+	<key>ProcessType</key>
+	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>guard-selftest</string>
 		<string>/usr/local/bin/python3</string>
 		<string>/Users/chidionyema/.claude/scripts/estate-selftest.py</string>
 		<string>--quiet</string>

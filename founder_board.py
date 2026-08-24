@@ -1608,6 +1608,57 @@ def collect_drills() -> list[Row]:
         rows.append(Row(BAD, "— drills nothing runs", str(len(stray)),
                         "written, never registered, so they prove nothing: "
                         + ", ".join(stray), "drills/run.py --check"))
+    rows.extend(_coverage_rows())
+    return rows
+
+
+def _coverage_rows() -> list[Row]:
+    """How much of the estate any of those drills actually reaches.
+
+    The row above says the ways back we have all work. This one says how much of
+    the estate they cover, which is the question that was open when he asked
+    whether Aiden was drilled: the drills were green and nothing joined them to
+    the asset list, so a job that does not come back on a new machine read the
+    same as one that does.
+    """
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_drills_coverage", os.path.join(SCRIPTS, "drills", "coverage.py"))
+        cov = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cov)
+        # The off switch is one file and it takes this row off the board as well
+        # as the nightly line, because a switch that silences half a thing is a
+        # switch nobody trusts.
+        if cov.is_off():
+            return []
+        lines, problems = cov.check()
+    except Exception as e:                        # noqa: BLE001 -- never report zero
+        return [_unknown("— assets with a way back", f"{type(e).__name__}: {e}")]
+
+    summary = next((l for l in lines if l.startswith("SUMMARY:")), "")
+    nums = re.findall(r"\d+", summary)
+    if len(nums) < 3:
+        return [_unknown("— assets with a way back", "no summary line in the report")]
+    holes, slots, assets = (int(n) for n in nums[:3])
+
+    # A broken answer key is its own row, because it makes the number beside it
+    # meaningless and the two failures are fixed by different people on different
+    # days. A hole is the estate; a broken key is the instrument.
+    broken = [f"{who}: {why}" for who, why in problems if who != cov.HOLE]
+    rows = [Row(
+        WARN if holes else GOOD,
+        "— assets with a way back",
+        f"{slots - holes} of {slots}",
+        f"across {assets} assets, each asked three ways: does it restart here, "
+        f"does it come back on a new machine, does it survive its vendor leaving. "
+        + (f"{holes} slot(s) nobody has decided about yet." if holes
+           else "Every one is either pointed at a drill or dismissed with a reason."),
+        "drills/coverage.py")]
+    if broken:
+        rows.append(Row(BAD, "— coverage answer key", "broken",
+                        "so the number above cannot be believed: "
+                        + "; ".join(broken)[:200], "drills/coverage.py --gate"))
     return rows
 
 

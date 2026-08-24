@@ -13,8 +13,12 @@
 	<true/>
 	<key>Nice</key>
 	<integer>10</integer>
+	<key>ProcessType</key>
+	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>key-escrow</string>
 		<string>/usr/bin/python3</string>
 		<string>/Users/chidionyema/.claude/scripts/estate/key_escrow.py</string>
 		<string>--seal</string>
