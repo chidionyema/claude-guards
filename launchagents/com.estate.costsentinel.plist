@@ -13,6 +13,8 @@
 	<integer>5</integer>
 	<key>ProgramArguments</key>
 	<array>
+		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
+		<string>estate-costsentinel</string>
 		<string>/usr/local/bin/python3</string>
 		<string>/Users/chidionyema/.claude/scripts/estate/estate_cost_sentinel.py</string>
 		<string>--digest</string>
