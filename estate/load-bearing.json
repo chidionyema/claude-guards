@@ -101,6 +101,10 @@
     {
       "path": "~/Documents/code/signalengine",
       "why": "the signal engine"
+    },
+    {
+      "path": "~/.estate",
+      "why": "the estate's requirements ledger and agent-certification onboarding; it has a github remote and 0 commits off-remote, but nothing declared it, so no escrow rule reached it and its R2 copy sat at 472f783 while the disk moved to 7ca27f9"
     }
   ],
   "secrets": [
