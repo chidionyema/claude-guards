@@ -111,6 +111,10 @@ def _is_product_repo(root: str) -> bool:
 #: PR as "65 files" — the same wrong-repo class as the two incidents above, third variant.
 _GIT_DASH_C = re.compile(r"""\bgit\s+-C\s+(?P<path>'[^']+'|"[^"]+"|[^\s;&|]+)""")
 
+#: `--repo owner/name` names the repository outright and outranks every path guess. Fifth
+#: variant of the wrong-repo class; see test_incident_rule_guard_repo_flag_graded_the_wrong_repo.py.
+_GH_REPO_FLAG = re.compile(r"(?:--repo|-R)[=\s]+(?P<slug>[\w.-]+/[\w.-]+)")
+
 
 def _repo_for(cmd: str, session_cwd: str | None) -> str:
     """The worktree this command runs in. Falls back to REPO, so behaviour never gets worse."""
@@ -488,12 +492,14 @@ def _merge_verdict(pr: str, states: list[tuple[str, str]] | None,
     return None
 
 
-def _pr_check_states(pr: str) -> list[tuple[str, str]] | None:
+def _pr_check_states(pr: str, cmd: str = "") -> list[tuple[str, str]] | None:
     """(name, state) for every check on `pr`, or None if the query itself failed."""
+    named = _GH_REPO_FLAG.search(cmd)
     try:
         p = subprocess.run(
-            (_real_tool("gh"), "pr", "checks", pr, "--json", "name,state",
-             "--jq", '.[] | "\\(.name)\\t\\(.state)"'),
+            [_real_tool("gh"), "pr", "checks", pr, "--json", "name,state",
+             "--jq", '.[] | "\\(.name)\\t\\(.state)"']
+            + (["--repo", named.group("slug")] if named else []),
             cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
             env=_clean_env())
     except (OSError, subprocess.SubprocessError):
@@ -558,7 +564,7 @@ def rule_merge_red_pr(cmd: str) -> str | None:
         pr = p.stdout.strip()
         if not pr.isdigit():
             return _unresolved
-    return _merge_verdict(pr, _pr_check_states(pr), escaped,
+    return _merge_verdict(pr, _pr_check_states(pr, cmd), escaped,
                           _main_red_refusal(), "main-is-red" in cmd)
 
 
