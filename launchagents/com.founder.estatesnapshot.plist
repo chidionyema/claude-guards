@@ -17,7 +17,7 @@
 	<array>
 		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
 		<string>estate-snapshot</string>
-		<string>/Users/chidionyema/dev/code/crew/scripts/estate-snapshot</string>
+		<string>/Users/chidionyema/dev/code/.crew-state/scripts/estate-snapshot</string>
 		<string>--commit</string>
 	</array>
 	<key>RunAtLoad</key>
@@ -29,6 +29,6 @@
 	<key>StartInterval</key>
 	<integer>3600</integer>
 	<key>WorkingDirectory</key>
-	<string>/Users/chidionyema/dev/code/crew</string>
+	<string>/Users/chidionyema/dev/code/.crew-state</string>
 </dict>
 </plist>
