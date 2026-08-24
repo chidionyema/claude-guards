@@ -855,6 +855,33 @@ def rule_force_push(cmd: str) -> str | None:
     return None
 
 
+_DIRECT_PUSH_MAIN_RE = re.compile(
+    r"\bgit\s+push\b[^\n|;&]*\s(?:\+?(?:HEAD|\S+):)?(?:refs/heads/)?main\b(?![-/])")
+
+
+def rule_direct_push_main(cmd: str) -> str | None:
+    """A direct push to main skips every CI gate the PRs run.
+
+    2026-08-24: commit 1a97e80 went straight to crew main with `findings` as a string in two
+    research-ledger entries. Gate 80 refuses exactly that, but gates run on pull requests and
+    a direct push never met one; the defect sat on main until the next PR's qa went red on it.
+    The platform-side fence (required status checks) is rolled back until estate-snapshot gets
+    a deploy-key bypass actor, so until then the fence lives where the command is typed.
+    launchd jobs (estate-snapshot) do not run through this hook and are unaffected.
+    """
+    if "direct-push-intended" in cmd:
+        return None
+    if _DIRECT_PUSH_MAIN_RE.search(cmd):
+        return ("BLOCKED by rule-guard: direct push to main.\n"
+                "main's gates run on pull requests; a direct push lands ungraded content. The "
+                "string-findings defect of 2026-08-24 (1a97e80) reached crew main this way and "
+                "broke the next PR's qa.\n"
+                "Do this instead: push a branch and open a PR — the merge-when-green poller "
+                "lands it when qa and review-gate pass."
+                + _escape("direct-push-intended"))
+    return None
+
+
 _FLY_REVIVE_RE = re.compile(
     r"\bfly(?:ctl)?\s+(?:apps\s+restart|machines?\s+(?:start|run|clone|restart|update)"
     r"|deploy\b|launch\b|scale\s|secrets\s+(?:set|import)|resume\b"
@@ -886,7 +913,7 @@ RULES = (rule_add_all, rule_runtime_state, rule_no_verify, rule_index_lock, rule
          rule_pr_size, rule_commit_in_shared_checkout, rule_merge_red_pr,
          rule_ci_autoscale, rule_clone_makes_a_standby,
          rule_restart_kills_a_live_build, rule_shared_stash,
-         rule_force_push, rule_no_fly_revival)
+         rule_force_push, rule_no_fly_revival, rule_direct_push_main)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
@@ -931,7 +958,15 @@ def selftest() -> int:
         ("git push --force-with-lease origin my-branch", None),
         ("git push --force-if-includes origin my-branch", None),
         ("git push origin my-branch", None),
-        ("git push --follow-tags origin main", None),
+        # Superseded 2026-08-24 by rule_direct_push_main: a push targeting main was legal
+        # when this case was written; it lands ungraded content now and must be refused.
+        ("git push --follow-tags origin main", "rule_direct_push_main"),
+        ("git push origin main", "rule_direct_push_main"),
+        ("git push origin HEAD:main", "rule_direct_push_main"),
+        ("git push -q origin HEAD:refs/heads/main", "rule_direct_push_main"),
+        ("git push origin main  # direct-push-intended", None),
+        ("git push origin HEAD:refs/heads/main-fixes", None),
+        ("git push origin maintenance", None),
         ("git push", None),
         ("grep -f patterns.txt file.txt", None),
         ("git stash pop", "rule_shared_stash"),
