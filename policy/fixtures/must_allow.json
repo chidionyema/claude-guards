@@ -1,5 +1,5 @@
 {
-  "_comment": "Must pass. A legacy guard that shrank, and one at exactly its ceiling. Migration and refactoring are never blocked; only new hand-rolled policy and growth are. Case 3: a guard sitting exactly on its rule-count ceiling. Case 4: policy/ holding no Python at all, which is the steady state.",
+  "_comment": "Must pass. A legacy guard that shrank, and one at exactly its ceiling. Migration and refactoring are never blocked; only new hand-rolled policy and growth are. Case 3: a guard sitting exactly on its rule-count ceiling. Case 4: policy/ holding no Python at all, which is the steady state. Case 5: every wired hook is a tracked file, which is the steady state and must never be refused.",
   "guards": [
     {
       "path": "scope-guard.py",
@@ -16,5 +16,14 @@
     "scope-guard.py",
     "rule-guard.py"
   ],
-  "policy_dir_py": []
+  "policy_dir_py": [],
+  "hooks_wired": [
+    "scope-guard.py",
+    "rule-guard.py"
+  ],
+  "tracked_py": [
+    "scope-guard.py",
+    "rule-guard.py",
+    "opa-hook.py"
+  ]
 }
