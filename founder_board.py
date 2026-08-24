@@ -1662,7 +1662,92 @@ def _coverage_rows() -> list[Row]:
     return rows
 
 
+
+# --------------------------------------------------------------- the approval ledger
+
+ESTATE_STATE_PATHS = [
+    os.path.join(HOME, "dev/code/crew/ESTATE_STATE.md"),
+    os.path.join(HOME, "dev/code/.crew-state/ESTATE_STATE.md"),
+]
+_TICKED = ("[x]", "[X]", "\u2611", "\u2705", "\u2714")
+
+
+def _estate_state_text() -> tuple[str, str]:
+    """Return (markdown, where). Disk first, then origin/main, else ("", reason)."""
+    for path in ESTATE_STATE_PATHS:
+        try:
+            with open(path, encoding="utf-8") as fh:
+                return fh.read(), path
+        except OSError:
+            continue
+    repo = os.path.join(HOME, "dev/code/crew")
+    code, out, err = sh(["git", "-C", repo, "show", "origin/main:ESTATE_STATE.md"], 20)
+    if code == 0 and out.strip():
+        return out, "origin/main"
+    return "", (err.strip().splitlines() or ["no ESTATE_STATE.md on disk or origin/main"])[0]
+
+
+def parse_estate_state(text: str) -> list[tuple[str, str, str, bool]]:
+    """Rows of the board table as (component, observation, verified, approved).
+
+    The approval column is the founder's. A row counts as approved only when that
+    cell carries a real tick; an empty box, a dash, or any prose an agent typed
+    there is not an approval (ruling R16, 2026-08-24).
+    """
+    rows = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line.startswith("|") or not line.endswith("|"):
+            continue
+        cells = [c.strip() for c in line[1:-1].split("|")]
+        if len(cells) < 4:
+            continue
+        if set("".join(cells)) <= set("-: "):          # the header underline
+            continue
+        if cells[0].lower().startswith("component"):    # the header itself
+            continue
+        approved = any(t in cells[3] for t in _TICKED)
+        rows.append((cells[0], cells[1], cells[2], approved))
+    return rows
+
+
+def collect_estate_state() -> list[Row]:
+    """The two-column board. Nothing here is green until the founder ticks it.
+
+    The founder, 2026-08-24: "only founder decives if sonething is live or not, no one
+    else can nove a ticket to live core". So this collector has exactly one way to emit
+    GOOD -- a tick in the approval column of ESTATE_STATE.md -- and no amount of passing
+    evidence in the observation column can produce one. An agent writing "it works" there
+    still renders UNKNOWN.
+    """
+    text, where = _estate_state_text()
+    if not text:
+        return [_unknown("ESTATE_STATE.md", f"could not read it: {where}",
+                         "git -C ~/dev/code/crew show origin/main:ESTATE_STATE.md")]
+    rows = parse_estate_state(text)
+    if not rows:
+        return [_unknown("ESTATE_STATE.md", f"read {where} but found no board rows in it")]
+    out = []
+    for component, observation, verified, approved in rows:
+        out.append(Row(
+            GOOD if approved else UNKNOWN,
+            component,
+            "APPROVED" if approved else "awaiting your tick",
+            f"{observation}  [measured {verified}]" if verified else observation,
+            "",
+        ))
+    out.append(Row(
+        GOOD if all(r[3] for r in rows) else UNKNOWN,
+        "How many are approved",
+        f"{sum(1 for r in rows if r[3])} of {len(rows)}",
+        f"source: {where}. Agents write the observation column only; the tick is yours.",
+        "",
+    ))
+    return out
+
+
 COLLECTORS = [
+    ("The board \u2014 nothing is live until you tick it", collect_estate_state),
     ("Is the machine able to work?", collect_machine),
     ("Money", collect_spend),
     ("Can we get the data back?", collect_backup),
@@ -1827,6 +1912,20 @@ def selftest() -> int:
     check("a raising collector reports UNKNOWN", rows[0]["state"] == UNKNOWN)
     check("a raising collector is not counted as good", b["unknown"] == 1 and b["bad"] == 0)
     check("the reason survives", "probe is dead" in rows[0]["detail"])
+
+    # R16: a tick in the founder's column is the ONLY thing that makes a row green,
+    # and evidence in the observation column never is. Both directions, one run.
+    table = (
+        "| Component | Observation (agents write) | Verified | Founder approval |\n"
+        "|---|---|---|---|\n"
+        "| Ticked thing | anything at all | 10:00 | [x] |\n"
+        "| Untimed thing | all tests pass, 200 OK, verified green | 10:00 | \u2b1c |\n"
+    )
+    parsed = parse_estate_state(table)
+    check("both board rows parse", len(parsed) == 2)
+    check("a ticked row is approved", parsed[0][3] is True)
+    check("passing evidence with no tick is NOT approved", parsed[1][3] is False)
+    check("the header row is not a board row", all(r[0] != "Component" for r in parsed))
 
     # A QUEUED or IN_PROGRESS check is not a red check. This is graded directly because the
     # first draft got it wrong on a live PR.

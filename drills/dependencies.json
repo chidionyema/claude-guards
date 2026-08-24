@@ -46,8 +46,8 @@
       "dismissed": "same"
     },
     "claude.ai": {
-      "is": "the vendor surface policy/hooks.rego refuses to publish founder-facing pages to",
-      "dismissed": "losing it costs nothing by construction. The only reference in this tree is the refusal text naming it, and the rule's whole point is that the founder's board is http://127.0.0.1:8787/, served by board_serve.py from a file on this machine. The one time a session did publish there he opened the link and got a 404, which is the incident the rule exists for."
+      "is": "the vendor surface a session can publish a founder-facing page to",
+      "dismissed": "nothing load-bearing may depend on it, and that is now enforced rather than intended. vendor-surface-guard.py is a PreToolUse hook on the Artifact tool that refuses a publish. It appears in this tree only inside that guard's own refusal text and docstring. Losing claude.ai costs us nothing, because the board the founder reads is served by board_serve.py on 127.0.0.1:8787 from a file launchd rebuilds hourly. Written 2026-08-24, after he opened a published artifact and got a 404."
     },
     "cloud.cerebras.ai": {
       "is": "a dashboard a person opens",
@@ -163,33 +163,33 @@
       "is": "the vendor every agent thinks with",
       "covered_by": "no-anthropic"
     },
+    "BLOB_KEY": {
+      "is": "the path of the escrow object inside the R2 bucket, not a credential",
+      "covered_by": "key-escrow-restore"
+    },
+    "CEREBRAS_API_KEY": {
+      "is": "substrate rail with a key and no rail in the drill",
+      "dismissed": "no scheduled job uses it. It is a spare, and a spare nobody calls is not a dependency"
+    },
     "CLAUDE_API_KEY": {
       "is": "the same vendor under a second name",
       "covered_by": "no-anthropic"
     },
-    "OPENROUTER_API_KEY": {
-      "is": "substrate rail",
-      "covered_by": "no-anthropic"
-    },
-    "GROQ_API_KEY": {
-      "is": "substrate rail",
-      "covered_by": "no-anthropic"
-    },
-    "MISTRAL_API_KEY": {
-      "is": "substrate rail and the agent rail",
-      "covered_by": "no-anthropic"
+    "CONSULT_TOKEN": {
+      "is": "auth between two local processes on this Mac",
+      "dismissed": "local, and it dies with the machine the rebuild drill already covers"
     },
     "DEEPSEEK_API_KEY": {
       "is": "substrate rail",
       "covered_by": "no-anthropic"
     },
+    "EXA_API_KEY": {
+      "is": "search",
+      "dismissed": "no scheduled job calls it"
+    },
     "GEMINI_API_KEY": {
       "is": "substrate rail",
       "covered_by": "no-anthropic"
-    },
-    "TELEGRAM_TOKEN": {
-      "is": "the only channel that reaches the founder",
-      "covered_by": "telegram-delivery"
     },
     "GH_TOKEN": {
       "is": "every push, every recovery clone",
@@ -199,29 +199,17 @@
       "is": "the same, inside Actions",
       "covered_by": "github-gone"
     },
-    "R2_ACCOUNT_ID": {
-      "is": "the offsite bundle bucket",
-      "covered_by": "offsite-backup-restore"
-    },
-    "CEREBRAS_API_KEY": {
-      "is": "substrate rail with a key and no rail in the drill",
-      "dismissed": "no scheduled job uses it. It is a spare, and a spare nobody calls is not a dependency"
-    },
-    "MINIMAX_API_KEY": {
-      "is": "spare rail",
-      "dismissed": "same"
-    },
-    "OPENAI_API_KEY": {
-      "is": "spare rail",
-      "dismissed": "same"
+    "GROQ_API_KEY": {
+      "is": "substrate rail",
+      "covered_by": "no-anthropic"
     },
     "HF_TOKEN": {
       "is": "model downloads",
       "dismissed": "build-time only"
     },
-    "EXA_API_KEY": {
-      "is": "search",
-      "dismissed": "no scheduled job calls it"
+    "ICLOUD_KEY": {
+      "is": "the path of the recovery private key in iCloud Drive; the key it names is what opens the escrow",
+      "covered_by": "key-escrow-restore"
     },
     "LANGCHAIN_API_KEY": {
       "is": "tracing",
@@ -231,21 +219,33 @@
       "is": "tracing",
       "dismissed": "same"
     },
-    "CONSULT_TOKEN": {
-      "is": "auth between two local processes on this Mac",
-      "dismissed": "local, and it dies with the machine the rebuild drill already covers"
-    },
-    "BLOB_KEY": {
-      "is": "the path of the escrow object inside the R2 bucket, not a credential",
-      "covered_by": "key-escrow-restore"
-    },
-    "ICLOUD_KEY": {
-      "is": "the path of the recovery private key in iCloud Drive; the key it names is what opens the escrow",
-      "covered_by": "key-escrow-restore"
-    },
     "LOCAL_KEY": {
       "is": "the path of the same recovery key at ~/.config/estate, the copy a scheduled job can read",
       "covered_by": "key-escrow-restore"
+    },
+    "MINIMAX_API_KEY": {
+      "is": "spare rail",
+      "dismissed": "same"
+    },
+    "MISTRAL_API_KEY": {
+      "is": "substrate rail and the agent rail",
+      "covered_by": "no-anthropic"
+    },
+    "OPENAI_API_KEY": {
+      "is": "spare rail",
+      "dismissed": "same"
+    },
+    "OPENROUTER_API_KEY": {
+      "is": "substrate rail",
+      "covered_by": "no-anthropic"
+    },
+    "R2_ACCOUNT_ID": {
+      "is": "the offsite bundle bucket",
+      "covered_by": "offsite-backup-restore"
+    },
+    "TELEGRAM_TOKEN": {
+      "is": "the only channel that reaches the founder",
+      "covered_by": "telegram-delivery"
     }
   }
 }
