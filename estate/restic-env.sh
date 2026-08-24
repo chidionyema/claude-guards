@@ -2,6 +2,13 @@
 # Source this to get a working restic environment for the estate repo.
 # Secrets stay in ~/.config/estate/estate.env and ~/.estate/restic/password;
 # this file names them and never contains them (LAW 21, LAW 24).
+#
+# launchd's default environment is PATH=/usr/bin:/bin:/usr/sbin:/sbin — it
+# does not read .zshrc/.zprofile, so a Homebrew-installed binary (restic at
+# /usr/local/bin/restic, measured 2026-08-24) is invisible to any job that
+# does not set PATH itself. Every script sourcing this file inherits a
+# working PATH instead of failing exit 127 on its first scheduled run.
+export PATH="/usr/local/bin:/opt/homebrew/bin:$PATH"
 set -a
 . "$HOME/.config/estate/estate.env"
 set +a

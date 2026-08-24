@@ -52,6 +52,7 @@ happens when it goes, which is the gap Aiden was sitting in.
 import argparse
 import json
 import os
+import subprocess
 import sys
 import time
 
@@ -407,7 +408,18 @@ def main():
     ap.add_argument("--gate", action="store_true",
                     help="exit 1 only when the answer key itself is broken, not "
                          "when the estate has holes in it")
+    # estate-selftest.py runs every script under ~/.claude/scripts that takes
+    # `--selftest`, once an hour, and it skips anything named test_*. So the 13
+    # cases in test_coverage.py sat next to this file and nothing ever ran them
+    # on a schedule. This hands the estate the spelling it looks for rather than
+    # moving the cases, because a control nobody runs is not a control.
+    ap.add_argument("--selftest", action="store_true",
+                    help="run test_coverage.py, the paired control for this tool")
     a = ap.parse_args()
+
+    if a.selftest:
+        return subprocess.call([sys.executable,
+                                os.path.join(HERE, "test_coverage.py")])
 
     if a.asset:
         return one(a.asset)

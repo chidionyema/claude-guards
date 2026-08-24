@@ -42,14 +42,33 @@ from __future__ import annotations
 import fnmatch
 import json
 import re
-import tomllib
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+try:
+    import tomllib
+except ImportError:  # stdlib only from 3.11; launchd here runs /usr/bin/python3 3.9
+    tomllib = None  # type: ignore[assignment]
 
 try:
     import yaml
 except ImportError:  # a guard that cannot read its evidence says so
     yaml = None  # type: ignore[assignment]
+
+
+class ParserUnavailable(RuntimeError):
+    """No parser for this format is installed, so the file was NOT checked.
+
+    Kept distinct from a parse failure because the two mean opposite things. A
+    parse failure is a verdict: the consumer cannot read this file. A missing
+    parser is the absence of a verdict, and reporting it as "broken" would make
+    the guard refuse correct work, which is an outage (LAW 38). Callers route
+    this to BLIND.
+
+    2026-08-24: _check_yaml already raised a bare RuntimeError here, and
+    problem() caught every Exception, so a machine without PyYAML would have
+    reported every healthy YAML file on the estate as broken.
+    """
 
 #: Files whose consumer accepts comments and trailing commas.
 JSONC_GLOBS = ("tsconfig*.json", "jsconfig*.json", "devcontainer.json", "*.jsonc")
@@ -117,11 +136,15 @@ def _check_jsonc(src: str) -> None:
 
 def _check_yaml(src: str) -> None:
     if yaml is None:
-        raise RuntimeError("PyYAML is not installed, so this file was NOT checked")
+        raise ParserUnavailable("PyYAML is not installed, so this file was NOT checked")
     list(yaml.safe_load_all(src))
 
 
 def _check_toml(src: str) -> None:
+    if tomllib is None:
+        raise ParserUnavailable(
+            "tomllib needs Python 3.11+; this interpreter is older, so this file "
+            "was NOT checked")
     tomllib.loads(src)
 
 
@@ -151,12 +174,19 @@ def checker_for(file_path: str | Path):
 
 
 def problem(file_path: str | Path, content: str) -> str | None:
-    """None when the consumer can read this content. Otherwise the parser's error."""
+    """None when the consumer can read this content. Otherwise the parser's error.
+
+    Raises ParserUnavailable when no parser for the format is installed. That is
+    not a verdict about the file and callers must report it as BLIND, never as a
+    fault in the file.
+    """
     check = checker_for(file_path)
     if check is None:
         return None
     try:
         check(content)
+    except ParserUnavailable:
+        raise
     except Exception as exc:
         return f"{type(exc).__name__}: {exc}"
     return None

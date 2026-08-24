@@ -55,7 +55,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config_syntax import checker_for, problem  # noqa: E402
+from config_syntax import ParserUnavailable, checker_for, problem  # noqa: E402
 
 ESCAPE = "CONFIG-SYNTAX-OK"
 
@@ -91,7 +91,13 @@ def verdict(tool: str, ti: dict) -> str | None:
     content = final_content(tool, ti)
     if content is None or ESCAPE in content:
         return None
-    why = problem(path, content)
+    try:
+        why = problem(path, content)
+    except ParserUnavailable:
+        # No parser for this format on this interpreter. The guard has no
+        # evidence, so it permits the write rather than refusing correct
+        # work (LAW 38).
+        return None
     if why is None:
         return None
     return (
@@ -151,13 +157,29 @@ def selftest() -> int:
                   "new_string": "<"}, False),
         ("Read", {"file_path": str(good_xml)}, False),
     ]
-    bad = 0
+    # A case whose parser is missing on this interpreter is SKIPPED and named.
+    # It must never be counted as a pass: a suite that quietly drops the cases it
+    # cannot run reports green for coverage it does not have. /usr/bin/python3 is
+    # 3.9.6 on this Mac and has no tomllib, which is how the .toml cases get here.
+    from config_syntax import tomllib as _toml, yaml as _yaml
+    missing = {".toml": _toml is None, ".yml": _yaml is None, ".yaml": _yaml is None}
+
+    bad = skipped = 0
     for tool, ti, want in cases:
+        path = ti.get("file_path", "")
+        ext = "." + path.rsplit(".", 1)[-1] if "." in path else ""
+        if missing.get(ext):
+            skipped += 1
+            print(f"SKIP {tool} {path} -- no parser for {ext} on "
+                  f"{sys.version.split()[0]}")
+            continue
         got = verdict(tool, ti) is not None
         if got != want:
             bad += 1
-            print(f"FAIL {tool} {ti.get('file_path')} -> refuse={got}, want={want}")
-    print(f"{len(cases) - bad}/{len(cases)} passed")
+            print(f"FAIL {tool} {path} -> refuse={got}, want={want}")
+    ran = len(cases) - skipped
+    print(f"{ran - bad}/{ran} passed"
+          + (f", {skipped} skipped for a missing parser" if skipped else ""))
     return 1 if bad else 0
 
 

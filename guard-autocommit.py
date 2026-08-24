@@ -117,9 +117,15 @@ def commit(repo: Path, files: list[str], skipped: list[str], session: str) -> bo
         body += ["", "Left for the next turn (did not parse, so probably mid-edit):"]
         body += ["  " + f for f in sorted(skipped)[:10]]
     body += ["", "session: " + session]
+    # The pathspec is the point. A bare `git commit` takes the whole index, so
+    # anything a session had staged in this directory for a different reason rides
+    # along under a message that says "autocommit N changed guards". crew 097eccd
+    # was that exact shape in pr-evidence.py: one screenshot, and the commit also
+    # carried two file deletions and a reverted function from a stale checkout.
+    # A tool handed a list of files commits that list.
     rc, _ = git(repo, "-c", "user.name=guard-autocommit",
                 "-c", "user.email=chidionyema@gmail.com",
-                "commit", "-m", "\n".join(body))
+                "commit", "-m", "\n".join(body), "--", *files)
     return rc == 0
 
 
@@ -210,6 +216,23 @@ def selftest() -> int:
 
         check("a second run with nothing to do is a no-op",
               run(r, "x") .startswith("nothing to commit"), run(r, "x"))
+
+        # An autocommit takes the guards it named and nothing else. A session that
+        # left unrelated work staged in this directory gets it back, still staged,
+        # rather than finding it inside a commit about guards.
+        (r / "good.py").write_text("x = 5\n")
+        (r / "unrelated.txt").write_text("staged by a session for its own reasons\n")
+        git(r, "add", "--", "unrelated.txt")
+        run(r, session="scope")
+        named = [f for f in git(r, "show", "--pretty=", "--name-only", "HEAD")[1].split()
+                 if f.strip()]
+        check("the autocommit takes only the guards it listed",
+              named == ["good.py"], str(named))
+        check("unrelated staged work is left staged for whoever staged it",
+              "A  unrelated.txt" in git(r, "status", "--porcelain")[1],
+              git(r, "status", "--porcelain")[1].replace("\n", " | "))
+        git(r, "reset", "-q", "--", "unrelated.txt")
+        (r / "unrelated.txt").unlink()
 
         # concurrency: a held lock must make the next caller stand down, not double-commit
         (r / "good.py").write_text("x = 9\n")
