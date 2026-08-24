@@ -6,7 +6,7 @@ through a symlink into its own directory — `~/.claude/AGENTS.md`, `~/.codex/AG
 belong to the estate, not to whichever vendor's CLI is open. Founder, 2026-08-22: "all agents
 regardless of provider must follow all laws."
 
-Thirty-nine rules, in priority order, numbered to 39. LAW 24 stood empty until 2026-08-23 and now
+Forty-one rules, in priority order, numbered to 41. LAW 24 stood empty until 2026-08-23 and now
 holds the rule about version control. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
@@ -26,7 +26,8 @@ one it hangs off and inherits its rank.
 **Effective order, WHAT to build.** A separate axis. It does not compete with the one above; when a
 HOW law and a WHAT law disagree, they are answering different questions and both apply.
 
-    19a(34) · 19 · 20 · 20b(27) · 20c(31) · 20d(32) · 20e(36) · 20f(37) · 20g(38) · 21
+    19a(34) · 19 · 19b(40) · 19c(41) · 20 · 20b(27) · 20c(31) · 20d(32) · 20e(36) · 20f(37)
+    20g(38) · 21
 
 **Effective order, how the estate IMPROVES.** A third axis, one law long, and it governs the other
 two: LAW 35 is the ethos the HOW and WHAT laws themselves evolve under. It never suspends LAW 1 —
@@ -84,6 +85,8 @@ keep.
 | 37 | The platform is a product, not a chore | whenever you build something other agents must use |
 | 38 | Self-service with guardrails, and a guard that refuses correct work is an outage | every time a fence says no |
 | 39 | Inventory every asset, or you will build it twice | before you build, and continuously after |
+| 40 | Build it so it could be sold | every module, before you call it finished |
+| 41 | Build for the buyer arriving tomorrow | every surface, and the risk register, continuously |
 
 **19-21 are a different axis and do not compete for that tie-break.** Laws 1-18 say HOW to work.
 Laws 19-21 say WHAT to build, and they rank against each other in that order: portability first,
@@ -162,6 +165,22 @@ command looking for a thing's owner before you write it. LAW 39 is what makes th
 answer. Founder, 2026-08-23, on the four principles: "big priority" — pointing at the inventory one.
 It is the highest-ranked law on this estate that is not yet built, which is stated here so the next
 session does not read the rank as a claim that it exists.
+
+**LAW 40 is a WHAT law and ranks immediately under LAW 19.** Read it as 19b. LAW 19 says you must
+be able to leave your suppliers. LAW 40 says the thing you built must be able to leave *you* — the
+same property, pointed at the product rather than at the vendor, which is why it inherits
+portability's rank rather than sitting last. Founder, 2026-08-24: "also if i wanted to sell this
+platform as a commercial product i should be able to do it seamlessly", "it should meet the grade",
+"add as pe law", "or modules within the platform".
+
+**LAW 41 is a WHAT law and ranks immediately under LAW 40.** Read it as 19c. LAW 40 grades the
+thing you built — its licences, its boundary, whether a stranger could run it. LAW 41 grades what
+that stranger can *see and check for themselves* on the day they arrive, unaided, including the
+part they look at first, which is what is wrong rather than what works. A module can pass all four
+of LAW 40's tests and still fail a buyer who cannot open anything without you sitting beside them.
+Founder, 2026-08-24: "we need to think as if an investor is going to buy the platform tomorrow",
+"add this as pe law", "buyer will look at risks so we need risk assessment also", "we dont have
+funds but oss tooling is free".
 
 **28-30 are the research laws, and they are HOW laws that rank early.** They were written last
 and the tie-break would otherwise bury all three under laws they are meant to sharpen. Read
@@ -1347,6 +1366,113 @@ gap between declared and discovered is the actual information.
 
 **You are breaking it when** you can be surprised by something this estate already owns. Every
 duplicate here was built by somebody who looked, honestly, and could not find the original.
+
+---
+
+# LAW 40 — BUILD IT SO IT COULD BE SOLD
+
+Every module is built to the grade where selling it would need a price and a contract, not a
+rewrite. Not because it will be sold — most of it never will — but because "could this be sold
+tomorrow" is the only quality bar that cannot be argued down. Every other standard has a version
+of "good enough for us"; this one does not, because the buyer is not us.
+
+**The unit is the module, not the platform.** Founder, 2026-08-24: "or modules within the
+platform". The inventory, the guards, the ledger, the drill harness, the delivery channel — each
+is a thing somebody else has a problem with today. A platform that can only be sold whole is a
+platform with one possible buyer, and it has usually become that way by accident: shared globals,
+a single database everything reaches into, a config file that assumes this machine.
+
+**Four tests, and each is a command rather than an opinion.**
+
+1. **Would a stranger get it running without you?** This is LAW 32's demo and onboarding, graded
+   by somebody who has never met the author. The rebuild drill is the honest version of this test
+   already: it stands the estate up in a throwaway home from the remotes alone, and the number of
+   manual steps it still needs is the number of pages missing from the manual.
+2. **Does it carry this estate's fingerprints?** A hardcoded home directory, a founder's name, one
+   tenant assumed everywhere, a credential in source, a path only this Mac has. Each is a line of
+   the rewrite a buyer would pay for and you would have to do first.
+3. **Do you know what you are allowed to sell?** Every dependency has a licence and some of them
+   forbid this. AGPL reaches into what you build on it. Elastic License and BUSL are not open
+   source however the README reads. A dependency that ships **no licence file at all** grants you
+   nothing — Humanitec's CLI and Terraform provider, measured 2026-08-24, are exactly this. Know
+   the answer before the module exists, because a licence is discovered cheaply and swapped
+   expensively.
+4. **Is the boundary real?** Name what goes in, what comes out, and what it needs to exist. If you
+   cannot state that in three lines, there is no module — there is a region of a program you have
+   decided to call one.
+
+**This is not a licence to gold-plate, and LAW 23 still outranks the urge.** Sellable means the
+edges are clean, the boundary is stated, the licences are known and a stranger can start it. It
+does not mean a billing system, a multi-region deployment or a settings page nobody asked for.
+The smallest thing that meets the four tests beats a larger thing that meets six.
+
+**The grade compounds, which is the actual reason for the law.** A module built to this standard
+is also the one another agent can adopt without reading its source, the one that survives the
+provider it was written against, and the one you can hand over when it stops being interesting.
+Sellability is not a commercial ambition bolted onto engineering standards. It is what those
+standards look like when you stop grading your own homework.
+
+**You are breaking it when** the honest answer to "could someone else run this" is "yes, if I
+walked them through it". That sentence is the rewrite, quoted at its own price.
+
+---
+
+# LAW 41 — BUILD FOR THE BUYER ARRIVING TOMORROW
+
+Work as though someone is buying this platform tomorrow morning and you are not in the room. They
+have a day, no context, and no patience for a tour. Everything they need to form a view is either
+already visible to them or it does not exist, because there is no version of diligence where the
+seller narrates. LAW 40 asks whether the thing could be sold. This asks what the buyer can see and
+check on the day, unaided.
+
+**Both surfaces, always, and this is where it is usually got wrong.** The estate has two customers
+who need opposite things. The founder needs the result to arrive without being fetched — a phone,
+one hand, no navigation, which is LAW 31. A buyer needs the opposite: a thing they can open and
+walk through themselves, at their own pace, following their own questions rather than yours.
+Building only the push leaves an outsider with nothing to open. Building only the portal puts the
+founder back in the position of going to fetch his own answers. Two surfaces, one source of truth
+underneath, and neither is optional. Founder, 2026-08-24: "we need both, like i said we need to
+think as if an investor is going to buy the platform tomorrow."
+
+This is a correction of a real mistake, recorded so it is not repeated: on 2026-08-24 a tooling
+brief refused every portal on the market and gave as one reason that "every portal assumes a human
+at a laptop who navigates to it, and the result must arrive on his phone." That reasoning was
+sound about the founder and wrong about the estate, because it treated the two surfaces as
+alternatives competing for one budget. They are not alternatives. They are two customers.
+
+**The risk register is what a buyer reads first, so it exists before they ask.** Nobody buys on the
+strength of a feature list. They price the downside, and a platform presenting only what works
+reads as one nobody has examined — which is a worse finding than any single risk on the list. So
+the risks are written down, standing and current, by the people who know them, rather than
+discovered by a stranger in an afternoon.
+
+Each row carries five things and none of them is a mood: what could go wrong, how likely, what it
+costs if it happens, what already reduces it, and who owns it. Single points of failure, one-person
+dependencies, undrilled exits, unlicensed dependencies, credentials with no rotation, data with no
+proven restore, providers that could withdraw. The register is generated where it can be — LAW 39's
+inventory already knows which drills have never run and which repositories carry no licence — and
+written by hand only where judgement is genuinely required.
+
+A named risk with an owner and a mitigation is a managed business. The same risk found by the buyer
+is a discount, and an unnamed risk found by the buyer is the end of the conversation, because it
+tells them the list they were handed was not the real list.
+
+**No funds is not a reason, because the tooling is free.** Founder, 2026-08-24: "we dont have funds
+but oss tooling is free." Measured the same day: the conventional stack for this — Roadie, Humanitec
+and Braintrust at their published minimums — is $43,776 a year, and the open-source stack that does
+the same job is $72 a year of compute. So "we cannot afford a diligence surface" is never a true
+sentence here; it is a sentence that means nobody spent the hour on LAW 35's research. A capability
+missing for want of money must name the specific thing that costs money and the search that failed
+to find a free one, or it is not a budget constraint, it is an unstarted task.
+
+**Evidence a stranger can re-run.** Every claim on the buyer-facing surface links to the command
+that proves it, so their own hands produce the number rather than reading yours. This is LAW 17 and
+LAW 22 pointed at somebody who has no reason to trust you at all, and it is the cheapest credibility
+there is: a claim they verified themselves costs you nothing to defend.
+
+**You are breaking it when** answering "what would a buyer see" requires you to open something and
+explain it. That answer is the finding. The parts of this estate that only make sense with you
+narrating are the parts that are not finished, whatever else is true about them.
 
 ---
 

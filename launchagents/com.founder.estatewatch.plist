@@ -6,8 +6,6 @@
 	<string>com.founder.estatewatch</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/.estate/guards/bin/estate-gate</string>
-		<string>com.founder.estatewatch</string>
 		<string>/usr/bin/python3</string>
 		<string>/Users/chidionyema/.claude/scripts/estate/estate_watch.py</string>
 	</array>

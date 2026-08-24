@@ -11,8 +11,6 @@
 	<string>com.founder.estateaudit</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/.estate/guards/bin/estate-gate</string>
-		<string>com.founder.estateaudit</string>
 		<string>/usr/bin/python3</string>
 		<string>/Users/chidionyema/.claude/scripts/estate/estate_audit.py</string>
 		<string>--html</string>
