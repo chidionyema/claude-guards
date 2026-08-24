@@ -1,5 +1,10 @@
 {
  "max_age_days_default": 8,
+ "not_drills": {
+  "run.py": "the runner itself",
+  "audit.py": "the dependency audit, which answers whether a recovery path exists at all rather than whether one works",
+  "bootstrap.sh": "the exit itself, not a test of it. rebuild/drill.sh is the drill and it runs this script against a throwaway home."
+ },
  "drills": [
   {
    "id": "no-anthropic",
