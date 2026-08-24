@@ -11,14 +11,10 @@
 	<string>com.estate.bundlepush</string>
 	<key>LowPriorityIO</key>
 	<true/>
-	<key>Nice</key>
-	<integer>10</integer>
 	<key>ProcessType</key>
 	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
-		<string>estate-bundlepush</string>
 		<string>/Users/chidionyema/.claude/bin/estate-runner</string>
 		<string>/Users/chidionyema/.claude/scripts/estate/estate_bundle_push.sh</string>
 	</array>

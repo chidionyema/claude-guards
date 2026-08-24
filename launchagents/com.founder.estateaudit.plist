@@ -9,14 +9,8 @@
 	</dict>
 	<key>Label</key>
 	<string>com.founder.estateaudit</string>
-	<key>Nice</key>
-	<integer>10</integer>
-	<key>ProcessType</key>
-	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
-		<string>estateaudit</string>
 		<string>/usr/bin/python3</string>
 		<string>/Users/chidionyema/.claude/scripts/estate/estate_audit.py</string>
 		<string>--html</string>

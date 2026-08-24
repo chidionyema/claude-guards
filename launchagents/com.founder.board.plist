@@ -10,8 +10,6 @@
 	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
-		<string>board</string>
 		<string>/usr/local/bin/python3</string>
 		<string>/Users/chidionyema/.claude/scripts/founder_board.py</string>
 		<string>--html</string>

@@ -10,8 +10,6 @@
 	<string>Background</string>
 	<key>ProgramArguments</key>
 	<array>
-		<string>/Users/chidionyema/.claude/scripts/hc-wrap.sh</string>
-		<string>stuckdetector</string>
 		<string>/bin/sh</string>
 		<string>/Users/chidionyema/.claude/scripts/stuck_detector_tick.sh</string>
 	</array>
