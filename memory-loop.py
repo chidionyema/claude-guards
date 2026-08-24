@@ -360,19 +360,68 @@ def read_laws():
         buf.append(line)
     if buf:
         laws.append("\n".join(buf).strip())
-    kept, size = [], 0
+    kept, size, overflow = [], 0, []
     for law in laws:
-        if size + len(law) + 2 > LAWS_MAX_CHARS:
-            break
+        if overflow or size + len(law) + 2 > LAWS_MAX_CHARS:
+            overflow.append(law)
+            continue
         kept.append(law)
         size += len(law) + 2
-    dropped = [l.split("\n", 1)[0].lstrip("# ") for l in laws[len(kept):]]
+    if not overflow:
+        return "\n\n".join(kept)
+    # A law that will not fit whole is COMPACTED, never dropped. Until 2026-08-24 the loop above
+    # simply stopped, and the file order it stopped in is the order laws were WRITTEN, not the
+    # order they rank in: ~/AGENTS.md says so itself under "The number on a law is not its rank".
+    # So the ten newest laws fell off the end, and every one of them was a high-ranking law --
+    # LAW 33 ranks as 4b, LAW 39 as 3b. Measured that morning: the block was 61,447 characters
+    # against a 60,000 cap, LAW 31 through LAW 40 reached no session on this machine, and four of
+    # the five law breaches that session were laws that were physically absent from the context.
+    # The heading plus the "You are breaking it when" line is the operative sentence of a law and
+    # costs about 230 characters, so all ten fit in 2,297 -- 3.8% on top of the cap, against a cap
+    # that exists because the block grew from 8,000 to 55,000, not because of 2KB.
+    # Whole entries only. Slicing the joined string to COMPACT_MAX_CHARS would cut the last law
+    # mid-sentence and delete the ones after it with nothing saying so, which is the same silent
+    # loss this whole branch exists to end.
+    lines, used, cut = [], 0, 0
+    for entry in (_compact_law(law) for law in overflow):
+        if used + len(entry) + 1 > COMPACT_MAX_CHARS:
+            cut += 1
+            continue
+        lines.append(entry)
+        used += len(entry) + 1
+    tail = ""
+    if cut:
+        tail = (f"\n[laws lost] {cut} further law(s) fit neither whole nor compacted. This is a "
+                "defect in the injector, not a licence to ignore them: read ~/AGENTS.md now.")
+    note = ("\n\n[laws compacted] ~/.claude/CLAUDE.md is over the "
+            f"{LAWS_MAX_CHARS}-character injection cap. These laws reached this session as their "
+            "heading and their one operative sentence only; read the full text from the file "
+            "before relying on one:\n" + "\n".join(lines) + tail)
     if not kept:
-        return None
-    note = ("\n\n[laws truncated] ~/.claude/CLAUDE.md is over the "
-            f"{LAWS_MAX_CHARS}-character injection cap, so these did NOT reach this session and "
-            f"must be read from the file: {', '.join(dropped)}.")
+        # Not one law fit whole. Until 2026-08-24 this returned None and every session started with
+        # NO laws at all -- and the selftest asserted that as correct ("an oversized block is
+        # refused"). A test can encode a catastrophe as long as nobody reads what it is asserting.
+        return note.lstrip()
     return "\n\n".join(kept) + note
+
+
+COMPACT_MAX_CHARS = 6000  # hard ceiling on the compacted-law block, so it can never grow into
+                          # the thing the size cap above exists to prevent. 40 laws cost 2,297.
+
+
+def _compact_law(law: str) -> str:
+    """One law reduced to its heading and its operative sentence.
+
+    Every law in ~/AGENTS.md ends with a "**You are breaking it when**" paragraph, and that
+    paragraph is the law's test. A session that has the heading and the test can obey the law and
+    knows to go read the rest; a session that has neither does not know the law exists. That is the
+    whole difference this function buys.
+    """
+    head = law.split("\n", 1)[0].strip()
+    m = re.search(r"^\*\*You are breaking it when\*\*.*?(?=\n\n|\Z)", law, re.M | re.S)
+    if not m:
+        return head
+    return head + "\n  " + " ".join(m.group(0).split())
 
 
 def _dynamic_laws():
@@ -485,7 +534,13 @@ def selftest():
 
     failures = []
 
+    ran = []
+
     def check(name, got, want):
+        # Counted here, never declared at the bottom. `total` was the literal 22 while this
+        # function ran a different number of assertions, so the denominator graded nothing --
+        # the same defect as the law-coverage check that asserted over an empty list.
+        ran.append(name)
         if got != want:
             failures.append(f"  {name}: want {want!r}, got {got!r}")
 
@@ -572,40 +627,66 @@ def selftest():
             with open(g["LAWS_FILE"], "w") as fh:
                 fh.write("# Prospector notes\n\nnot laws\n\n---\n\nrest\n")
             check("first section is not LAW -> nothing injected", read_laws(), None)
+            # Not one law fits whole. This returned None until 2026-08-24, which stripped every
+            # law from every session, and the assertion here said "an oversized block is refused"
+            # -- a test encoding a catastrophe as the requirement. A law is compacted, never lost.
             with open(g["LAWS_FILE"], "w") as fh:
-                fh.write("# LAW 0\n\n" + ("x" * (LAWS_MAX_CHARS + 1000)) + "\n\n---\n\nrest\n")
-            check("an oversized block is refused", read_laws(), None)
-
-            # Over the cap with MORE than one law, the laws that fit must still reach the
-            # session, and the ones that did not must be named. Silently returning None here
-            # would have stripped every law from every session the moment CLAUDE.md grew.
-            with open(g["LAWS_FILE"], "w") as fh:
-                # Sized off LAWS_MAX_CHARS, never a literal. Both of these tests hardcoded 9000
-                # against an 8000 cap; when the cap moved to 20000 on 2026-08-20 they started
-                # asserting that a block UNDER the cap was refused, and failed for the change
-                # rather than for a defect. A test that pins a constant grades the constant.
-                fh.write("# LAW 0 — KEEP\n\nshort\n\n# LAW 1 — DROP\n\n"
-                         + ("y" * (LAWS_MAX_CHARS + 1000)) + "\n\n---\n\nrest\n")
+                fh.write("# LAW 0 — HUGE\n\n" + ("x" * (LAWS_MAX_CHARS + 1000))
+                         + "\n\n**You are breaking it when** you drop it.\n\n---\n\nrest\n")
             got = read_laws()
-            check("over the cap, the laws that fit still ship",
-                  got is not None and got.startswith("# LAW 0 — KEEP"), True)
-            check("over the cap, the dropped law is named",
-                  got is not None and "LAW 1 — DROP" in got and "[laws truncated]" in got, True)
+            check("no law fits whole -> still injected, compacted", got is not None, True)
+            check("no law fits whole -> the law is named", "LAW 0 — HUGE" in (got or ""), True)
 
-            # The real CLAUDE.md on this machine must actually inject every law it declares.
-            # A law the founder wrote that never reaches an agent is worse than no law.
+            # Over the cap with MORE than one law, the laws that fit ship whole and the rest ship
+            # compacted. Sized off LAWS_MAX_CHARS, never a literal: these tests once hardcoded 9000
+            # against an 8000 cap, and when the cap moved they graded the constant, not the rule.
+            with open(g["LAWS_FILE"], "w") as fh:
+                fh.write("# LAW 0 — KEEP\n\nshort\n\n# LAW 1 — SPILL\n\n"
+                         + ("y" * (LAWS_MAX_CHARS + 1000))
+                         + "\n\n**You are breaking it when** you drop it.\n\n---\n\nrest\n")
+            got = read_laws()
+            check("over the cap, the laws that fit still ship whole",
+                  (got or "").startswith("# LAW 0 — KEEP"), True)
+            check("over the cap, the spilled law still reaches the session",
+                  "LAW 1 — SPILL" in (got or "") and "[laws compacted]" in (got or ""), True)
+            check("a compacted law carries its operative sentence",
+                  "you drop it." in (got or ""), True)
+
+            # INCIDENT 2026-08-24. ~/AGENTS.md reached 40 laws, the block reached 61,447 characters
+            # against a 60,000 cap, and LAW 31 through LAW 40 reached NO session on this machine.
+            # Four of the five law breaches that night were laws physically absent from the context.
+            # The rule, not the code: whatever the cap and however many laws, every law is named.
+            for cap in (200, 1000, LAWS_MAX_CHARS // 2, LAWS_MAX_CHARS):
+                body = "\n\n".join(
+                    f"# LAW {n} — L{n}\n\n{'z' * 400}\n\n**You are breaking it when** t{n}."
+                    for n in range(1, 41))
+                with open(g["LAWS_FILE"], "w") as fh:
+                    fh.write(body + "\n\n---\n\nrest\n")
+                saved_cap = g["LAWS_MAX_CHARS"]
+                g["LAWS_MAX_CHARS"] = cap
+                try:
+                    out = read_laws() or ""
+                finally:
+                    g["LAWS_MAX_CHARS"] = saved_cap
+                absent = [n for n in range(1, 41) if f"# LAW {n} — L{n}" not in out]
+                check(f"incident_20260824 no law is absent at cap={cap}", absent, [])
+
+            # The live rules file must inject every law it declares. This check existed and was
+            # asserting nothing: it read ~/.claude/CLAUDE.md raw, which is the 11-character line
+            # "@AGENTS.md", found zero headings, and all() over an empty list is always True.
+            # Follow the import, exactly as the injector does.
             g["LAWS_FILE"] = real_laws
-            live = read_laws()
-            declared = [ln for ln in open(real_laws).read().split("\n---\n", 1)[0].split("\n")
+            live = read_laws() or ""
+            declared = [ln for ln in (_read_with_imports(real_laws) or "").split("\n")
                         if ln.startswith("# LAW ")]
-            check("every law in the live CLAUDE.md reaches the session",
-                  live is not None and all(d in live for d in declared) and "[laws truncated]" not in live,
-                  True)
+            check("the live rules file declares laws at all", len(declared) >= 1, True)
+            check("every law in the live rules file reaches the session",
+                  [d for d in declared if d not in live], [])
         finally:
             globals()["LAWS_FILE"] = real_laws
             shutil.rmtree(laws_home, ignore_errors=True)
 
-    total = 22
+    total = len(ran)
     if failures:
         print(f"memory-loop selftest: {len(failures)}/{total} FAILED")
         print("\n".join(failures))
