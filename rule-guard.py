@@ -83,11 +83,11 @@ _ASSIGN = re.compile(r"""(?:^|[\n;&]\s*)(?P<name>[A-Za-z_]\w*)=(?P<val>'[^']*'|"
 
 
 def _expand(text: str, cmd: str) -> str:
-    """`$VAR` and `${VAR}` in `text`, filled from assignments made earlier in `cmd`."""
+    """`$VAR`, `${VAR}` and `~` in `text`: assignments made earlier in `cmd`, then the environment. See test_incident_rule_guard_tilde_cd_graded_the_wrong_repo.py."""
     for m in _ASSIGN.finditer(cmd):
         val = m.group("val").strip("'\"")
         text = text.replace("${" + m.group("name") + "}", val).replace("$" + m.group("name"), val)
-    return text
+    return os.path.expanduser(os.path.expandvars(text))
 
 
 # The Claude config directory became a git repository on 2026-08-21 (the governance repo).
