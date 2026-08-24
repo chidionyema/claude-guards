@@ -16,6 +16,15 @@
       "home_env": "MAESTRO_HOME",
       "onboarded": "2026-08-23",
       "spec": "docs/MAESTRO-DEPUTY-v1.0.md"
+    },
+    {
+      "name": "estate",
+      "home": "~/.estate",
+      "ledger": "REQUIREMENTS.jsonl",
+      "home_env": "ESTATE_HOME",
+      "onboarded": "2026-08-24",
+      "spec": "https://github.com/chidionyema/crew/issues/78#issuecomment-5392774484",
+      "_why": "The estate itself is an agent, because the things nobody owns are the things that rot. Its first claims are about job monitoring: 46 loaded jobs, 12 wrapped, 34 bare on the day it was onboarded, including two backup jobs and the cost sentinel. A backup nobody watches is indistinguishable from no backup."
     }
   ]
 }
