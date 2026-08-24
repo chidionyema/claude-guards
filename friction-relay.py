@@ -215,7 +215,43 @@ def render(cache: dict, now: float) -> str:
     return "\n".join(lines)
 
 
-RULINGS = os.path.join(SCRIPTS, "rulings.json")
+#: Beside this script, not under a hardcoded ~/.claude/scripts. friction-relay.py and
+#: rulings.json are committed in the same directory of the same repository, so this is
+#: where the file is on the Mac AND in a clone. The hardcoded path made the two selftest
+#: checks below pass on a runner by finding nothing, which is how a gate grades a proxy.
+RULINGS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rulings.json")
+
+
+def ruling_problems(rows) -> list[str]:
+    """Everything wrong with a rulings list, worst first. Empty means it is sound.
+
+    Two sessions allocated R16 on 2026-08-24 -- R16-command-guards-are-rego and
+    R16-founder-only-declares-live -- and R15 had gone the same way the day before.
+    The id is a hand-typed sequential number and there are six sessions who cannot
+    see each other, so a collision is the expected case, not the surprise. When it
+    happens both rulings are real and one of them quietly stops being injected.
+    """
+    problems, seen = [], {}
+    for i, r in enumerate(rows):
+        if not isinstance(r, dict):
+            problems.append("ruling %d is not an object" % i)
+            continue
+        rid = r.get("id") or ""
+        m = re.match(r"^R(\d+)-[a-z0-9-]+$", rid)
+        if not m:
+            problems.append("ruling %d has no id of the form R<number>-slug: %r" % (i, rid))
+            continue
+        for field in ("date", "verbatim"):
+            if not r.get(field):
+                problems.append("%s is missing %s" % (rid, field))
+        n = int(m.group(1))
+        if n in seen:
+            problems.append("R%d is used twice: %s and %s -- renumber the newer one"
+                            % (n, seen[n], rid))
+        else:
+            seen[n] = rid
+    return problems
+
 
 
 def render_rulings() -> str:
@@ -235,6 +271,11 @@ def render_rulings() -> str:
     lines = ["[friction-relay] STANDING FOUNDER RULINGS. These never expire and bind",
              "every session. Violating one, or making him repeat one, is the incident.",
              ""]
+    # Never drop a ruling to tidy the block: say what is wrong and inject all of them.
+    problems = ruling_problems(rows)
+    if problems:
+        lines[2:2] = ["  RULINGS FILE IS UNSOUND -- fix rulings.json before trusting this block:"]
+        lines[3:3] = ["    - " + p for p in problems] + [""]
     for r in rows:
         lines.append('  %s (%s): "%s"' % (r.get("id", "?"), r.get("date", "?"),
                                           r.get("verbatim", "")))
@@ -316,10 +357,31 @@ def selftest() -> int:
         ck("a malformed row does not raise", True)
     except Exception:
         ck("a malformed row does not raise", False)
+    # No `or not os.path.exists(RULINGS)` escape. rulings.json is committed beside this
+    # file, so if it is not there the check has found a real defect and must say so.
+    ck("rulings.json is beside this script", os.path.exists(RULINGS))
     ru = render_rulings()
-    ck("standing rulings are injected", "STANDING FOUNDER RULINGS" in ru or not os.path.exists(RULINGS))
-    ck("the fly ruling is carried verbatim", "not going back to fly" in ru or not os.path.exists(RULINGS))
-    print("friction-relay selftest: %d/%d checks passed" % (11 - len(fails), 11))
+    ck("standing rulings are injected", "STANDING FOUNDER RULINGS" in ru)
+    ck("the fly ruling is carried verbatim", "not going back to fly" in ru)
+    with open(RULINGS, encoding="utf-8") as fh:
+        shipped = json.load(fh).get("rulings") or []
+    ck("the shipped rulings file is sound", ruling_problems(shipped) == [])
+    ck("every ruling is injected, none summarised away",
+       all(r["id"] in ru for r in shipped))
+    two_r16 = [{"id": "R16-command-guards-are-rego", "date": "2026-08-24", "verbatim": "x"},
+               {"id": "R16-founder-only-declares-live", "date": "2026-08-24", "verbatim": "y"}]
+    ck("two rulings sharing a number are reported",
+       any("R16 is used twice" in p for p in ruling_problems(two_r16)))
+    ck("a ruling with no verbatim is reported",
+       any("missing verbatim" in p for p in ruling_problems(
+           [{"id": "R99-x", "date": "2026-08-24", "verbatim": ""}])))
+    ck("a malformed id is reported",
+       ruling_problems([{"id": "sixteen", "date": "d", "verbatim": "v"}]) != [])
+    ck("a sound list is not reported",
+       ruling_problems([{"id": "R1-a", "date": "d", "verbatim": "v"},
+                        {"id": "R2-b", "date": "d", "verbatim": "v"}]) == [])
+    total = 19
+    print("friction-relay selftest: %d/%d checks passed" % (total - len(fails), total))
     return 1 if fails else 0
 
 
