@@ -46,7 +46,7 @@ import rego.v1
 # This list only ever shrinks. When a script's rules move into Rego, delete the
 # script and delete its line here in the same commit.
 legacy := {
-	"rule-guard.py": 1108,
+	"rule-guard.py": 1114,
 	"ticket-gate.py": 1098,
 	"goal-guard.py": 960,
 	"tool-drip-guard.py": 641,

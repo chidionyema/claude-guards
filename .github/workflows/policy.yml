@@ -34,7 +34,13 @@ jobs:
       CONFTEST_VERSION: "0.69.0"
       OPA_VERSION: "1.19.1"
     steps:
+      # fetch-depth: 0 because three selftest cases name a remote-tracking branch and
+      # the rules ask git whether it resolves. Measured in a clone with
+      # refs/remotes/origin/* deleted: 95/98, the three cases abstaining. With the
+      # refs present: 98/98. A guard that cannot see its subject permits in silence.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: install conftest
         run: |
