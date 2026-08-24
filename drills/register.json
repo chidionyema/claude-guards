@@ -124,6 +124,17 @@
     "{HERE}/check_recovery_posture.py"
    ],
    "max_age_days": 1
+  },
+  {
+   "id": "substrate-never-sleeps",
+   "what_breaks": "The MacBook sleeps. Under R14 this laptop is production, so every scheduled job, every agent session and every service on it stops at once, and nothing that runs on the machine can report it because it is asleep too.",
+   "why": "Founder, 2026-08-24: 'first of all the macbook must never sleep'. The estate already had com.founder.estate-awake, a KeepAlive LaunchAgent holding 'caffeinate -s -i'. Measured that morning: launchctl reported PID 41015 alive and LastExitStatus 0, and pmset -g log showed the machine had entered sleep 6 times on AC power in the preceding 24 hours. The job was green and wrong. caffeinate is a userland assertion -- it is a no-op for system sleep on battery, it dies with the login session, and it cannot stop a thermal or maintenance sleep. The OS setting 'pmset -c sleep 0' is the real mechanism (R6: use the platform, not a wrapper). This drill grades the three things that actually decide it: the OS setting is 0, the machine is on AC, and the sleep log is empty. It reports BLIND rather than a verdict when it cannot read pmset.",
+   "cmd": [
+    "/bin/sh",
+    "-c",
+    "set -u\nLOG=$(pmset -g log 2>/dev/null) || { echo \"BLIND: cannot read pmset -g log\"; exit 2; }\nCUS=$(pmset -g custom 2>/dev/null) || { echo \"BLIND: cannot read pmset -g custom\"; exit 2; }\n[ -n \"$LOG\" ] || { echo \"BLIND: pmset -g log returned nothing\"; exit 2; }\nAC=$(printf '%s\\n' \"$CUS\" | sed -n '/^AC Power/,$p' | awk '$1==\"sleep\"{print $2; exit}')\ncase \"$AC\" in ''|*[!0-9]*) echo \"BLIND: could not parse the AC sleep setting\"; exit 2;; esac\nCUT=$(date -v-24H '+%Y-%m-%d %H:%M:%S') || { echo \"BLIND: date -v unavailable\"; exit 2; }\nN=$(printf '%s\\n' \"$LOG\" | grep 'Entering Sleep state' | awk -v c=\"$CUT\" '$1\" \"$2 > c' | wc -l | tr -d ' ')\nPWR=$(pmset -g batt 2>/dev/null | head -1)\nF=0\n[ \"$AC\" -eq 0 ] || { echo \"FAIL: pmset AC sleep=$AC, must be 0. Fix: sudo pmset -c sleep 0 disksleep 0 standby 0 powernap 0\"; F=1; }\n[ \"$N\" -eq 0 ] || { echo \"FAIL: the substrate slept $N times in the last 24h (pmset -g log)\"; F=1; }\ncase \"$PWR\" in *\"'AC Power'\"*) ;; *) echo \"FAIL: on battery, not AC. Under R14 this laptop is production and it is on a countdown.\"; F=1;; esac\n[ \"$F\" -eq 0 ] && echo \"PASS: AC sleep=0, on AC power, 0 sleeps in 24h\"\nexit $F\n"
+   ],
+   "max_age_days": 1
   }
  ],
  "retired": [
