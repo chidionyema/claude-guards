@@ -45,6 +45,10 @@
       "is": "a dashboard a person opens",
       "dismissed": "same"
     },
+    "claude.ai": {
+      "is": "the vendor surface a session can publish a founder-facing page to",
+      "dismissed": "nothing load-bearing may depend on it, and that is now enforced rather than intended. vendor-surface-guard.py is a PreToolUse hook on the Artifact tool that refuses a publish. It appears in this tree only inside that guard's own refusal text and docstring. Losing claude.ai costs us nothing, because the board the founder reads is served by board_serve.py on 127.0.0.1:8787 from a file launchd rebuilds hourly. Written 2026-08-24, after he opened a published artifact and got a 404."
+    },
     "cloud.cerebras.ai": {
       "is": "a dashboard a person opens",
       "dismissed": "same"
