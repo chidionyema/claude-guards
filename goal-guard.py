@@ -58,6 +58,13 @@ LEDGER = HOME / ".claude" / "state" / "ledger.jsonl"
 # so the real number is measurable within a week and this default replaced by one.
 DEFAULT_LANE = {
     "goal_required": False,
+    #: "off" | "report" | "deny". Founder spec 2026-08-24, verbatim: "Before every tool
+    #: call, the agent checks: 'Does this serve the ACTIVE goal?' If no -> Blocked.
+    #: Ticket it if needed. Stay on lane." The vendor-documented enforcement point is a
+    #: PreToolUse permissionDecision deny (code.claude.com/docs/en/hooks); research on
+    #: the record in crew#132. "report" logs and warns but never blocks -- LAW 38: run
+    #: report first, measure the would-deny rate, then flip to "deny".
+    "gate": "off",
     "readonly_run_limit": 25,
     #: The THIRD execution of one target. LAW 9: "Two turns without progress means stop and
     #: change approach. Not a third attempt at the same thing with a better flag." Three is
@@ -316,6 +323,39 @@ def walk_back(st: dict, lane_name: str, limit: int, session: str = "") -> str:
     )
 
 
+def gate_check(lane: dict, st: dict, payload: dict, kind: str) -> tuple[str, str] | None:
+    """The blocking half of the goal-holder. Returns (mode, reason) or None to pass.
+
+    Only a provable WRITE is ever gated: reading is legitimate work (module docstring),
+    and UNKNOWN gated would guess -- the three-way split's whole point. Two conditions:
+    a gated lane with NO goal on disk (the measured failure: one session ran 2,635 calls
+    against an empty goal slot), and a target outside the goal's declared scope. Scope
+    is optional and only graded where the target is a plain file_path; a Bash command's
+    target is not provable from here, so it passes -- a guard that guesses refuses
+    correct work, and that is an outage (LAW 38)."""
+    mode = str(lane.get("gate") or "off")
+    if mode not in ("report", "deny") or kind != "WRITE":
+        return None
+    goal = st.get("goal") or ""
+    if not goal:
+        return (mode,
+                "this session has no ACTIVE goal on disk, so this state-changing call "
+                "cannot be serving one. Declare it first, naming its crew#133 board item:\n"
+                "  python3 ~/.claude/scripts/goal-guard.py --set-goal "
+                "'<board item + objective with a number in it>'\n"
+                "Off-goal work is a one-line crew ticket, not this session's time.")
+    scope = st.get("scope") or []
+    fp = (payload.get("tool_input") or {}).get("file_path", "")
+    if scope and fp and not any(
+            os.path.realpath(os.path.expanduser(fp)).startswith(
+                os.path.realpath(os.path.expanduser(p))) for p in scope):
+        return (mode,
+                f"target {fp} is outside this session's declared goal scope. Serve the "
+                f"ACTIVE goal, or switch goals explicitly (--set-goal) and leave a "
+                f"one-line crew note saying why.")
+    return None
+
+
 def handle(payload: dict) -> int:
     lane_name, lane = load_lane()
     session = payload.get("session_id") or "nosession"
@@ -324,6 +364,26 @@ def handle(payload: dict) -> int:
     st["calls"] = st.get("calls", 0) + 1
 
     kind = classify(tool, payload)
+
+    gated = gate_check(lane, st, payload, kind)
+    if gated and gated[0] == "deny":
+        # The tool never runs, so none of the progress bookkeeping below may record it.
+        st["gate_denies"] = st.get("gate_denies", 0) + 1
+        ledger({"t": int(time.time()), "kind": "gate_deny", "session": session[:12],
+                "lane": lane_name, "tool": tool})
+        write_state(session, st)
+        json.dump({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": "deny",
+            "permissionDecisionReason": f"[goal-gate/{lane_name}] {gated[1]}"}}, sys.stdout)
+        return 0
+    gate_msg = ""
+    if gated:  # report mode: the call runs, the would-deny is measured and shown
+        st["gate_reports"] = st.get("gate_reports", 0) + 1
+        ledger({"t": int(time.time()), "kind": "gate_report", "session": session[:12],
+                "lane": lane_name, "tool": tool})
+        gate_msg = (f"[goal-gate/{lane_name}] WOULD DENY (report mode): {gated[1]}")
+
     if kind == "WRITE":
         st["run"] = 0
         if tool == "Bash":
@@ -376,7 +436,7 @@ def handle(payload: dict) -> int:
         net_msg = ""
 
     write_state(session, st)
-    both = "\n".join(m for m in (target_msg, msg, net_msg) if m)
+    both = "\n".join(m for m in (gate_msg, target_msg, msg, net_msg) if m)
     if both:
         json.dump({"systemMessage": both}, sys.stdout)
     return 0
@@ -444,6 +504,33 @@ def inject(payload: dict) -> int:
     json.dump({"hookSpecificOutput": {
         "hookEventName": payload.get("hook_event_name", "SessionStart"),
         "additionalContext": "\n\n".join(parts)}}, sys.stdout)
+    return 0
+
+
+def anchor(payload: dict) -> int:
+    """UserPromptSubmit: one line re-anchoring the goal at the top of every turn.
+
+    The gate (gate_check) is the stick; this is the reason the stick rarely fires. The
+    goal decays from the window as the turn count grows -- recitation at the point of
+    attention is the literature-backed fix (Manus context-engineering; crew#132 research
+    comment). One line, because this runs on EVERY prompt and resident bytes are
+    re-billed every turn."""
+    lane_name, lane = load_lane()
+    session = payload.get("session_id") or "nosession"
+    st = read_state(session)
+    goal = st.get("goal")
+    if goal:
+        ctx = f"[goal-guard/{lane_name}] ACTIVE GOAL: {goal}"
+    elif lane.get("goal_required") or str(lane.get("gate")) in ("report", "deny"):
+        ctx = (f"[goal-guard/{lane_name}] No ACTIVE goal on disk -- state-changing tool "
+               f"calls will be {'DENIED' if lane.get('gate') == 'deny' else 'flagged'} "
+               f"until one is set: python3 ~/.claude/scripts/goal-guard.py --set-goal "
+               f"'<board item + objective>'")
+    else:
+        return 0
+    json.dump({"hookSpecificOutput": {
+        "hookEventName": "UserPromptSubmit",
+        "additionalContext": ctx}}, sys.stdout)
     return 0
 
 
@@ -732,6 +819,59 @@ def selftest() -> int:
     finally:
         sys.modules["goal_graph"] = real
 
+    print("the gate -- founder spec, crew#132: no ACTIVE goal, no state change")
+    LANES_FILE.write_text(json.dumps({"lanes": {"default": {"gate": "deny"}}}))
+    d = call("Edit", fp="/x/a.py", sess="g1")
+    ck("deny lane + no goal: a WRITE is denied", '"permissionDecision": "deny"' in d)
+    ck("the denial says how to unblock, not just no", "--set-goal" in d)
+    ck("a denied call records no progress -- the tool never ran",
+       not read_state("g1").get("last_progress"))
+    ck("the denial is on the ledger", LEDGER.read_text().count("gate_deny") >= 1)
+    ck("the same lane never denies a READ", '"deny"' not in call("Read", sess="g1"))
+    ck("nor an UNKNOWN -- gating a guess refuses correct work (LAW 38)",
+       '"deny"' not in call("Bash", "./mystery", sess="g1"))
+    st = read_state("g1")
+    st["goal"] = "ship crew#132"
+    write_state("g1", st)
+    ck("goal on disk: the same WRITE passes",
+       '"deny"' not in call("Edit", fp="/x/a.py", sess="g1"))
+    st = read_state("g1")
+    st["scope"] = ["/x"]
+    write_state("g1", st)
+    ck("scope: a WRITE inside the declared scope passes",
+       '"deny"' not in call("Edit", fp="/x/b.py", sess="g1"))
+    ck("scope: a WRITE outside it is denied",
+       '"permissionDecision": "deny"' in call("Edit", fp="/elsewhere/c.py", sess="g1"))
+    ck("scope: a Bash WRITE has no provable file_path and passes -- never gate a guess",
+       '"deny"' not in call("Bash", "git commit -m x", sess="g1"))
+    LANES_FILE.write_text(json.dumps({"lanes": {"default": {"gate": "report"}}}))
+    r = call("Edit", fp="/x/a.py", sess="g2")
+    ck("report mode: the would-deny is visible", "WOULD DENY" in r)
+    ck("report mode: nothing is actually denied", "permissionDecision" not in r)
+    ck("report mode is on the ledger too -- the 24h measurement LAW 38 wants",
+       LEDGER.read_text().count("gate_report") >= 1)
+    LANES_FILE.write_text(json.dumps({"lanes": {"default": {}}}))
+    ck("gate off (the shipped default): no goal, a WRITE still passes",
+       '"deny"' not in call("Edit", fp="/x/a.py", sess="g3"))
+
+    print("the anchor -- UserPromptSubmit recitation")
+
+    def turn(sess):
+        b = io.StringIO()
+        with contextlib.redirect_stdout(b):
+            anchor({"session_id": sess, "hook_event_name": "UserPromptSubmit"})
+        return b.getvalue()
+
+    st = read_state("g4")
+    st["goal"] = "merge crew#132"
+    write_state("g4", st)
+    ck("a goal on disk is recited at every prompt",
+       "ACTIVE GOAL: merge crew#132" in turn("g4"))
+    ck("no goal, ungated lane: silent", turn("g5") == "")
+    LANES_FILE.write_text(json.dumps({"lanes": {"default": {"gate": "deny"}}}))
+    ck("no goal, gated lane: the prompt says writes will be DENIED",
+       "DENIED" in turn("g5"))
+
     print("\n  %d/%d checks passed" % (total[0] - bad[0], total[0]))
     return 1 if bad[0] else 0
 
@@ -749,13 +889,30 @@ def _deadline(seconds: int = 3) -> None:
         pass
 
 
+def cli_session() -> str:
+    """Session id for the CLI flags, explicit flag first, env second, never a default."""
+    if "--session" in sys.argv:
+        i = sys.argv.index("--session")
+        if len(sys.argv) > i + 1:
+            return sys.argv[i + 1]
+    return os.environ.get("CLAUDE_SESSION_ID", "")
+
+
 def main() -> int:
     if "--selftest" in sys.argv:
         return selftest()
     if "--set-goal" in sys.argv:
         i = sys.argv.index("--set-goal")
         goal = sys.argv[i + 1] if len(sys.argv) > i + 1 else ""
-        sess = os.environ.get("CLAUDE_SESSION_ID", "nosession")
+        sess = cli_session()
+        if not sess:
+            # The trap this closes: with CLAUDE_SESSION_ID unset, the old code silently
+            # wrote nosession.json and the real session stayed goalless -- gated lanes
+            # then denied every write while --status swore a goal was set.
+            print("no session id. Pass --session <id> or set CLAUDE_SESSION_ID; the id "
+                  "is the UUID in this project's ~/.claude/projects/<slug>/ transcript "
+                  "path.", file=sys.stderr)
+            return 1
         st = read_state(sess)
         st["goal"] = goal
         write_state(sess, st)
@@ -764,7 +921,7 @@ def main() -> int:
         print(f"goal set for session {sess}: {goal}")
         return 0
     if "--status" in sys.argv:
-        sess = os.environ.get("CLAUDE_SESSION_ID", "nosession")
+        sess = cli_session() or "nosession"
         name, lane = load_lane()
         st = read_state(sess)
         print(f"lane={name} limit={lane['readonly_run_limit']} "
@@ -779,6 +936,8 @@ def main() -> int:
     if ev in ("SessionStart", "PostCompact", "SessionStart:compact"):
         prune()                        # once a session, not once a call
         return inject(payload)
+    if ev == "UserPromptSubmit":
+        return anchor(payload)
     return handle(payload)
 
 
@@ -788,7 +947,9 @@ if __name__ == "__main__":
     # fields). This covers the ones I did not design -- a disk-full write, a bug of mine,
     # an import failure. A governance hook that refuses work because IT broke is worse
     # than no hook. --selftest is exempt: a test that cannot fail grades nothing.
-    if "--selftest" in sys.argv:
+    if any(f in sys.argv for f in ("--selftest", "--set-goal", "--status")):
+        # CLI use, not a hook: a real exit code is the point. --set-goal with no session
+        # id must FAIL loudly, not be laundered to 0 by the hook wrapper below.
         raise SystemExit(main())
     _deadline()
     try:
