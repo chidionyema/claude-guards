@@ -140,6 +140,14 @@
     "www.minimax.io": {
       "is": "a marketing page",
       "dismissed": "same"
+    },
+    "hc-ping.com": {
+      "is": "the hosted Healthchecks ping endpoint",
+      "dismissed": "Not a dependency. The estate standard is Healthchecks self-hosted (BSD-3, docs/STANDARDS.md), and hc-wrap.sh names this host only in a comment recording that the hosted URL shape omits the /ping/ segment. If the hosted service vanished the estate would not notice. Losing our OWN receiver is the real risk, and that is what MON-1 and MON-4 in ~/.estate/REQUIREMENTS.jsonl grade hourly."
+    },
+    "healthchecks.io": {
+      "is": "the project's documentation and hosted service",
+      "dismissed": "Not a dependency. Read once on 2026-08-24 to get the ping protocol right; the URL survives in a comment as a citation. The software is BSD-3 and vendored by us, so the exit from the hosted service is the deployment we already run."
     }
   },
   "credentials": {
