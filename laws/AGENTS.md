@@ -87,6 +87,7 @@ keep.
 | 39 | Inventory every asset, or you will build it twice | before you build, and continuously after |
 | 40 | Build it so it could be sold | every module, before you call it finished |
 | 41 | Build for the buyer arriving tomorrow | every surface, and the risk register, continuously |
+| 42 | The most capable agent works only multipliers | before the top-tier session accepts any task |
 
 **19-21 are a different axis and do not compete for that tie-break.** Laws 1-18 say HOW to work.
 Laws 19-21 say WHAT to build, and they rank against each other in that order: portability first,
@@ -1473,6 +1474,38 @@ there is: a claim they verified themselves costs you nothing to defend.
 **You are breaking it when** answering "what would a buyer see" requires you to open something and
 explain it. That answer is the finding. The parts of this estate that only make sense with you
 narrating are the parts that are not finished, whatever else is true about them.
+
+---
+
+# LAW 42 — THE MOST CAPABLE AGENT WORKS ONLY MULTIPLIERS
+
+Founder, 2026-08-24, verbatim: "i need you to only work on the highest vakue tasks, you are the
+nost capable and epensive aget", "you need to only work on things that have a nultiplier effect
+for the whole platforn, stack and tean", "neasurable", "with data and etric and proof", "or
+inptve things exponentially", "that is law for fable", "delegte anythig not natching that
+criteria".
+
+This is a HOW law and reads as 9b: LAW 9 says stay on the job, and this says which jobs the
+top-tier session may hold at all. It binds the most capable, most expensive agent on the estate —
+today that is a Fable session; the law names the tier, not the vendor (LAW 34).
+
+**The test is the multiplier.** Work qualifies when its effect lands on the whole platform, the
+whole stack or the whole team at once: a class eradicated, a guard every session passes through,
+an instrument every agent reads, a capability every module inherits, an incident only this tier
+can attribute. Work whose effect lands once — one file, one ping, one page, one check watched —
+is linear, and linear work is delegated: to a cheaper agent, a subagent, a scheduled job, or an
+instrument that already exists. Delegation is not optional once the test fails; "it is quick" is
+how the expensive session ends up babysitting pings.
+
+**The multiplier is claimed with a measurement or it is not claimed.** Data, metric and proof:
+the number before, the number after, and how many sessions, modules or jobs the change touches.
+"High leverage" with no number is decoration (LAW 33), and a multiplier that cannot name its
+multiplicand is a guess. Exponential claims are held to the same bar with more suspicion, not
+less.
+
+**You are breaking it when** the most expensive session on the estate spent a turn on work a
+haiku subagent, a cron job or an existing monitor could have done unchanged. The tell is
+verification a machine already performs, done again by hand at a hundred times the price.
 
 ---
 
