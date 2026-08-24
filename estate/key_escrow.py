@@ -31,6 +31,7 @@ WHAT IT IS NOT. This is not a backup of ~/.config. It is three named files, and
 adding a fourth is a deliberate edit to SOURCES below, not a glob that quietly
 grows until the escrow is a copy of the home directory.
 """
+import errno
 import hashlib
 import os
 import shutil
@@ -249,7 +250,20 @@ def verify():
         if n != m:
             return 1
     except OSError as exc:
-        print("iCloud copy: NOT PRESENT (%s)" % exc)
+        # "It is not there" and "I cannot see it from here" are different facts and
+        # they lead to different repairs: the first means the sealer is dead, the
+        # second means this process lacks the right to look. Collapsing them prints
+        # NOT PRESENT for a key that is sitting safely in iCloud, which sends
+        # somebody to re-seal an escrow that never broke. Under launchd stat is
+        # normally permitted, so a permission error here is the interesting case
+        # rather than the impossible one, and a check that has lost its evidence
+        # reports BLIND instead of a verdict.
+        if exc.errno in (errno.EACCES, errno.EPERM):
+            print("iCloud copy: BLIND -- cannot stat it from this process (%s). "
+                  "This is not evidence the key is missing; it is evidence this "
+                  "process may not look. Re-run by hand to get a verdict." % exc)
+        else:
+            print("iCloud copy: NOT PRESENT (%s)" % exc)
         return 1
 
     env, bucket = r2_env()
@@ -330,7 +344,62 @@ def verify():
     return 0
 
 
+def selftest():
+    """Prove the iCloud line tells absence apart from being unable to look.
+
+    estate-selftest.py runs every --selftest under ~/.claude/scripts once an hour,
+    so putting the control here is what stops the next session reintroducing the
+    collapse. It touches no key material: it replaces os.stat with a function that
+    raises the errno being tested and reads the line that comes out.
+
+    Incident test, rung 4. The bug: `except OSError` printed NOT PRESENT for every
+    failure, so a permission error on a key sitting safely in iCloud read as a lost
+    key and would send somebody to re-seal an escrow that never broke.
+    """
+    import io
+    import contextlib
+
+    real_stat = os.stat
+    cases = [
+        (errno.ENOENT, "NOT PRESENT", "a file that genuinely is not there"),
+        (errno.EACCES, "BLIND", "a file this process may not look at"),
+        (errno.EPERM, "BLIND", "a file refused by policy rather than by absence"),
+    ]
+    fails = []
+    for code, want, what in cases:
+        def fake_stat(path, *a, **k):
+            if str(path) == str(ICLOUD_KEY):
+                raise OSError(code, os.strerror(code), str(path))
+            return real_stat(path, *a, **k)
+        os.stat = fake_stat
+        buf = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(buf):
+                verify()
+        except Exception:
+            pass
+        finally:
+            os.stat = real_stat
+        line = next((l for l in buf.getvalue().splitlines()
+                     if l.startswith("iCloud copy:")), "(no iCloud line printed)")
+        ok = want in line
+        print("  %s  %-8s %s" % ("pass" if ok else "FAIL", want, what))
+        if not ok:
+            fails.append("%s: got %r" % (what, line))
+        # The blind line must never be mistaken for a verdict about the key.
+        if want == "BLIND" and "not evidence" not in line:
+            fails.append("%s: BLIND line does not say it is not evidence" % what)
+
+    for f in fails:
+        print("  FAIL %s" % f)
+    print("%d/%d passed: 1 that must read as absent, 2 that must read as blind"
+          % (len(cases) - len({f.split(':')[0] for f in fails}), len(cases)))
+    return 1 if fails else 0
+
+
 def main():
+    if "--selftest" in sys.argv:
+        return selftest()
     if "--seal" in sys.argv:
         return seal()
     if "--verify" in sys.argv:
