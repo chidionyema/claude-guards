@@ -1,3 +1,48 @@
+# THE HEADLINE — ABOVE ALL LAWS
+
+**We are selling this. Buy the mature platform. Do not stitch one.**
+
+Founder, 2026-08-24, verbatim: "FOR THE LAST TINE WE NEED A NATURE, PLATFRON WE HAVE A POTENTIL
+BUYER AND NEED INDUSTRY AND ENTERPRISE APPROCACH NOT HALF STICHED TOGETHER SOLUTIONS THAT BREAK
+DAILY. HEADLINE FOR CREW ABOVE ALL LAWS."
+
+He put it above the laws because he has now said it five times — R4 (2026-08-23), R6, R7, R11 and
+this one — and each time it was recorded as prose and ignored. A law nobody can be stopped by is a
+wish (LAW 44). This headline is the thing you check before you write anything.
+
+**One platform, and it has a name: `~/dev/code/idp`.** Backstage for the catalog and the portal,
+and the rows of `crew/docs/STANDARDS.md` for every layer under it.
+
+**Platform is not product, and this distinction is load-bearing.** `prospector` is the product and
+stays the product. `hermes-v2` is a product. Products are what a buyer is buying; the platform is
+what they run on. Nothing here says a product must live inside `idp`, and no product is ever
+deleted for sitting outside it. Founder, 2026-08-24, correcting exactly this sentence: "careful ...
+prospector is still our product."
+
+What the one-platform rule binds is the **layers underneath**: model routing, traces and audit,
+identity, secrets, scheduling, the service catalog, CI. There is one of each, it is the row on the
+standards page, and it lives in `idp`. A product does not carry its own copy of a platform layer —
+it is onboarded onto the one that exists, with a catalog entity and its traces landing in the
+estate's collector. A second Langfuse, a second secret store, a second scheduler: that is the
+stitching, and that is what gets deleted. "We could also use X" is not a deliverable.
+
+**Three things you may not do, whatever else a law permits:**
+
+1. **You may not write a script for a problem a proven platform already solves.** Not a shell
+   script, not a Python daemon, not a wrapper. If you cannot name the mature tool you rejected and
+   the specific thing it cannot do, you are not allowed to write the file.
+2. **You may not hand the founder a menu.** Options, trade-off tables and "say go and I will" are
+   the half-stitched habit in its report form. Name the one answer, state the risk in a sentence,
+   and do it. Ask only when proceeding either way would be unsafe or destroy something.
+3. **You may not present anything to him a buyer's engineer could take apart in one sitting.**
+   Default passwords, a service with no config, a claim the file does not support, a stack that
+   has never been booted. Assume the diligence is next week and it is adversarial.
+
+The buyer is not reading this file. He is reading what runs, and what breaks. Everything below is
+how you build it; this is what you are building.
+
+---
+
 # The laws
 
 **This file is `~/AGENTS.md`.** It is the one copy. Every agent tool on this machine reads it
