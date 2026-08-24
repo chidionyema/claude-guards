@@ -31,6 +31,59 @@ MANIFEST = os.path.join(HERE, "tracked.json")
 
 HOME = os.path.expanduser("~")
 
+#: Where the mirrored copies are written. HERE for every mode a person runs by
+#: hand, because they are looking at this working tree. --sync replaces it, see
+#: own_checkout below.
+REPO_ROOT = HERE
+
+#: A checkout that belongs to this job and to nothing else. Until 2026-08-24
+#: --sync committed into HERE, which is ~/.claude/scripts: the tree every session
+#: edits and 33 launchd jobs execute. Whenever a session had it on a branch, the
+#: mirror was committed onto that session's branch and the push was skipped by
+#: design. The board records what that cost on 2026-08-24 alone -- 15:53, 17:54,
+#: 18:24, 18:54 and 19:43 committed 32, 1, 1, 3 and 34 files and pushed none of
+#: them. The law that says everything is in git put nothing in git for four hours,
+#: and the failure was reported as normal operation each time.
+#:
+#: A worktree detached at origin/main has no branch for anyone to be standing on,
+#: so there is no case left where the commit lands somewhere it must not be pushed
+#: from. Under Caches because it is derived: `git worktree add` rebuilds it, and
+#: nothing here is the only copy of anything.
+WORKTREE = os.path.join(HOME, "Library", "Caches", "estate", "tracked-worktree")
+
+
+def own_checkout():
+    """(path, "") for a worktree of this repository detached at origin/main, or
+    (None, reason) when one cannot be had.
+
+    None is not an outage. The caller falls back to HERE, which is exactly what
+    this function replaced, so the worst case is the behaviour that shipped
+    yesterday. A mirror taken in an awkward place is recoverable; a mirror not
+    taken at all is the thing LAW 24 was written about.
+    """
+    import subprocess
+
+    def run(*args, cwd=HERE):
+        return subprocess.run(["git", "-C", cwd, *args],
+                              capture_output=True, text=True, timeout=120)
+
+    try:
+        if not os.path.exists(os.path.join(WORKTREE, ".git")):
+            os.makedirs(os.path.dirname(WORKTREE), exist_ok=True)
+            r = run("worktree", "add", "--detach", WORKTREE, "origin/main")
+            if r.returncode:
+                return None, (r.stderr.strip() or r.stdout.strip())[:200]
+        # Offline is not a reason to stop. A tip fetched an hour ago is still a
+        # tip nobody is standing on, which is the property this whole function is
+        # for; the push at the end is where being behind actually shows up.
+        run("fetch", "--quiet", "origin", "main", cwd=WORKTREE)
+        r = run("checkout", "--detach", "--quiet", "--force", "origin/main", cwd=WORKTREE)
+        if r.returncode:
+            return None, (r.stderr.strip() or r.stdout.strip())[:200]
+        return WORKTREE, ""
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, str(exc)[:200]
+
 
 def entries(into=None):
     """into=DIR aims every live path at a throwaway home instead of this one.
@@ -44,7 +97,7 @@ def entries(into=None):
             live = os.path.join(into, os.path.relpath(live, HOME)) \
                 if live.startswith(HOME + os.sep) else live
         e["live"] = live
-        e["repo_abs"] = os.path.join(HERE, e["repo"])
+        e["repo_abs"] = os.path.join(REPO_ROOT, e["repo"])
         yield e
 
 
@@ -220,6 +273,15 @@ def board(kind, text, source="tracked.py"):
 def sync():
     """Pull the drift, commit it, push it. Report only what a person would act on."""
     import subprocess
+    global REPO_ROOT
+    root, why = own_checkout()
+    if root is None:
+        board("guard-broken",
+              "tracked.py could not open its own checkout (%s), so it is mirroring "
+              "into %s, which a session may be using. The commit may land on "
+              "somebody's branch and go unpushed." % (why, HERE))
+        root = HERE
+    REPO_ROOT = root
     paths = sorted({e["repo"].split("/")[0] for e in entries()})
 
     moved = 0
@@ -233,7 +295,7 @@ def sync():
               % (len(REFUSED), ", ".join(os.path.basename(p) for p, _ in REFUSED)))
 
     def git(*args):
-        return subprocess.run(["git", "-C", HERE, *args],
+        return subprocess.run(["git", "-C", root, *args],
                               capture_output=True, text=True, timeout=120)
 
     # -uall, because plain --porcelain collapses a new directory to one line and
@@ -261,23 +323,23 @@ def sync():
         reason = (c.stderr.strip() or c.stdout.strip())[:300]
         board("guard-broken", "tracked.py could not commit: " + reason)
         return 1
-    # This checkout is shared: another session can have it on its own feature
-    # branch with commits of its own in flight. Pushing HEAD there collides
-    # with that session's own push and rewrites nothing usefully -- measured
-    # 2026-08-24, "! [rejected] HEAD -> fix/spend-sentinel-refuses-false-zero
-    # (non-fast-forward)" once and several silent "could not commit:" empty-
-    # reason failures beside it, all while a person owned that branch. The
-    # commit above already satisfies LAW 24 (it is in git, locally); only
-    # main is this job's business to push to.
-    branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
-    if branch != "main":
-        board("tracked",
-              "committed %d load-bearing file(s) changed outside git on '%s', "
-              "not pushed: this checkout belongs to another session while it "
-              "is off main. Push reaches origin next time this runs on main."
-              % (len(changed), branch))
-        return 0
-    p = git("push", "origin", "HEAD")
+    # Only main is this job's business to push to. In its own worktree that is
+    # always true, because own_checkout detached it at origin/main a moment ago.
+    # The check below is for the fallback path, where root is the shared checkout
+    # and a session may have it on a branch: pushing that collides with the
+    # session's own push and rewrites nothing usefully -- measured 2026-08-24,
+    # "! [rejected] HEAD -> fix/spend-sentinel-refuses-false-zero
+    # (non-fast-forward)". The commit above already satisfies LAW 24 locally.
+    if root == HERE:
+        branch = git("rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+        if branch != "main":
+            board("tracked",
+                  "committed %d load-bearing file(s) changed outside git on '%s', "
+                  "not pushed: this checkout belongs to another session while it "
+                  "is off main. Push reaches origin next time this runs on main."
+                  % (len(changed), branch))
+            return 0
+    p = git("push", "origin", "HEAD:main")
     if p.returncode:
         board("guard-broken",
               "tracked.py committed %d changed file(s) but could not push: %s. "
