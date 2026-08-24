@@ -1,0 +1,8 @@
+{
+  "_comment": "Two violations the policy must refuse. Case 1 is the reversion the founder predicted: a session writes a fresh Python guard instead of a Rego rule. Case 2 is the quieter version: nobody adds a file, somebody just grows an existing one.",
+  "guards": [
+    {"path": "urgent-fix-guard.py", "lines": 240},
+    {"path": "scope-guard.py", "lines": 400}
+  ],
+  "wired": ["urgent-fix-guard.py", "scope-guard.py"]
+}
