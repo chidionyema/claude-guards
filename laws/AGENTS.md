@@ -51,7 +51,7 @@ through a symlink into its own directory — `~/.claude/AGENTS.md`, `~/.codex/AG
 belong to the estate, not to whichever vendor's CLI is open. Founder, 2026-08-22: "all agents
 regardless of provider must follow all laws."
 
-Forty-six rules, in priority order, numbered to 46. LAW 24 stood empty until 2026-08-23 and now
+Forty-seven rules, in priority order, numbered to 47. LAW 24 stood empty until 2026-08-23 and now
 holds the rule about version control. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
@@ -66,7 +66,7 @@ in ~/AGENTS-FULL.md for the founder's words and the reason each law exists.
 one it hangs off and inherits its rank.
 
     1 · 2 · 2b(29) · 3 · 3b(39) · 3c(45) · 4 · 4b(33) · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10
-    11 · 11b(26) · 12 · 13 · 14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
+    5c(47) · 11 · 11b(26) · 12 · 13 · 14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
 
 **Effective order, WHAT to build.** A separate axis. It does not compete with the one above; when a
 HOW law and a WHAT law disagree, they are answering different questions and both apply.
@@ -137,6 +137,7 @@ keep.
 | 44 | A law without a protocol is a wish | every law, and the moment the founder repeats any instruction |
 | 45 | Your mistake ends as a guard no session can walk past, proved over every instance | the moment any mistake is found; the mistake is not closed until the sweep is clean |
 | 46 | No hardcoding: a file never names where the checkout, the home directory or the machine lives | before any path, host, port, account or credential is typed as a literal |
+| 47 | A founder blocker is loud, visible and one action: push notification plus a `FOUNDER ACTION:` line with the exact URL or word | the moment any step depends on the founder |
 
 **The full text of every law lives in `~/AGENTS-FULL.md`, and it is not injected.** Each law's
 prose — the founder's words, the incident that paid for it, the axis re-ranking paragraphs, and
@@ -179,8 +180,16 @@ about to write a project's name in this file, it belongs in that project's file.
 
 ## Reply format
 
-- **Line 1 is `DONE:`, `BLOCKED:` or `WORKING:`** plus one plain sentence. A reply that does not
-  start with one of those three is malformed.
+- **Line 1 is `DONE:`, `INVENTORY:`, `BLOCKED:` or `WORKING:`** plus one plain sentence. A reply
+  that does not start with one of those four is malformed.
+- **`DONE:` means the founder used it and confirmed it.** Founder, 2026-08-25, Definition of Done
+  v2.1: "Merged code, green CI, and passing tests are inventory. They are not progress." Built,
+  merged and green is `INVENTORY:`. A `DONE:` reply carries a `Founder receipt:` line naming
+  where his confirmation is recorded. `dod-guard.py` refuses the reply otherwise.
+- **An `INVENTORY:` reply is a handoff, and a handoff has exactly five lines** above the fold:
+  `Built:` (one sentence), `Use:` (exact command, button or phrase), `Expect:` (exact output or
+  state change), `Not done:` (honest gaps), `Evidence:` (URL, commit hash, file path or command,
+  never a sentence). Full policy, gates and thresholds: `idp/docs/policy/definition-of-done.md`.
 - **Under 150 words above the fold.** Evidence and caveats go below a `---`, and only when they
   change what the founder does next.
 - **No end-of-reply menus.** Open items are one line each, three at most, or a real question.
@@ -188,6 +197,16 @@ about to write a project's name in this file, it belongs in that project's file.
 - **Fix it, do not report it back.** A defect found inside work in progress is fixed in the same
   turn. Surface it unfixed only when you are barred from touching it: a founder decision, a refused
   permission, another session's work.
+
+## Executable spec or blocked (R29, founder 2026-08-25)
+
+- A PR that changes code must also change the executable spec: a `*.feature` scenario, a test,
+  or the generator that draws the live diagram. `spec-gate` in CI fails the PR otherwise, and
+  the ruleset refuses the merge. Every active estate repo runs the same gate (crew#236).
+- No manual doc updates and no "I will update the wiki later". Diagrams are generated from
+  what is running (`bin/estate-diagram`); a hand-drawn one is deleted.
+- Policy is compiled, not read: `~/AGENTS.md` and `rulings.json` are parsed at session start.
+  A contradiction between a ruling and the code it names is a halt, not a note.
 
 ## Plain English
 
