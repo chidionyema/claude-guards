@@ -171,7 +171,7 @@
    "enforced_by": "~/.claude/scripts/no-local-vm-guard.sh (fails when a colima/limactl/qemu/vfkit process exists or a colima/lima plist is in ~/Library/LaunchAgents); run by drills and on SessionStart."
   },
   {
-   "id": "R27-definition-of-done-v2.1",
+   "id": "R27-definition-of-done-v2-1",
    "date": "2026-08-25",
    "verbatim": "ok we are upgrading standards now as in tired of repeating myself, i need things working like clockwork, my blood pressure is getting too high [handed over AGENTS_md_DoD_v2_1: A feature is NOT done until the Founder has used it end-to-end and confirmed it works. Merged code, green CI, and passing tests are inventory.]",
    "meaning": "The word DONE: is reserved for work the founder has used and confirmed; the reply must carry a `Founder receipt:` line naming where that confirmation is recorded. Built, merged and green is INVENTORY:, and an INVENTORY reply carries the five handoff lines Built:, Use:, Expect:, Not done:, Evidence:. Evidence is a URL, commit hash, file path or command, never a sentence. Full policy: idp/docs/policy/definition-of-done.md (Gates 1-5, non-functional thresholds, penalties). The mechanical gates it names (bin/estate-bootstrap, bin/estate-demo, bin/estate-security-scan, coverage in CI, Merkle founder receipt) are tracked on the crew board and do not exist yet; say so rather than claim them.",
