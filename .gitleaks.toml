@@ -1,0 +1,11 @@
+# gitleaks allow-list for this repository. The estate security gate
+# (chidionyema/idp/.github/actions/security-scan) runs gitleaks over the full
+# history; every entry here is a match that is not a credential, with the
+# reason. A real secret is never allow-listed: it is rotated (crew#240).
+[extend]
+useDefault = true
+
+title = "claude-guards"
+[allowlist]
+description = "history only: the local k3d client key (server 127.0.0.1:6445), untracked and git-ignored since this file was added; k3d regenerates it"
+paths = [ '''config/k3d/.*''' ]
