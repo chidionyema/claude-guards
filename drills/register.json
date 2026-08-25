@@ -1,151 +1,161 @@
 {
-  "max_age_days_default": 8,
-  "not_drills": {
-    "run.py": "the runner itself",
-    "audit.py": "the dependency audit, which answers whether a recovery path exists at all rather than whether one works",
-    "bootstrap.sh": "the exit itself, not a test of it. rebuild/drill.sh is the drill and it runs this script against a throwaway home.",
-    "coverage.py": "the join between the asset list and this register. It asks which drill covers each asset, so it reports on drills rather than being one.",
-    "test_coverage.py": "the paired control for coverage.py: 13 cases, 5 that must be allowed and 8 refused. It grades that tool and recovers nothing."
+ "max_age_days_default": 8,
+ "not_drills": {
+  "run.py": "the runner itself",
+  "audit.py": "the dependency audit, which answers whether a recovery path exists at all rather than whether one works",
+  "bootstrap.sh": "the exit itself, not a test of it. rebuild/drill.sh is the drill and it runs this script against a throwaway home.",
+  "coverage.py": "the join between the asset list and this register. It asks which drill covers each asset, so it reports on drills rather than being one.",
+  "test_coverage.py": "the paired control for coverage.py: 13 cases, 5 that must be allowed and 8 refused. It grades that tool and recovers nothing."
+ },
+ "drills": [
+  {
+   "id": "no-anthropic",
+   "what_breaks": "Anthropic goes down, suspends the account, or prices us out, and every agent on this estate stops at once.",
+   "why": "LAW 19: portability outranks everything. The founder called this the single biggest risk to the company's existence on 2026-08-23. The laws were already symlinked into ~/.codex, ~/.gemini and ~/.cursor, so the groundwork for an exit was in place and the exit itself had never once been taken. The drill strips every Anthropic credential from the environment and checks two layers: a model answering at all, and something that can actually edit a file. A chat completion is not a replacement for an agentic coder, so a pass needs one of each.",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/no_anthropic.py"
+   ],
+   "max_age_days": 2
   },
-  "drills": [
-    {
-      "id": "no-anthropic",
-      "what_breaks": "Anthropic goes down, suspends the account, or prices us out, and every agent on this estate stops at once.",
-      "why": "LAW 19: portability outranks everything. The founder called this the single biggest risk to the company's existence on 2026-08-23. The laws were already symlinked into ~/.codex, ~/.gemini and ~/.cursor, so the groundwork for an exit was in place and the exit itself had never once been taken. The drill strips every Anthropic credential from the environment and checks two layers: a model answering at all, and something that can actually edit a file. A chat completion is not a replacement for an agentic coder, so a pass needs one of each.",
-      "cmd": [
-        "/usr/bin/python3",
-        "{HERE}/no_anthropic.py"
-      ],
-      "max_age_days": 2
-    },
-    {
-      "id": "rebuild",
-      "what_breaks": "This Mac dies and the estate has to come back on a new machine.",
-      "why": "LAW 19: a dependency whose exit has never been drilled is not portable, it is a hope.",
-      "cmd": [
-        "/bin/bash",
-        "{HERE}/../rebuild/drill.sh"
-      ],
-      "max_age_days": 8
-    },
-    {
-      "id": "estate-bundle-restore",
-      "what_breaks": "A commit exists only on this Mac and the Mac dies.",
-      "why": "estate_bundle_push.sh already clones each bundle back after uploading it. The drill is that the newest receipt says so and is recent, because a push script that stopped running still leaves yesterday's green receipt behind.",
-      "cmd": [
-        "/usr/bin/python3",
-        "{HERE}/check_bundle_restore.py"
-      ],
-      "max_age_days": 2
-    },
-    {
-      "id": "offsite-backup-restore",
-      "what_breaks": "The prospector data is gone and the offsite copy is the only one left.",
-      "why": "com.prospector.offsite-backup writes to an S3-compatible bucket and exits 0. Nothing had ever read an object back out. LAW 28: clean receipts from a backup that never copied a byte is a lie with a cron schedule. The first run of this drill, 2026-08-23, found that every repository bundle taken since 2026-08-18 was unrestorable: the source checkout had become a shallow clone and `git bundle verify` cannot see that.",
-      "cmd": [
-        "/bin/bash",
-        "-lc",
-        "cd {HOME}/Documents/code/prospector-live && exec .venv/bin/python -m ops.automations.offsite_restore_drill"
-      ],
-      "max_age_days": 3
-    },
-    {
-      "id": "key-escrow-restore",
-      "what_breaks": "This laptop dies and the two age keys die with it, so every encrypted bundle in the offsite bucket is permanently opaque.",
-      "why": "~/.config holds the only copy of both age private keys and of the R2 credentials the offsite backup itself uses, and every backup path deliberately excludes that directory. Measured 2026-08-23: no offsite copy of either key existed anywhere. The escrow splits recovery across two accounts the founder already owns -- ciphertext in R2, the key that opens it in iCloud Drive -- and this drill is the half that proves a new machine could actually use them.",
-      "cmd": [
-        "/usr/bin/python3",
-        "{HERE}/check_key_escrow.py"
-      ],
-      "max_age_days": 8
-    },
-    {
-      "id": "secret-rotation",
-      "what_breaks": "A credential leaks and has to be replaced before anyone can be told it leaked.",
-      "why": "LAW 21: a rotation that has not been proved by a command reads as not done. Nothing here has ever rotated a live credential and then shown the old one failing.",
-      "cmd": null,
-      "todo": "Rotate one low-blast-radius credential end to end: mint, install, prove the new one works, prove the old one now returns 401."
-    },
-    {
-      "id": "telegram-delivery",
-      "what_breaks": "Something breaks at 03:00 and the message never arrives.",
-      "why": "LAW 28: prove the arrival, not the send. The old coordinator fired escalate 18 times and delivered 0 notifications, and nothing caught it for four days. The drill authenticates the bot (getMe) and proves the route to the founder's chat (sendChatAction), which fail differently: a revoked token kills the first, a wrong or blocked chat id kills the second. It deliberately does NOT read messages back: that needs getUpdates, and a second getUpdates consumer is the exact trap that made the gateway deaf for 31.5 hours on 2026-08-22 (one token, one poller).",
-      "cmd": [
-        "/usr/bin/python3",
-        "{HERE}/check_telegram_delivery.py"
-      ],
-      "max_age_days": 2
-    },
-    {
-      "id": "windows-rebuild",
-      "what_breaks": "The laptop dies and the replacement is a Windows machine.",
-      "why": "The rebuild drill restores this estate into a throwaway home on THIS operating system. It has never once been run on Windows, so the honest state of a Windows rebuild is unproven, not hard. jobs/render_windows.py turns all 29 jobs into Task Scheduler XML and every one of them loses something on the way.",
-      "cmd": null,
-      "todo": "Render every job to Task Scheduler XML, import it on a real Windows host or a Windows container, start one job, and read its output back. Until a job has actually run there, the renderer is a file format exercise."
-    },
-    {
-      "id": "github-gone",
-      "what_breaks": "GitHub goes down, suspends the account, or the token is revoked, and every repository's history is unreachable.",
-      "why": "dependencies.json named this drill against github.com, GH_TOKEN and GITHUB_TOKEN and it was a placeholder with no cmd, so three dependencies read as covered by nothing. estate-bundle-restore does not cover it: it passes on a verify-ok receipt, and estate_bundle_push.sh says in its own header that restoring an incremental bundle needs the remote as well as the bundle. Worse, a repo whose remote already holds every commit is skipped by the pusher outright, so on 2026-08-24 R2 held no standalone copy of ~/.claude/scripts, hermes-v2 or crew. This drill grades one thing: does R2 hold a --all bundle per declared repo that was cloned back standalone at upload time.",
-      "cmd": [
-        "/usr/bin/python3",
-        "{HERE}/check_github_gone.py"
-      ],
-      "todo": "With github.com unreachable, rebuild claude-estate and claude-guards from the R2 bundles alone into a throwaway home, and run the existing rebuild assertions against the result. If that cannot pass, the fix is a full-history bundle for the repos that have a remote, not a bigger comment.",
-      "max_age_days": 2
-    },
-    {
-      "id": "cloudflare-gone",
-      "what_breaks": "Cloudflare suspends the account or the Workers platform goes away.",
-      "why": "survival-stack does not run ON Cloudflare, it IS a Cloudflare Workers application: the control plane is a Worker, its state is in R2 and KV, and its DNS is Cloudflare's. api.cloudflare.com, dash.cloudflare.com, the workers.dev hostnames and the r2.cloudflarestorage.com buckets are one vendor wearing four names. The estate's offsite backups are in the same account, so a suspension takes the product and the recovery path together. Nothing has ever been exported from it.",
-      "cmd": null,
-      "max_age_days": 30
-    },
-    {
-      "id": "stripe-gone",
-      "what_breaks": "Stripe freezes the account or terminates the relationship.",
-      "why": "api.stripe.com is the only route money takes into this company. A freeze does not degrade the product, it stops revenue while the product keeps serving, which is the failure that looks fine on every dashboard. The drill is whether a second processor can be switched on and whether the customer records needed to do it live anywhere but Stripe.",
-      "cmd": null,
-      "max_age_days": 90
-    },
-    {
-      "id": "db-integrity",
-      "what_breaks": "A database quietly loses its indexes, every backup faithfully copies the damage, and the first person to find out is whoever runs the restore.",
-      "why": "Found on 2026-08-23: Documents/code/prospector/store/prospector.db was missing eight index entries across four indexes, rows 3604-3608 of 3608, and had been since at least the 21st. Nothing on this Mac would ever have said so. PRAGMA quick_check returns ok on that exact file, because it skips index content by design, so the cheap check passed while the real one failed. Missing index entries are recoverable from the table data, so this drill repairs those itself and says what it did; anything worse it refuses to touch and reports, because rebuilding indexes over a damaged page hides the damage.",
-      "cmd": [
-        "/usr/bin/python3",
-        "{HERE}/check_db_integrity.py"
-      ],
-      "max_age_days": 1
-    },
-    {
-      "id": "recovery-posture",
-      "what_breaks": "A scheduled job stops running and nothing on this Mac notices, because every other instrument grades the output of a job that got a turn.",
-      "why": "Founder, 2026-08-23: 'bsiclly if i disappered today the esate should be able to run itself'. That is a claim about recovery, and recovery was the one property nothing measured. Found on the first run: com.founder.agentcert and com.prospector.launchd-held fire on the same second every hour, lost the estate-gate slot race every time, and had never completed a single run -- while launchd reported exit 0 for both. The drill grades six ways a job stops recovering itself: its program is missing from disk, it has no KeepAlive or RunAtLoad or interval at all, it is a live service whose first crash is permanent, it is gated and never gets a turn, it is loaded with no plist so it dies at the next reboot, or its plist is on disk and it is not loaded. It tells three identical-looking gated symptoms apart by cause, because losing every slot race, dying mid-run and simply running right now need different repairs.",
-      "cmd": [
-        "/usr/bin/python3",
-        "{HERE}/check_recovery_posture.py"
-      ],
-      "max_age_days": 1
-    },
-    {
-      "id": "substrate-never-sleeps",
-      "what_breaks": "The MacBook sleeps. Under R14 this laptop is production, so every scheduled job, every agent session and every service on it stops at once, and nothing that runs on the machine can report it because it is asleep too.",
-      "why": "Founder, 2026-08-24: 'first of all the macbook must never sleep'. The estate already had com.founder.estate-awake, a KeepAlive LaunchAgent holding 'caffeinate -s -i'. Measured that morning: launchctl reported PID 41015 alive and LastExitStatus 0, and pmset -g log showed the machine had entered sleep 6 times on AC power in the preceding 24 hours. The job was green and wrong. caffeinate is a userland assertion -- it is a no-op for system sleep on battery, it dies with the login session, and it cannot stop a thermal or maintenance sleep. The OS setting 'pmset -c sleep 0' is the real mechanism (R6: use the platform, not a wrapper). This drill grades the three things that actually decide it: the OS setting is 0, the machine is on AC, and the sleep log is empty. It reports BLIND rather than a verdict when it cannot read pmset.",
-      "cmd": [
-        "/bin/sh",
-        "-c",
-        "set -u\nLOG=$(pmset -g log 2>/dev/null) || { echo \"BLIND: cannot read pmset -g log\"; exit 2; }\nCUS=$(pmset -g custom 2>/dev/null) || { echo \"BLIND: cannot read pmset -g custom\"; exit 2; }\n[ -n \"$LOG\" ] || { echo \"BLIND: pmset -g log returned nothing\"; exit 2; }\nAC=$(printf '%s\\n' \"$CUS\" | sed -n '/^AC Power/,$p' | awk '$1==\"sleep\"{print $2; exit}')\ncase \"$AC\" in ''|*[!0-9]*) echo \"BLIND: could not parse the AC sleep setting\"; exit 2;; esac\nCUT=$(date -v-24H '+%Y-%m-%d %H:%M:%S') || { echo \"BLIND: date -v unavailable\"; exit 2; }\nN=$(printf '%s\\n' \"$LOG\" | grep 'Entering Sleep state' | awk -v c=\"$CUT\" '$1\" \"$2 > c' | wc -l | tr -d ' ')\nPWR=$(pmset -g batt 2>/dev/null | head -1)\nF=0\n[ \"$AC\" -eq 0 ] || { echo \"FAIL: pmset AC sleep=$AC, must be 0. Fix: sudo pmset -c sleep 0 disksleep 0 standby 0 powernap 0\"; F=1; }\n[ \"$N\" -eq 0 ] || { echo \"FAIL: the substrate slept $N times in the last 24h (pmset -g log)\"; F=1; }\ncase \"$PWR\" in *\"'AC Power'\"*) ;; *) echo \"FAIL: on battery, not AC. Under R14 this laptop is production and it is on a countdown.\"; F=1;; esac\n[ \"$F\" -eq 0 ] && echo \"PASS: AC sleep=0, on AC power, 0 sleeps in 24h\"\nexit $F\n"
-      ],
-      "max_age_days": 1
-    }
-  ],
-  "retired": [
-    {
-      "id": "fly-rollback",
-      "retired_on": "2026-08-23",
-      "why": "Founder, 2026-08-23: the estate is moving off Fly, so a drill for rolling back a Fly deploy would be proving a recovery path we are leaving. Recorded here rather than only in git history so nobody adds it back from the same reasoning that added it the first time.",
-      "still_uncovered": "A bad deploy taking production down is still a real loss mode. It is not replaced by a vague entry, because a drill that names no platform cannot be run and would read as coverage. It goes back on this register the day the replacement platform is chosen, named for that platform."
-    }
-  ]
+  {
+   "id": "rebuild",
+   "what_breaks": "This Mac dies and the estate has to come back on a new machine.",
+   "why": "LAW 19: a dependency whose exit has never been drilled is not portable, it is a hope.",
+   "cmd": [
+    "/bin/bash",
+    "{HERE}/../rebuild/drill.sh"
+   ],
+   "max_age_days": 8
+  },
+  {
+   "id": "estate-bundle-restore",
+   "what_breaks": "A commit exists only on this Mac and the Mac dies.",
+   "why": "estate_bundle_push.sh already clones each bundle back after uploading it. The drill is that the newest receipt says so and is recent, because a push script that stopped running still leaves yesterday's green receipt behind.",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/check_bundle_restore.py"
+   ],
+   "max_age_days": 2
+  },
+  {
+   "id": "offsite-backup-restore",
+   "what_breaks": "The prospector data is gone and the offsite copy is the only one left.",
+   "why": "com.prospector.offsite-backup writes to an S3-compatible bucket and exits 0. Nothing had ever read an object back out. LAW 28: clean receipts from a backup that never copied a byte is a lie with a cron schedule. The first run of this drill, 2026-08-23, found that every repository bundle taken since 2026-08-18 was unrestorable: the source checkout had become a shallow clone and `git bundle verify` cannot see that.",
+   "cmd": [
+    "/bin/bash",
+    "-lc",
+    "cd {HOME}/Documents/code/prospector-live && exec .venv/bin/python -m ops.automations.offsite_restore_drill"
+   ],
+   "max_age_days": 3
+  },
+  {
+   "id": "key-escrow-restore",
+   "what_breaks": "This laptop dies and the two age keys die with it, so every encrypted bundle in the offsite bucket is permanently opaque.",
+   "why": "~/.config holds the only copy of both age private keys and of the R2 credentials the offsite backup itself uses, and every backup path deliberately excludes that directory. Measured 2026-08-23: no offsite copy of either key existed anywhere. The escrow splits recovery across two accounts the founder already owns -- ciphertext in R2, the key that opens it in iCloud Drive -- and this drill is the half that proves a new machine could actually use them.",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/check_key_escrow.py"
+   ],
+   "max_age_days": 8
+  },
+  {
+   "id": "secret-rotation",
+   "what_breaks": "A credential leaks and has to be replaced before anyone can be told it leaked.",
+   "why": "LAW 21: a rotation that has not been proved by a command reads as not done. Nothing here has ever rotated a live credential and then shown the old one failing.",
+   "cmd": null,
+   "todo": "Rotate one low-blast-radius credential end to end: mint, install, prove the new one works, prove the old one now returns 401."
+  },
+  {
+   "id": "telegram-delivery",
+   "what_breaks": "Something breaks at 03:00 and the message never arrives.",
+   "why": "LAW 28: prove the arrival, not the send. The old coordinator fired escalate 18 times and delivered 0 notifications, and nothing caught it for four days. The drill authenticates the bot (getMe) and proves the route to the founder's chat (sendChatAction), which fail differently: a revoked token kills the first, a wrong or blocked chat id kills the second. It deliberately does NOT read messages back: that needs getUpdates, and a second getUpdates consumer is the exact trap that made the gateway deaf for 31.5 hours on 2026-08-22 (one token, one poller).",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/check_telegram_delivery.py"
+   ],
+   "max_age_days": 2
+  },
+  {
+   "id": "windows-rebuild",
+   "what_breaks": "The laptop dies and the replacement is a Windows machine.",
+   "why": "The rebuild drill restores this estate into a throwaway home on THIS operating system. It has never once been run on Windows, so the honest state of a Windows rebuild is unproven, not hard. jobs/render_windows.py turns all 29 jobs into Task Scheduler XML and every one of them loses something on the way.",
+   "cmd": null,
+   "todo": "Render every job to Task Scheduler XML, import it on a real Windows host or a Windows container, start one job, and read its output back. Until a job has actually run there, the renderer is a file format exercise."
+  },
+  {
+   "id": "github-gone",
+   "what_breaks": "GitHub goes down, suspends the account, or the token is revoked, and every repository's history is unreachable.",
+   "why": "dependencies.json named this drill against github.com, GH_TOKEN and GITHUB_TOKEN and it was a placeholder with no cmd, so three dependencies read as covered by nothing. estate-bundle-restore does not cover it: it passes on a verify-ok receipt, and estate_bundle_push.sh says in its own header that restoring an incremental bundle needs the remote as well as the bundle. Worse, a repo whose remote already holds every commit is skipped by the pusher outright, so on 2026-08-24 R2 held no standalone copy of ~/.claude/scripts, hermes-v2 or crew. This drill grades one thing: does R2 hold a --all bundle per declared repo that was cloned back standalone at upload time.",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/check_github_gone.py"
+   ],
+   "todo": "With github.com unreachable, rebuild claude-estate and claude-guards from the R2 bundles alone into a throwaway home, and run the existing rebuild assertions against the result. If that cannot pass, the fix is a full-history bundle for the repos that have a remote, not a bigger comment.",
+   "max_age_days": 2
+  },
+  {
+   "id": "cloudflare-gone",
+   "what_breaks": "Cloudflare suspends the account or the Workers platform goes away.",
+   "why": "survival-stack does not run ON Cloudflare, it IS a Cloudflare Workers application: the control plane is a Worker, its state is in R2 and KV, and its DNS is Cloudflare's. api.cloudflare.com, dash.cloudflare.com, the workers.dev hostnames and the r2.cloudflarestorage.com buckets are one vendor wearing four names. The estate's offsite backups are in the same account, so a suspension takes the product and the recovery path together. Nothing has ever been exported from it.",
+   "cmd": null,
+   "max_age_days": 30
+  },
+  {
+   "id": "stripe-gone",
+   "what_breaks": "Stripe freezes the account or terminates the relationship.",
+   "why": "api.stripe.com is the only route money takes into this company. A freeze does not degrade the product, it stops revenue while the product keeps serving, which is the failure that looks fine on every dashboard. The drill is whether a second processor can be switched on and whether the customer records needed to do it live anywhere but Stripe.",
+   "cmd": null,
+   "max_age_days": 90
+  },
+  {
+   "id": "db-integrity",
+   "what_breaks": "A database quietly loses its indexes, every backup faithfully copies the damage, and the first person to find out is whoever runs the restore.",
+   "why": "Found on 2026-08-23: Documents/code/prospector/store/prospector.db was missing eight index entries across four indexes, rows 3604-3608 of 3608, and had been since at least the 21st. Nothing on this Mac would ever have said so. PRAGMA quick_check returns ok on that exact file, because it skips index content by design, so the cheap check passed while the real one failed. Missing index entries are recoverable from the table data, so this drill repairs those itself and says what it did; anything worse it refuses to touch and reports, because rebuilding indexes over a damaged page hides the damage.",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/check_db_integrity.py"
+   ],
+   "max_age_days": 1
+  },
+  {
+   "id": "recovery-posture",
+   "what_breaks": "A scheduled job stops running and nothing on this Mac notices, because every other instrument grades the output of a job that got a turn.",
+   "why": "Founder, 2026-08-23: 'bsiclly if i disappered today the esate should be able to run itself'. That is a claim about recovery, and recovery was the one property nothing measured. Found on the first run: com.founder.agentcert and com.prospector.launchd-held fire on the same second every hour, lost the estate-gate slot race every time, and had never completed a single run -- while launchd reported exit 0 for both. The drill grades six ways a job stops recovering itself: its program is missing from disk, it has no KeepAlive or RunAtLoad or interval at all, it is a live service whose first crash is permanent, it is gated and never gets a turn, it is loaded with no plist so it dies at the next reboot, or its plist is on disk and it is not loaded. It tells three identical-looking gated symptoms apart by cause, because losing every slot race, dying mid-run and simply running right now need different repairs.",
+   "cmd": [
+    "/usr/bin/python3",
+    "{HERE}/check_recovery_posture.py"
+   ],
+   "max_age_days": 1
+  },
+  {
+   "id": "substrate-never-sleeps",
+   "what_breaks": "The MacBook sleeps. Under R14 this laptop is production, so every scheduled job, every agent session and every service on it stops at once, and nothing that runs on the machine can report it because it is asleep too.",
+   "why": "Founder, 2026-08-24: 'first of all the macbook must never sleep'. The estate already had com.founder.estate-awake, a KeepAlive LaunchAgent holding 'caffeinate -s -i'. Measured that morning: launchctl reported PID 41015 alive and LastExitStatus 0, and pmset -g log showed the machine had entered sleep 6 times on AC power in the preceding 24 hours. The job was green and wrong. caffeinate is a userland assertion -- it is a no-op for system sleep on battery, it dies with the login session, and it cannot stop a thermal or maintenance sleep. The OS setting 'pmset -c sleep 0' is the real mechanism (R6: use the platform, not a wrapper). This drill grades the three things that actually decide it: the OS setting is 0, the machine is on AC, and the sleep log is empty. It reports BLIND rather than a verdict when it cannot read pmset.",
+   "cmd": [
+    "/bin/sh",
+    "-c",
+    "set -u\nLOG=$(pmset -g log 2>/dev/null) || { echo \"BLIND: cannot read pmset -g log\"; exit 2; }\nCUS=$(pmset -g custom 2>/dev/null) || { echo \"BLIND: cannot read pmset -g custom\"; exit 2; }\n[ -n \"$LOG\" ] || { echo \"BLIND: pmset -g log returned nothing\"; exit 2; }\nAC=$(printf '%s\\n' \"$CUS\" | sed -n '/^AC Power/,$p' | awk '$1==\"sleep\"{print $2; exit}')\ncase \"$AC\" in ''|*[!0-9]*) echo \"BLIND: could not parse the AC sleep setting\"; exit 2;; esac\nCUT=$(date -v-24H '+%Y-%m-%d %H:%M:%S') || { echo \"BLIND: date -v unavailable\"; exit 2; }\nN=$(printf '%s\\n' \"$LOG\" | grep 'Entering Sleep state' | awk -v c=\"$CUT\" '$1\" \"$2 > c' | wc -l | tr -d ' ')\nPWR=$(pmset -g batt 2>/dev/null | head -1)\nF=0\n[ \"$AC\" -eq 0 ] || { echo \"FAIL: pmset AC sleep=$AC, must be 0. Fix: sudo pmset -c sleep 0 disksleep 0 standby 0 powernap 0\"; F=1; }\n[ \"$N\" -eq 0 ] || { echo \"FAIL: the substrate slept $N times in the last 24h (pmset -g log)\"; F=1; }\ncase \"$PWR\" in *\"'AC Power'\"*) ;; *) echo \"FAIL: on battery, not AC. Under R14 this laptop is production and it is on a countdown.\"; F=1;; esac\n[ \"$F\" -eq 0 ] && echo \"PASS: AC sleep=0, on AC power, 0 sleeps in 24h\"\nexit $F\n"
+   ],
+   "max_age_days": 1
+  },
+  {
+   "id": "oke-rebuild",
+   "what_breaks": "The platform on OKE drifts from git, stops serving, or cannot be rebuilt from its repositories; the estate is not portable and nobody knows until a customer does.",
+   "why": "crew#220, founder 2026-08-25: repeatable, idempotent, one-shot, drilled; port the platform anywhere in the shortest time with zero downtime. --check is the daily zero-downtime rung: tofu plan reports no drift, nodes Ready, every Flux Kustomization ready, https://mumchimp.com/ 200 with a valid cert, /catalog holds 77 packs. --teardown-rebuild is the full rung and needs a second cluster's capacity (founder decision on crew#220).",
+   "cmd": [
+    "{IDP}/bin/idp-oke-rebuild",
+    "--check"
+   ],
+   "max_age_days": 1
+  }
+ ],
+ "retired": [
+  {
+   "id": "fly-rollback",
+   "retired_on": "2026-08-23",
+   "why": "Founder, 2026-08-23: the estate is moving off Fly, so a drill for rolling back a Fly deploy would be proving a recovery path we are leaving. Recorded here rather than only in git history so nobody adds it back from the same reasoning that added it the first time.",
+   "still_uncovered": "A bad deploy taking production down is still a real loss mode. It is not replaced by a vague entry, because a drill that names no platform cannot be run and would read as coverage. It goes back on this register the day the replacement platform is chosen, named for that platform."
+  }
+ ]
 }
