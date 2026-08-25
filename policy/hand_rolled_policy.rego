@@ -69,6 +69,8 @@ legacy := {
 	"scope-guard.py": 146,
 	"laws-link-guard.py": 145,
 	"canonical-root-guard.py": 133,
+	"dod-guard.py": 192,
+	"feed-guard.py": 176,
 }
 
 # How many command refusals each guard still implements in Python. Same direction
