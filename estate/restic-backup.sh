@@ -9,6 +9,7 @@ set -eu
 # Transcripts (~/.claude/projects) stay with the old offsite job for now.
 restic backup \
   "$HOME/.estate" \
+  "$HOME/Library/Containers/com.apple.Notes/Data/Library/Notes" \
   "$HOME/.claude/state" \
   "$HOME/.claude/projects/-Users-chidionyema/memory" \
   "$HOME/.claude/projects/-Users-chidionyema/checkpoints" \
