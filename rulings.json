@@ -155,6 +155,13 @@
    "verbatim": "Every container image in the estate must support both linux/amd64 and linux/arm64. No exceptions. No per-environment hacks. One image tag, two architectures, runtime picks automatically.",
    "meaning": "Every image the estate pushes is a single tag carrying a linux/amd64 and a linux/arm64 manifest, built by `docker buildx build --platform linux/amd64,linux/arm64` in GitHub Actions and pushed to GHCR. The Mac (x86_64) pulls amd64, OKE (Ampere) pulls arm64, nobody configures anything. Local builds go through idp/bin/build-image; CI blocks a single-arch push.",
    "enforced_by": "idp/bin/build-image (refuses a single --platform), idp/bin/multiarch-gate (every build-push-action and docker build call must name both platforms; fixtures both ways in idp-ci), idp/.github/workflows/build-multiarch.yml, STANDARDS.md row."
+  },
+  {
+   "id": "R25-auth-requests-go-to-telegram",
+   "date": "2026-08-25",
+   "verbatim": "any founder auth request must also be sent to telegram, dont assume founder is always on laptop. another team is working on new telegram setup so do nothing but ensure everyone is synced in on this",
+   "meaning": "Whenever a session needs the founder to authenticate (a device code, an OAuth browser sign-in, an MFA prompt, a console login), it prints the request in the reply AND sends the same request to him on Telegram (Otto / The Architect, whichever the Telegram team lands). Never assume he is at the laptop. Until the new Telegram setup lands, no session builds a Telegram sender for this; the duty is to know the rule and follow it once the channel exists.",
+   "enforced_by": "Not yet enforced by a guard: the Telegram channel is being rebuilt by another team (2026-08-25). Candidate guard once it lands: the auth-request phrases (one-time code, device code, sign in, oauth) in a reply above the fold must be matched by a Telegram send receipt in the same turn."
   }
  ],
  "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R25; grep the estate for the id before you add one."
