@@ -8,7 +8,7 @@
 	lowSpeedTime = 999999
 	maxRequestBuffer = 100M
 [credential]
-	helper = osxkeychain
+	helper = !gh auth git-credential
 [pull]
 	rebase = false
 [filter "lfs"]
