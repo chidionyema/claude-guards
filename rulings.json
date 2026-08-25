@@ -214,7 +214,31 @@
       "date": "2026-08-25",
       "verbatim": "ok lets adopt this but every 30 minutes not 4 hours ... and ensure everyone is permanently doing this without me asking ... this way even if agent sessions die, we can recover easily",
       "meaning": "Every session appends a handoff to ~/.estate/feed.md at least every 30 minutes: six lines at most, each starting with 🔴 Blocked / 🟡 Active / 🟢 Done / ⚪ Pending / 📍 State. The feed is the persistent brain; a session that dies has left its state there. A session that starts with 'Status' reads the feed and summarises it; nobody re-explains and the founder is never asked what the feed already says. Enforced by ~/.claude/scripts/feed-guard.py on Stop (blocks an overdue turn), SessionStart (injects the last entries) and UserPromptSubmit (reminder). Append with: python3 ~/.claude/scripts/feed-guard.py append --session <id> --lane <repo>."
+    },
+    {
+      "id": "R34-net-new-research-paradigm-verifiable-calibrated",
+      "date": "2026-08-25",
+      "verbatim": "We are changing our approach entirely. ... we are officially banning the words \"refactor,\" \"rewrite,\" or \"update\" regarding the engine. ... every claim carries its source in an append-only, object-locked bucket ... every forecast is Brier-scored ... a Golden Corpus of 50-100 hand-researched dossiers is the oracle.",
+      "meaning": "The research engine is net-new, not a cleanup of the old one. Every claim names a locked source (R2 object lock, append-only); every forecast is logged and Brier-scored (MLflow); the science plane is Argo/MLflow/Kubernetes; differential replay against the old engine is dead; a 50-100 item Golden Corpus, crew-researched online from existing dossier titles, is the oracle; the buyer sees a calibration curve. Full text: crew docs/rulings/R34-net-new-research-paradigm-verifiable-calibrated.md."
+    },
+    {
+      "id": "R35-research-crew-is-a-platform-layer",
+      "date": "2026-08-25",
+      "verbatim": "how does the research science and machine learning crew engage with the rest of the platform, they are here to exponentially improve all parts of the estate including prospector, the capabilities need to be world class on their own and can be purposed to any part of platform and beyond as we add new product and capabilities",
+      "meaning": "The research/science/ML capability is a platform layer in idp, on the same row as model routing and traces. Every product (prospector, hermes-v2, whatever is added next) is a customer of it; it is never built inside one product. Full text: crew docs/rulings/R35-research-crew-is-a-platform-layer-for-every-product.md."
+    },
+    {
+      "id": "R36-cloud-agnostic-disposable-compute-universal-state",
+      "date": "2026-08-25",
+      "verbatim": "Rebuilding the same Oracle cluster faster is just automating our own lock-in.",
+      "meaning": "The platform must not know or care who owns the servers it runs on. Compute is disposable and state is universal: a rebuild from an empty tenancy on any provider is one workflow_dispatch, and moving vaults or load balancers is one manifest change. Recorded from crew#250 by idp#124 (bin/cloud-agnostic-gate)."
+    },
+    {
+      "id": "R37-research-is-a-crew-science-is-an-embedded-layer",
+      "date": "2026-08-25",
+      "verbatim": "Research is a crew. Science/ML is a layer. ... Research discovers what to build. Science predicts when it will be ready, if it will break, and whether the founder can be interrupted. Both are mandatory. Neither can wait. ... a Python 'tapeworm' script writing to a local SQLite database on your Mac is completely incompatible with the elite, cloud-agnostic standard we just established. ... it must be impossible for any potential data point to be missed.",
+      "meaning": "Research looks outward (markets, competitors, capabilities) and is a crew whose adoption decisions end with the founder's last call. Science/ML looks inward (sessions, CI, guards, budget, founder response) and is an embedded layer, always on, no opt-out: OTel Collector on the cluster, ClickHouse, MLflow + Langfuse, Brier-graded predictions, founder as calibration authority. Every emitter is registered and an unregistered writer cannot land. Full text: crew docs/rulings/R37-research-is-a-crew-science-is-an-embedded-layer.md."
     }
   ],
-  "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R30; grep the estate for the id before you add one."
+  "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R38 (R34-R37 landed 2026-08-25 via claude-guards#60); grep the estate for the id before you add one."
 }

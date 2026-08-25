@@ -156,6 +156,10 @@
     "www.minimax.io": {
       "is": "a marketing page",
       "dismissed": "same"
+    },
+    "api.github.com": {
+      "is": "the crew docs/rulings listing the policy job reads (claude-guards#60); same outage surface as github.com",
+      "covered_by": "github-gone"
     }
   },
   "credentials": {
