@@ -137,7 +137,7 @@ keep.
 | 44 | A law without a protocol is a wish | every law, and the moment the founder repeats any instruction |
 | 45 | Your mistake ends as a guard no session can walk past, proved over every instance | the moment any mistake is found; the mistake is not closed until the sweep is clean |
 | 46 | No hardcoding: a file never names where the checkout, the home directory or the machine lives | before any path, host, port, account or credential is typed as a literal |
-| 47 | A founder blocker is loud, visible and one action: push notification plus a `FOUNDER ACTION:` line with the exact URL or word | the moment any step depends on the founder |
+| 47 | A founder blocker is loud, visible and one action: `founder-blocker.py` (Telegram home channel, pinned, ledgered) plus a `FOUNDER ACTION:` line with the exact URL or word; a terminal push alone is a miss | the moment any step depends on the founder |
 
 **The full text of every law lives in `~/AGENTS-FULL.md`, and it is not injected.** Each law's
 prose — the founder's words, the incident that paid for it, the axis re-ranking paragraphs, and

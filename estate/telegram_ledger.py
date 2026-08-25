@@ -49,7 +49,8 @@ def _trim() -> None:
         LEDGER.write_text("\n".join(lines) + "\n")
     except OSError:
         try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 50))
-        except Exception: pass
+        except (OSError, ValueError):  # ledger is best-effort
+            pass
 
 
 def record(source: str, outcome: str, text: str = "", *, key: str = "",
@@ -75,10 +76,11 @@ def record(source: str, outcome: str, text: str = "", *, key: str = "",
         with LEDGER.open("a") as fh:
             fh.write(json.dumps(row, ensure_ascii=False) + "\n")
         _trim()
-    except Exception:
+    except (OSError, ValueError):
         # Bookkeeping never breaks the thing it is bookkeeping for.
         try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 77))
-        except Exception: pass
+        except (OSError, ValueError):  # ledger is best-effort
+            pass
 
 
 def read(since_s: float = 0.0) -> list[dict]:

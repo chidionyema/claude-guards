@@ -211,10 +211,10 @@
       "meaning": "The research engine is not fed, tuned to, or measured against the old prospector dossiers. It generates its own ideas from scratch, at every scale (one company, one market, the estate). The old corpus has one use: a baseline the engine must beat, shown side by side. Any plan whose first step is 'load the old dossiers' is the old system wearing a new name. Sharpens R31."
     },
     {
-      "id": "R33-research-crew-is-a-platform-layer",
+      "id": "R35-research-crew-is-a-platform-layer",
       "date": "2026-08-25",
       "verbatim": "they are here to exponentially improve all parts of the estate including prospector, the capabilities need to be world class on their own and can be purposed to any part of platform and beyond as we add new product and capabilities. i need to be certain we are on the same page and you dont drift",
-      "meaning": "The research/science/ML capability is a platform layer in idp, one contract (a target at a scale), one estate-wide forecast ledger, serves every product; nothing in its prompt, runner or ledger names prospector. Spec: crew docs/rulings/R33-*.md"
+      "meaning": "The research/science/ML capability is a platform layer in idp, one contract (a target at a scale), one estate-wide forecast ledger, serves every product; nothing in its prompt, runner or ledger names prospector. Spec: crew docs/rulings/R35-*.md"
     }
   ],
   "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R30; grep the estate for the id before you add one."

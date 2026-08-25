@@ -12,15 +12,16 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
-import pathlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import telegram_ledger                                        # noqa: E402  (path set above)
+import telegram_ledger
 
 HERMES_HOME = Path(os.environ.get("HERMES_HOME", os.path.expanduser("~/.hermes")))
 # Credentials moved out of the Hermes tree on 2026-08-22. Two reasons, both real:
@@ -77,7 +78,8 @@ def _debounced(key: str, window_s: float, record: bool = True) -> bool:
         _DEBOUNCE.write_text(json.dumps(data))
     except OSError:
         try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 78))
-        except Exception: pass
+        except (OSError, ValueError, urllib.error.URLError):  # alerting must never crash the caller
+            pass
     return False
 
 
@@ -209,7 +211,7 @@ def send_operator_alert(text: str, *, debounce_key: str | None = None,
                   f"  python3 ~/.hermes/scripts/telegram_noise.py --since 2h")
         try:
             ok = _post(token, chat, notice)
-        except Exception as exc:
+        except (OSError, ValueError, urllib.error.URLError) as exc:
             print(f"[estate_alert] cap notice failed: {exc!r}", file=sys.stderr)
             return False
         telegram_ledger.record(source, "sent" if ok else "failed", notice,
@@ -220,8 +222,8 @@ def send_operator_alert(text: str, *, debounce_key: str | None = None,
         ok = _post(token, chat, text)
         telegram_ledger.record(source, "sent" if ok else "failed", text,
                                key=debounce_key or "", msg_id=int(ok or 0))
-        return ok
-    except Exception as exc:
+        return bool(ok)
+    except (OSError, ValueError, urllib.error.URLError) as exc:
         # Never raise — but never swallow the reason either. A page that vanishes with no
         # trace cannot be diagnosed, and this is the path that reports everything else.
         print(f"[estate_alert] send failed: {exc!r}", file=sys.stderr)
