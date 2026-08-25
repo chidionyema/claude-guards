@@ -124,6 +124,21 @@ jobs:
           done < policy/fixtures/must_deny.expected
           exit $fail
 
+      # claude-guards#60. Ruling numbers are allocated in rulings.json and nowhere else.
+      # The register is this file's ids; the docs are the crew repository's
+      # docs/rulings filenames (public, read over the API). policy/rulings.rego
+      # refuses a number claimed twice and a doc whose number the register lacks;
+      # policy/rulings_test.rego proves both the refusal and the permit in
+      # `the rego unit tests` above.
+      - name: ruling numbers are allocated once, in rulings.json
+        run: |
+          jq '{register: [.rulings[].id]}' rulings.json > reg.json
+          curl -sSf https://api.github.com/repos/chidionyema/crew/contents/docs/rulings \
+            | jq '[.[].name | select(test("^R[0-9]+-"))]' > docs.json
+          jq -s '{register: .[0].register, docs: .[1]}' reg.json docs.json > rulings-input.json
+          echo "register: $(jq '.register | length' rulings-input.json) ids, crew docs: $(jq '.docs | length' rulings-input.json)"
+          conftest test --policy policy --namespace rulings rulings-input.json
+
       - name: the policy must permit a shrinking guard
         run: conftest test --policy policy policy/fixtures/must_allow.json
 
