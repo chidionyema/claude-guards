@@ -15,7 +15,7 @@ Hooks (settings.json):
 
 Commands:
   feed-guard.py append --session ID --lane NAME  <<'EOF'   (6 lines max, each starts with
-      🔴 🟡 🟢 ⚪ or 📍; refused otherwise)
+      🔴 🟡 🟢 ⚪ 📍 🔧 or 🔀; TOUCHES and OVERLAP required; refused otherwise)
   feed-guard.py status [--n 5]     print the last n entries
   feed-guard.py selftest           proves the guard both ways in a temp feed
 
@@ -35,7 +35,11 @@ from pathlib import Path
 
 FEED = Path(os.environ.get("ESTATE_FEED") or os.path.expanduser("~/.estate/feed.md"))
 INTERVAL_S = 30 * 60
-MARKS = ("🔴", "🟡", "🟢", "⚪", "📍")
+MARKS = ("🔴", "🟡", "🟢", "⚪", "📍", "🔧", "🔀")
+# crew#259 (sync meeting, 2026-08-25): every handoff names what it will change and what it
+# overlaps, so collisions are visible before they happen. Both lines are required.
+REQUIRED = ("🔧 TOUCHES:", "🔀 OVERLAP:")
+MAX_LINES = 8
 HEAD = re.compile(r"^## (\S+) · session (\S+) · lane (.*)$")
 
 
@@ -75,11 +79,14 @@ def overdue(feed: Path, session: str, at: dt.datetime | None = None) -> int | No
 
 def append(feed: Path, session: str, lane: str, body: str, at: dt.datetime | None = None) -> str | None:
     lines = [l.rstrip() for l in body.strip().splitlines() if l.strip()]
-    if not lines or len(lines) > 6:
-        return f"handoff must be 1 to 6 lines, got {len(lines)}"
+    if not lines or len(lines) > MAX_LINES:
+        return f"handoff must be 1 to {MAX_LINES} lines, got {len(lines)}"
     bad = [l for l in lines if not l.startswith(MARKS)]
     if bad:
-        return "every line starts with one of 🔴 🟡 🟢 ⚪ 📍; refused: " + bad[0][:60]
+        return "every line starts with one of 🔴 🟡 🟢 ⚪ 📍 🔧 🔀; refused: " + bad[0][:60]
+    missing = [r for r in REQUIRED if not any(l.startswith(r) and l[len(r):].strip() for l in lines)]
+    if missing:
+        return "required line missing or empty (crew#259): " + ", ".join(missing) + ' -- write "none" if there is nothing'
     at = at or now()
     feed.parent.mkdir(parents=True, exist_ok=True)
     with feed.open("a", encoding="utf-8") as fh:
@@ -96,8 +103,11 @@ def block_text(session: str, lane: str, age: int) -> str:
             f"then end the turn:\n"
             f"python3 ~/.claude/scripts/feed-guard.py append --session {session} --lane {lane} <<'EOF'\n"
             f"🔴 Blocked: <what, who unblocks>\n🟡 Active: <issue numbers>\n🟢 Done: <merged, with sha>\n"
-            f"⚪ Pending: <founder pick>\n📍 State: <file or URL with the full picture>\nEOF\n"
-            f"Six lines at most, each starting with 🔴 🟡 🟢 ⚪ or 📍. Drop lines that are empty.")
+            f"⚪ Pending: <founder pick>\n🔧 TOUCHES: <files, services, ports, secrets you will change in the next 2h, or none>\n"
+            f"🔀 OVERLAP: <issue numbers another session also touches, or none>\n"
+            f"📍 State: <file or URL with the full picture>\nEOF\n"
+            f"Eight lines at most, each starting with 🔴 🟡 🟢 ⚪ 🔧 🔀 or 📍. TOUCHES and OVERLAP are required (crew#259). "
+            f"Drop other lines that are empty.")
 
 
 def hook(kind: str) -> int:
@@ -135,16 +145,19 @@ def selftest() -> int:
         t0 = now()
         # must refuse: no entry, then a 7-line body, then a line without a mark
         ok &= overdue(f, "aaaa", t0) == -1
-        ok &= append(f, "aaaa", "idp", "\n".join(["🟢 x"] * 7), t0) is not None
+        ok &= append(f, "aaaa", "idp", "\n".join(["🟢 x"] * 9), t0) is not None
         ok &= append(f, "aaaa", "idp", "Done: x", t0) is not None
+        # must refuse: the five old lines without TOUCHES/OVERLAP, and an empty TOUCHES
+        ok &= append(f, "aaaa", "idp", "🔴 a\n🟡 b\n🟢 c\n⚪ d\n📍 e", t0) is not None
+        ok &= append(f, "aaaa", "idp", "🟡 b\n🔧 TOUCHES:\n🔀 OVERLAP: none\n📍 e", t0) is not None
         # must permit: a fresh 5-line entry, then not overdue at +29 min, overdue at +31
-        ok &= append(f, "aaaa", "idp", "🔴 a\n🟡 b\n🟢 c\n⚪ d\n📍 e", t0) is None
+        ok &= append(f, "aaaa", "idp", "🔴 a\n🟡 b\n🟢 c\n⚪ d\n🔧 TOUCHES: none\n🔀 OVERLAP: none\n📍 e", t0) is None
         ok &= overdue(f, "aaaa", t0 + dt.timedelta(minutes=29)) is None
         ok &= overdue(f, "aaaa", t0 + dt.timedelta(minutes=31)) == 31 * 60
         # another session is judged on its own entries
         ok &= overdue(f, "bbbb", t0) == -1
-        ok &= len(entries(f)) == 1 and entries(f)[0][3] == ["🔴 a", "🟡 b", "🟢 c", "⚪ d", "📍 e"]
-    print(f"{'ok  ' if ok else 'FAIL'}  feed-guard selftest: refuses no-entry/7-lines/no-mark, permits a fresh entry, "
+        ok &= len(entries(f)) == 1 and entries(f)[0][3] == ["🔴 a", "🟡 b", "🟢 c", "⚪ d", "🔧 TOUCHES: none", "🔀 OVERLAP: none", "📍 e"]
+    print(f"{'ok  ' if ok else 'FAIL'}  feed-guard selftest: refuses no-entry/9-lines/no-mark/missing-TOUCHES-OVERLAP, permits a 7-line entry, "
           f"overdue at 31 min and not at 29, per session")
     return 0 if ok else 1
 
