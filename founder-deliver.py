@@ -239,6 +239,51 @@ def decide(did: str, verdict: str, by: str = "founder", state_path: Path = STATE
     return line
 
 
+ISSUE_RE = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/issues/\d+|(?<![\w/])crew ?#(\d+)\b")
+DOC_REPO_URL = "https://github.com/chidionyema/%s/blob/main/%s"
+
+
+def attach(text: str, gh=None, state_path: Path = STATE) -> str:
+    """Founder, 2026-08-25: "save doc attached to ticket, should be auto". Any reply opening
+    DONE:/INVENTORY: that names an issue and a doc (repo doc path, blob URL or artifact) gets the
+    doc links posted on that issue, once per (issue, link). Returns 'attached', 'skip' or 'dup'."""
+    global STATE
+    STATE = state_path
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    if not lines or not (lines[0].startswith("DONE:") or lines[0].startswith("INVENTORY:")):
+        return "skip"
+    issue = None
+    for m in ISSUE_RE.finditer(text):
+        issue = ("https://github.com/chidionyema/crew/issues/" + m.group(1)) if m.group(1) else m.group(0).split("#")[0]
+        break
+    if not issue:
+        return "skip"
+    docs = []
+    for m in LINK_RE.finditer(text):
+        u = m.group(0).rstrip(".,;:")
+        if "/issues/" in u or "/pull/" in u or "/commit/" in u:
+            continue
+        if not u.startswith("http"):
+            repo, _, rel = u.partition("/")
+            u = DOC_REPO_URL % (repo, rel)
+        if u not in docs:
+            docs.append(u)
+    if not docs:
+        return "skip"
+    state = _load()
+    seen = state.setdefault("attached", {})
+    fresh = [u for u in docs if seen.get(issue + " " + u) is None]
+    if not fresh:
+        return "dup"
+    body = "Attached (auto, founder-deliver):\n" + "\n".join("- " + u for u in fresh)
+    if not (gh or _gh_comment)(issue, body):
+        return "blind"
+    for u in fresh:
+        seen[issue + " " + u] = True
+    _save(state)
+    return "attached"
+
+
 def selftest() -> int:
     import tempfile
     fails = 0
@@ -308,6 +353,25 @@ def selftest() -> int:
         ok8 = "READ LATER" in r8 and len(posted) == 1
         print("decide-late", "PASS" if ok8 else "FAIL (%s)" % r8)
         fails += not ok8
+        posted_att: list[tuple[str, str]] = []
+        ga = lambda u, b: posted_att.append((u, b)) or True  # noqa: E731
+        ra = attach("INVENTORY: doc written.\nBuilt: crew/docs/rulings/R31-x.md for crew #221\n",
+                    gh=ga, state_path=st)
+        oka = ra == "attached" and posted_att and posted_att[0][0].endswith("/crew/issues/221") \
+            and "crew/blob/main/docs/rulings/R31-x.md" in posted_att[0][1]
+        print("attach-must", "PASS" if oka else "FAIL (%s %s)" % (ra, posted_att))
+        fails += not oka
+        rb = attach("INVENTORY: doc written.\nBuilt: crew/docs/rulings/R31-x.md for crew #221\n",
+                    gh=ga, state_path=st)
+        okb = rb == "dup" and len(posted_att) == 1
+        print("attach-dup ", "PASS" if okb else "FAIL (%s)" % rb)
+        fails += not okb
+        rc = attach("INVENTORY: no doc here, https://github.com/chidionyema/crew/issues/221\n",
+                    gh=ga, state_path=st)
+        rd = attach("WORKING: crew/docs/x.md on crew #221\n", gh=ga, state_path=st)
+        okc = rc == "skip" and rd == "skip" and len(posted_att) == 1
+        print("attach-not ", "PASS" if okc else "FAIL (%s %s)" % (rc, rd))
+        fails += not okc
     print("founder-deliver selftest: %d failures" % fails)
     return 1 if fails else 0
 
@@ -331,6 +395,11 @@ def main() -> int:
         verdict = handle(payload)
         if verdict in ("sent", "blind"):
             print("[founder-deliver] %s" % verdict, file=sys.stderr)
+        path = payload.get("transcript_path") or ""
+        if path:
+            att = attach(last_assistant_text(Path(path)))
+            if att in ("attached", "blind"):
+                print("[founder-deliver] attach %s" % att, file=sys.stderr)
     except Exception as exc:  # noqa: BLE001
         print("[founder-deliver] BLIND: %s" % exc, file=sys.stderr)
     return 0
