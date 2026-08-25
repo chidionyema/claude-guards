@@ -246,7 +246,7 @@ def collect_estate_audit() -> list[Row]:
     # here, and reporting the second as the first is the failure the whole file exists to stop.
     if d.get("stale"):
         rows = [_unknown("Estate audit", f"last scan {age_m}m ago — STALE",
-                         "launchctl list | grep estateaudit", " ".join(cmd))]
+                         "launchctl list | grep estateaudit")]
     else:
         rows = [Row(GOOD if not crit else BAD, "Estate audit", f"{len(crit)} critical",
                     f"{c.get('warn', 0)} warn, {c.get('unknown', 0)} unknown, "
@@ -1821,6 +1821,40 @@ def _asset_exists(rel: str) -> bool:
     return sh(["git", "-C", CREW, "cat-file", "-e", f"origin/main:{rel}"], 10)[0] == 0
 
 
+DELIVER_STATE = os.path.expanduser("~/.claude/state/founder-deliver.json")
+
+
+def collect_deliveries() -> list[Row]:
+    """Everything a session finished and handed to him, newest first, with the link to open it.
+
+    Founder, 2026-08-25: "currently im blind to what was researched", "nothing can ever go into
+    the void", "should have reached me on telegram or a link where i can see it directly",
+    "everything needs to be on tap". founder-deliver.py (a Stop hook) sends each DONE: reply that
+    links a deliverable to Telegram and records it here. This is the same record in the browser.
+    """
+    try:
+        data = json.load(open(DELIVER_STATE, encoding="utf-8"))
+    except FileNotFoundError:
+        return [_unknown("Delivered to you", "nothing recorded yet: no DONE: reply has linked a "
+                         "deliverable since the hook landed 2026-08-25",
+                         "python3 ~/.claude/scripts/founder-deliver.py --selftest")]
+    except Exception as exc:  # noqa: BLE001
+        return [_unknown("Delivered to you", f"{DELIVER_STATE} unreadable: {exc}")]
+    items = list(reversed(data.get("deliveries") or []))
+    if not items:
+        return [_unknown("Delivered to you", "record exists but holds no deliveries",
+                         f"cat {DELIVER_STATE}")]
+    out = []
+    for d in items[:12]:
+        when = time.strftime("%Y-%m-%d %H:%M", time.localtime(d.get("ts", 0)))
+        dec = d.get("decision") or {}
+        verdict = f"decided: {dec.get('verdict', '').upper()}" if dec else "awaiting your tap"
+        out.append(Row(GOOD if dec else WARN, f"{when} · {verdict}",
+                       str(d.get("head", ""))[:160], "  ".join(d.get("links") or []),
+                       f"open {(d.get('links') or [''])[0]}"))
+    return out
+
+
 def collect_research_and_docs() -> list[Row]:
     """Every research pass, and whether the asset it promised is somewhere he can open it.
 
@@ -1947,6 +1981,7 @@ COLLECTORS = [
     ("Can we get the data back?", collect_backup),
     ("Ways back, proved rather than believed", collect_drills),
     ("Your requests, closed with proof", collect_founder_requests),
+    ("Delivered to you \u2014 open it here", collect_deliveries),
     ("Research and documents \u2014 did the asset land?", collect_research_and_docs),
     ("What you said, and whether it landed", collect_founder_friction),
     ("Work in flight", collect_prs),
@@ -1964,14 +1999,56 @@ COLLECTORS = [
 ]
 
 
+COLLECTOR_CAP_S = float(os.environ.get("FOUNDER_BOARD_COLLECTOR_CAP_S", "30"))
+
+
+def _run_capped(title, fn, cap_s: float = None):
+    """One collector may not take the page down.
+
+    2026-08-25: three collectors each ran past 45s (Money, prospector audit, Deliverables) and
+    the build blew a 500s timeout, so the HTML he opens in the browser had been stale since
+    04:48. The class: a page that is his only view is built by a loop where one slow probe
+    kills the whole page. A collector past the cap reports UNKNOWN for its section and the
+    page ships without it. The thread is a daemon so a hung probe cannot hold the exit.
+    """
+    import threading
+    cap = COLLECTOR_CAP_S if cap_s is None else cap_s
+    box = {}
+
+    def go():
+        try:
+            box["rows"] = fn()
+        except Exception as e:                    # noqa: BLE001 -- rule 1: never report zero
+            box["err"] = e
+    th = threading.Thread(target=go, daemon=True)
+    th.start()
+    th.join(cap)
+    if th.is_alive():
+        return [_unknown(title, f"collector still running after {cap:.0f}s; page built without it",
+                         "FOUNDER_BOARD_COLLECTOR_CAP_S=120 python3 ~/.claude/scripts/founder_board.py")]
+    if "err" in box:
+        e = box["err"]
+        return [_unknown(title, f"collector raised {type(e).__name__}: {e}")]
+    return box["rows"]
+
+
+def _selftest_cap() -> bool:
+    """Both ways in one run: a slow collector is UNKNOWN, a fast one keeps its rows."""
+    import time as _t
+    slow = _run_capped("slow", lambda: (_t.sleep(2), [Row(GOOD, "x", "y")])[1], cap_s=0.2)
+    fast = _run_capped("fast", lambda: [Row(GOOD, "x", "y")], cap_s=2.0)
+    ok = slow[0].state == UNKNOWN and "still running" in slow[0].value + slow[0].detail \
+        and fast[0].state == GOOD
+    print("PASS: a slow collector is UNKNOWN and a fast one keeps its rows." if ok
+          else "FAIL: collector cap")
+    return ok
+
+
 def build() -> dict:
     sections = []
     for title, fn in COLLECTORS:
         started = time.time()
-        try:
-            rows = fn()
-        except Exception as e:                    # noqa: BLE001 -- rule 1: never report zero
-            rows = [_unknown(title, f"collector raised {type(e).__name__}: {e}")]
+        rows = _run_capped(title, fn)
         sections.append({"title": title, "took_s": round(time.time() - started, 1),
                          "rows": [r.as_dict() for r in rows]})
     flat = [r for s in sections for r in s["rows"]]
@@ -2023,6 +2100,14 @@ def _atomic_write(path: str, text: str) -> None:
             pass
         raise
 
+_URL = re.compile(r"(https?://[^\s<]+)")
+
+
+def _linkify(escaped: str) -> str:
+    """URLs in an already-escaped detail cell become links he can click."""
+    return _URL.sub(r'<a href="\1">\1</a>', escaped)
+
+
 def render_html(board: dict) -> str:
     e = html.escape
     stamp = time.strftime("%Y-%m-%d %H:%M %Z", time.localtime(board["generated_at"]))
@@ -2042,7 +2127,7 @@ def render_html(board: dict) -> str:
             parts.append(
                 f'<li class="row {r["state"]}"><span class="label">{e(r["label"])}</span>'
                 f'<span class="value">{e(str(r["value"]))}</span>'
-                + (f'<span class="detail">{e(r["detail"])}</span>' if r["detail"] else "")
+                + (f'<span class="detail">{_linkify(e(r["detail"]))}</span>' if r["detail"] else "")
                 + (f'<code>{e(r["command"])}</code>' if r["command"] else "")
                 + "</li>")
         parts.append("</ul></section>")
@@ -2249,7 +2334,7 @@ def main() -> int:
     ap.add_argument("--selftest", action="store_true")
     args = ap.parse_args()
     if args.selftest:
-        return selftest()
+        return 0 if (_selftest_cap() and selftest() in (0, None)) else 1
 
     board = build()
     try:
