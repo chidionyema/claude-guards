@@ -195,8 +195,7 @@
       "id": "R30-founder-blocker-is-loud",
       "date": "2026-08-25",
       "verbatim": "you need to be clear and make things easy and intuitive, i miss too many things i need to do, if something depends on me and is blocking, it needs to be loud, visible and super friction free for me to act, law",
-      "meaning": "When a step depends on the founder (a sign-in, an approval, a decision), the session (1) sends a PushNotification the moment it blocks, (2) states in the reply, above the fold, one line starting FOUNDER ACTION: with the exact URL, button or word he must give and where the tab is, (3) leaves nothing else for him to read or find. Never bury the ask under evidence, never pipe the prompt's URL into a log he cannot see, never say 'the tab should be open'. A blocked ask he did not see is the session's failure, not his.",
-      "rule": "SHARPENED 2026-08-25 (\"again i missed it, i manage 8 agents concurrently, did you send to telegram also?\"): the one action is `python3 ~/.claude/scripts/founder-blocker.py \"<do this>\" <url>` \u2014 Telegram home channel, pinned, ledgered. A terminal push alone is a miss. blocker-guard.py refuses a FOUNDER ACTION: reply without that ledger row."
+      "meaning": "When a step depends on the founder (a sign-in, an approval, a decision), the session (1) sends a PushNotification the moment it blocks, (2) states in the reply, above the fold, one line starting FOUNDER ACTION: with the exact URL, button or word he must give and where the tab is, (3) leaves nothing else for him to read or find. Never bury the ask under evidence, never pipe the prompt's URL into a log he cannot see, never say 'the tab should be open'. A blocked ask he did not see is the session's failure, not his."
     },
     {
       "id": "R31-research-engine-is-the-platform",
@@ -209,6 +208,12 @@
       "date": "2026-08-25",
       "verbatim": "why are we concerned with the old dossiers when we want to exponentially improve things, old dossiers were duck taped together, our new capabilities should be sneering at this and want to prove they can generate much better ideas for all scales",
       "meaning": "The research engine is not fed, tuned to, or measured against the old prospector dossiers. It generates its own ideas from scratch, at every scale (one company, one market, the estate). The old corpus has one use: a baseline the engine must beat, shown side by side. Any plan whose first step is 'load the old dossiers' is the old system wearing a new name. Sharpens R31."
+    },
+    {
+      "id": "R33-feed-handoff-every-30-minutes",
+      "date": "2026-08-25",
+      "verbatim": "ok lets adopt this but every 30 minutes not 4 hours ... and ensure everyone is permanently doing this without me asking ... this way even if agent sessions die, we can recover easily",
+      "meaning": "Every session appends a handoff to ~/.estate/feed.md at least every 30 minutes: six lines at most, each starting with \ud83d\udd34 Blocked / \ud83d\udfe1 Active / \ud83d\udfe2 Done / \u26aa Pending / \ud83d\udccd State. The feed is the persistent brain; a session that dies has left its state there. A session that starts with 'Status' reads the feed and summarises it; nobody re-explains and the founder is never asked what the feed already says. Enforced by ~/.claude/scripts/feed-guard.py on Stop (blocks an overdue turn), SessionStart (injects the last entries) and UserPromptSubmit (reminder). Append with: python3 ~/.claude/scripts/feed-guard.py append --session <id> --lane <repo>."
     },
     {
       "id": "R35-research-crew-is-a-platform-layer",
