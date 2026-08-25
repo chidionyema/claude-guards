@@ -1746,6 +1746,200 @@ def collect_estate_state() -> list[Row]:
     return out
 
 
+
+
+# --------------------------------------------------------------------------- research
+
+#: Where the crew checkout is. LAW 46: the machine's layout is an input, not a literal.
+CREW = os.environ.get("CREW_REPO", os.path.join(HOME, "dev", "code", "crew"))
+DEV = os.path.dirname(CREW)
+RESEARCH_LEDGER = os.path.join(CREW, "science", "RESEARCH-LEDGER.jsonl")
+RESEARCH_PAGE = os.path.join(CREW, "science", "research-ledger.html")
+DOCS_BASELINE = os.path.join(CREW, "science", "DOCS-BASELINE.json")
+
+#: A file a research entry says it delivered, e.g. "docs/reference/cluster-cost.md".
+#: URLs are stripped before this runs: github.com/o/r/blob/main/x.md matches the same
+#: shape and is not a local file, so leaving them in reports assets missing that never
+#: were assets.
+_ASSET_PATH = re.compile(r"(?<![\w/.-])((?:[\w.-]+/)+[\w.-]+\.(?:md|html|jsonl?|py|sh|ya?ml))")
+#: The hyphen is in the lookbehind because it is a word character in a path segment. Without
+#: it, ".well-known/agent-card.json" matched from "known/" and this collector reported a file
+#: that exists as gone -- a false alarm on the founder's board, which is worse than no row.
+_URL = re.compile(r"https?://\S+")
+
+
+def _ledger_entries() -> tuple[list[dict] | None, str]:
+    """(entries, where). Disk first, then origin/main, else (None, reason)."""
+    try:
+        with open(RESEARCH_LEDGER, encoding="utf-8") as fh:
+            raw, where = fh.read(), RESEARCH_LEDGER
+    except OSError as e:
+        code, out, err = sh(["git", "-C", CREW, "show",
+                             "origin/main:science/RESEARCH-LEDGER.jsonl"], 20)
+        if code != 0 or not out.strip():
+            return None, f"no ledger on disk ({type(e).__name__}) and none on origin/main"
+        raw, where = out, "origin/main"
+    entries = []
+    for n, line in enumerate(raw.splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            entries.append(json.loads(line))
+        except json.JSONDecodeError as e:
+            return None, f"{where} line {n} is not JSON: {e}"
+    return entries, where
+
+
+def _asset_paths(entry: dict) -> list[str]:
+    """Every local file this ledger entry claims to have delivered."""
+    blob = _URL.sub(" ", json.dumps(entry))
+    seen, out = set(), []
+    for m in _ASSET_PATH.finditer(blob):
+        p = m.group(1)
+        if p not in seen:
+            seen.add(p)
+            out.append(p)
+    return out
+
+
+def _asset_bases() -> list[str]:
+    bases = [CREW, HOME, DEV]
+    try:
+        bases += [os.path.join(DEV, d) for d in sorted(os.listdir(DEV))
+                  if os.path.isdir(os.path.join(DEV, d))]
+    except OSError:
+        pass
+    return bases
+
+
+def _asset_exists(rel: str) -> bool:
+    """Open the thing itself. A research write-up saying an asset shipped is not the asset."""
+    for base in _asset_bases():
+        if os.path.exists(os.path.join(base, rel)):
+            return True
+    return sh(["git", "-C", CREW, "cat-file", "-e", f"origin/main:{rel}"], 10)[0] == 0
+
+
+def collect_research_and_docs() -> list[Row]:
+    """Every research pass, and whether the asset it promised is somewhere he can open it.
+
+    Founder, 2026-08-25: "every reseach needs assets delivered, nothing ever disappears
+    into the ether", "a dcunet no one reads is useless", "and i never see the docs again".
+    Three complaints with one shape. The work happened, a write-up existed for an hour, and
+    neither ever reached him again.
+
+    So this grades the artifact and not the write-up about the artifact. An entry that names
+    docs/reference/cluster-cost.md is checked by opening that path. An entry whose
+    metric_after is still empty two weeks on is research that produced no measured outcome,
+    which is the ether he means.
+    """
+    entries, where = _ledger_entries()
+    if entries is None:
+        return [_unknown("Research ledger", where,
+                         "git -C ~/dev/code/crew show origin/main:science/RESEARCH-LEDGER.jsonl")]
+    if not entries:
+        return [_unknown("Research ledger", f"{where} is empty: no research is on the record",
+                         f"wc -l {RESEARCH_LEDGER}")]
+
+    today = dt.date.today()
+
+    def age_days(value):
+        try:
+            return (today - dt.date.fromisoformat(str(value)[:10])).days
+        except ValueError:
+            return None
+
+    ranked = sorted(((age_days(e.get("date")), e) for e in entries
+                     if age_days(e.get("date")) is not None), key=lambda p: p[0])
+    out: list[Row] = []
+
+    if not ranked:
+        out.append(_unknown("Research passes on the record",
+                            f"{len(entries)} entries, none with a readable ISO date"))
+    else:
+        newest = ranked[0][0]
+        out.append(Row(GOOD if newest <= 7 else BAD,
+                       "Research passes on the record",
+                       f"{len(entries)}, newest {newest}d old",
+                       f"source: {where}. The gate refuses a newest entry older than 7 days.",
+                       "~/dev/code/crew/scripts/verify.d/80-research-ledger.sh"))
+
+    render_cmd = "python3 ~/dev/code/crew/scripts/research-ledger-page.py"
+    try:
+        with open(RESEARCH_PAGE, encoding="utf-8") as fh:
+            page = fh.read()
+    except OSError as e:
+        out.append(Row(BAD, "The page you can open", "MISSING",
+                       f"{RESEARCH_PAGE} does not exist ({type(e).__name__}). The ledger is "
+                       "JSONL, and JSONL is not a document anyone reads.", render_cmd))
+    else:
+        question = str(ranked[0][1].get("question", "")) if ranked else ""
+        probe = question[:60]
+        carried = bool(probe) and (probe in page or html.escape(probe) in page)
+        age_h = (time.time() - os.path.getmtime(RESEARCH_PAGE)) / 3600.0
+        out.append(Row(GOOD if carried else BAD,
+                       "The page you can open",
+                       "current" if carried else "STALE",
+                       f"{RESEARCH_PAGE}, rendered {age_h:.0f}h ago. " + (
+                           "It carries the newest research question."
+                           if carried else
+                           "It does NOT carry the newest research question, so the newest work "
+                           "is in the JSONL and nowhere a person reads."),
+                       render_cmd))
+
+    for age, entry in ranked[:5]:
+        question = str(entry.get("question", "(the entry names no question)"))
+        label = question if len(question) <= 72 else question[:69] + "..."
+        paths = _asset_paths(entry)
+        gone = [p for p in paths if not _asset_exists(p)]
+        if not paths:
+            out.append(Row(WARN, label, "names no asset",
+                           f"{age}d old. The entry points at no file, so there is nothing to "
+                           "open and nothing to check.", ""))
+        elif gone:
+            out.append(Row(BAD, label, f"{len(gone)} of {len(paths)} gone",
+                           f"{age}d old. Named by the research and not on disk or origin/main: "
+                           + ", ".join(gone[:3]), ""))
+        else:
+            out.append(Row(GOOD, label, f"{len(paths)} delivered",
+                           f"{age}d old. " + ", ".join(paths[:3]), ""))
+
+    unmeasured = [(a, e) for a, e in ranked
+                  if a > 14 and not str(e.get("metric_after") or "").strip()]
+    out.append(Row(BAD if unmeasured else GOOD,
+                   "Research older than 14 days with no measured outcome",
+                   str(len(unmeasured)),
+                   ("The question was asked and no number ever came back: "
+                    + "; ".join(f"{a}d {str(e.get('question'))[:48]}" for a, e in unmeasured[:3]))
+                   if unmeasured else "Every entry past 14 days carries a metric_after.",
+                   "~/dev/code/crew/scripts/verify.d/80-research-ledger.sh"))
+
+    docs_cmd = "~/dev/code/crew/scripts/verify.d/95-docs.sh"
+    try:
+        with open(DOCS_BASELINE, encoding="utf-8") as fh:
+            baseline = json.load(fh)
+    except (OSError, json.JSONDecodeError) as e:
+        out.append(_unknown("Documents meeting the standard",
+                            f"cannot read {DOCS_BASELINE}: {type(e).__name__}: {e}", docs_cmd))
+        return out
+
+    total, failing = baseline.get("documents_total"), baseline.get("documents_failing")
+    if not isinstance(total, int) or not isinstance(failing, int):
+        out.append(_unknown("Documents meeting the standard",
+                            "DOCS-BASELINE.json carries no documents_total/documents_failing",
+                            docs_cmd))
+        return out
+
+    out.append(Row(GOOD if failing == 0 else BAD,
+                   "Documents meeting the standard",
+                   f"{total - failing} of {total}",
+                   "A document passes when it is in git, carries an Owner: line and a date, and "
+                   "holds real prose. The baseline is a ratchet: it may shrink, never grow.",
+                   docs_cmd))
+    return out
+
+
 COLLECTORS = [
     ("The board \u2014 nothing is live until you tick it", collect_estate_state),
     ("Is the machine able to work?", collect_machine),
@@ -1753,6 +1947,7 @@ COLLECTORS = [
     ("Can we get the data back?", collect_backup),
     ("Ways back, proved rather than believed", collect_drills),
     ("Your requests, closed with proof", collect_founder_requests),
+    ("Research and documents \u2014 did the asset land?", collect_research_and_docs),
     ("What you said, and whether it landed", collect_founder_friction),
     ("Work in flight", collect_prs),
     ("What is broken", collect_estate_audit),
@@ -1912,6 +2107,20 @@ def selftest() -> int:
     check("a raising collector reports UNKNOWN", rows[0]["state"] == UNKNOWN)
     check("a raising collector is not counted as good", b["unknown"] == 1 and b["bad"] == 0)
     check("the reason survives", "probe is dead" in rows[0]["detail"])
+
+    # LAW 38, both ways in one run: the asset check must catch a named file that is not
+    # there, and must NOT flag one that is. A guard only ever seen refusing has never been
+    # shown to permit.
+    check("a delivered asset is found",
+          _asset_paths({"note": "science/RESEARCH-LEDGER.jsonl"}) == ["science/RESEARCH-LEDGER.jsonl"]
+          and _asset_exists("science/RESEARCH-LEDGER.jsonl"))
+    check("an asset that vanished is caught",
+          _asset_paths({"note": "science/NO-SUCH-FILE-9f3a.md"}) == ["science/NO-SUCH-FILE-9f3a.md"]
+          and not _asset_exists("science/NO-SUCH-FILE-9f3a.md"))
+    check("a leading dotted segment is not clipped at a hyphen",
+          _asset_paths({"note": ".well-known/agent-card.json"}) == [".well-known/agent-card.json"])
+    check("a URL is not mistaken for a local asset",
+          _asset_paths({"sources": ["https://github.com/o/r/blob/main/README.md"]}) == [])
 
     # R16: a tick in the founder's column is the ONLY thing that makes a row green,
     # and evidence in the observation column never is. Both directions, one run.
