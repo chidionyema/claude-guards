@@ -188,7 +188,7 @@
    "id": "R29-executable-spec-or-blocked",
    "date": "2026-08-25",
    "verbatim": "we need this operational estate wide plain ... Every PR must update the BDD scenario or the auto-gen script. If the PR changes code but not the executable spec, the CI blocks merge. No manual doc updates. No 'I'll update the wiki later.' ... alert peers",
-   "meaning": "Documentation that lives outside the execution path rots. Three mechanisms are the estate rule: (1) BDD scenarios are the spec and the test, so a PR that changes code must also change a .feature file or the generator that produces the live diagram; CI blocks it otherwise. (2) Diagrams are generated from live state (launchd, docker, the catalog), never drawn by hand. (3) AGENTS.md is compiled policy: a contradiction between policy and code halts, it is not a doc to read. Applies to every active estate repository, enforced by the spec-gate composite action rolled out with the security scan (crew#234).",
+   "meaning": "Documentation that lives outside the execution path rots. Three mechanisms are the estate rule: (1) BDD scenarios are the spec and the test, so a PR that changes code must also change a .feature file or the generator that produces the live diagram; CI blocks it otherwise. (2) Diagrams are generated from live state (launchd, docker, the catalog), never drawn by hand. (3) AGENTS.md is compiled policy: a contradiction between policy and code halts, it is not a doc to read. Applies to every active estate repository, enforced by the spec-gate composite action rolled out with the security scan (crew#236).",
    "enforced_by": "idp .github/actions/spec-gate (CI, every active repo); rule-guard.py refuses a PR body that promises a later doc update"
   }
  ],
