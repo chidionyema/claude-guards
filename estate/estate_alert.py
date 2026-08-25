@@ -171,7 +171,25 @@ def send_operator_alert(text: str, *, debounce_key: str | None = None,
         telegram_ledger.record(source, "suppressed", text, key=debounce_key or "")
         return False
     token = _env("TELEGRAM_BOT_TOKEN")
-    chat = _env("TELEGRAM_HOME_CHANNEL")
+    # Founder, 2026-08-25, three times in one day: "still noisy telegram", "all important
+    # links need to be pinned and the noisy stuff moved elsewhere". The home channel is his
+    # private DM. Automated alerts go to TELEGRAM_ALERT_CHANNEL if set (a group he adds the
+    # bot to), else to the on-disk inbox the founder board reads. The DM is for conversation.
+    # HERMES_ALERT_DM_FALLBACK=1 restores the old behaviour.
+    chat = _env("TELEGRAM_ALERT_CHANNEL")
+    if not chat and os.environ.get("HERMES_ALERT_DM_FALLBACK", "0") != "1":
+        inbox = Path(os.environ.get("ESTATE_ALERT_INBOX",
+                                    str(Path.home() / ".estate" / "alerts" / "inbox.jsonl")))
+        inbox.parent.mkdir(parents=True, exist_ok=True)
+        with inbox.open("a") as fh:
+            fh.write(json.dumps({"ts": time.time(), "source": source, "key": debounce_key or "",
+                                 "text": _fit(text)}) + "\n")
+        telegram_ledger.record(source, "inboxed", text, key=debounce_key or "")
+        if dry_run:
+            print(f"[estate_alert] inboxed to {inbox} (no TELEGRAM_ALERT_CHANNEL)")
+        return True
+    if not chat:
+        chat = _env("TELEGRAM_HOME_CHANNEL")
     if not token or not chat:
         if dry_run:
             print(f"[estate_alert] MISSING creds (token={bool(token)} chat={bool(chat)})")
