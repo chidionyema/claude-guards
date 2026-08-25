@@ -202,6 +202,12 @@
       "date": "2026-08-25",
       "verbatim": "Stop thinking about prospector. Prospector is one customer. I want the research engine that prospector calls. The engine is the platform. Prospector is just a user.",
       "meaning": "The capability is an autonomous research engine. Five behaviours are proved before any scheduler, tracker or eval tool is touched: (1) question generation: 100 dossiers in, 10 unasked hypotheses out; (2) experiment design from one hypothesis: test, data, method; (3) execution and recording with no human; (4) calibration: Brier score against outcomes, published; (5) explanation: what it learned and why it changed its mind, one sentence. Tool choice is the cheapest that lets the five run; cost is optimised after. Sharpens R28."
+    },
+    {
+      "id": "R32-old-dossiers-are-a-baseline-not-an-input",
+      "date": "2026-08-25",
+      "verbatim": "why are we concerned with the old dossiers when we want to exponentially improve things, old dossiers were duck taped together, our new capabilities should be sneering at this and want to prove they can generate much better ideas for all scales",
+      "meaning": "The research engine is not fed, tuned to, or measured against the old prospector dossiers. It generates its own ideas from scratch, at every scale (one company, one market, the estate). The old corpus has one use: a baseline the engine must beat, shown side by side. Any plan whose first step is 'load the old dossiers' is the old system wearing a new name. Sharpens R31."
     }
   ],
   "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R30; grep the estate for the id before you add one."
