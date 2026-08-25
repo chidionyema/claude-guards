@@ -183,7 +183,14 @@
    "verbatim": "just so we are clear prospecor is a custoner of the Research, data science and ML as a platform capability crew, another other part of the estate including the whole estate can also be a custoner, we need contracts with avery part of the platforn signed, this capability needs to be way ahead of tinne and procude articacts and capabiltes that keep us 10 steps aheard of everyone else, so in reality prospecot should aleady habe hundreds or vetted ideas.ranked etc and should jus pick package and publish",
    "meaning": "The research/data-science/ML capability (the science plane, crew #221) is a provider with its own crew. Prospector is one customer; every other part of the estate, and the estate as a whole, can be a customer. Each customer has a signed contract (an interface and an SLO, recorded in git) with the capability. The capability works ahead of demand: it produces ranked, vetted artefacts before a product asks, so prospector picks, packages and publishes from a standing backlog of hundreds of vetted ranked ideas rather than generating them on demand. Never design the capability as a prospector subsystem.",
    "enforced_by": "friction-relay injects this at SessionStart; contract files tracked on crew #221 (no mechanical guard yet, say so)"
+  },
+  {
+   "id": "R29-executable-spec-or-blocked",
+   "date": "2026-08-25",
+   "verbatim": "we need this operational estate wide plain ... Every PR must update the BDD scenario or the auto-gen script. If the PR changes code but not the executable spec, the CI blocks merge. No manual doc updates. No 'I'll update the wiki later.' ... alert peers",
+   "meaning": "Documentation that lives outside the execution path rots. Three mechanisms are the estate rule: (1) BDD scenarios are the spec and the test, so a PR that changes code must also change a .feature file or the generator that produces the live diagram; CI blocks it otherwise. (2) Diagrams are generated from live state (launchd, docker, the catalog), never drawn by hand. (3) AGENTS.md is compiled policy: a contradiction between policy and code halts, it is not a doc to read. Applies to every active estate repository, enforced by the spec-gate composite action rolled out with the security scan (crew#234).",
+   "enforced_by": "idp .github/actions/spec-gate (CI, every active repo); rule-guard.py refuses a PR body that promises a later doc update"
   }
  ],
- "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R28; grep the estate for the id before you add one."
+ "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R30; grep the estate for the id before you add one."
 }
