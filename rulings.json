@@ -195,7 +195,8 @@
       "id": "R30-founder-blocker-is-loud",
       "date": "2026-08-25",
       "verbatim": "you need to be clear and make things easy and intuitive, i miss too many things i need to do, if something depends on me and is blocking, it needs to be loud, visible and super friction free for me to act, law",
-      "meaning": "When a step depends on the founder (a sign-in, an approval, a decision), the session (1) sends a PushNotification the moment it blocks, (2) states in the reply, above the fold, one line starting FOUNDER ACTION: with the exact URL, button or word he must give and where the tab is, (3) leaves nothing else for him to read or find. Never bury the ask under evidence, never pipe the prompt's URL into a log he cannot see, never say 'the tab should be open'. A blocked ask he did not see is the session's failure, not his."
+      "meaning": "When a step depends on the founder (a sign-in, an approval, a decision), the session (1) sends a PushNotification the moment it blocks, (2) states in the reply, above the fold, one line starting FOUNDER ACTION: with the exact URL, button or word he must give and where the tab is, (3) leaves nothing else for him to read or find. Never bury the ask under evidence, never pipe the prompt's URL into a log he cannot see, never say 'the tab should be open'. A blocked ask he did not see is the session's failure, not his.",
+      "rule": "SHARPENED 2026-08-25 (\"again i missed it, i manage 8 agents concurrently, did you send to telegram also?\"): the one action is `python3 ~/.claude/scripts/founder-blocker.py \"<do this>\" <url>` \u2014 Telegram home channel, pinned, ledgered. A terminal push alone is a miss. blocker-guard.py refuses a FOUNDER ACTION: reply without that ledger row."
     },
     {
       "id": "R31-research-engine-is-the-platform",
@@ -208,6 +209,12 @@
       "date": "2026-08-25",
       "verbatim": "why are we concerned with the old dossiers when we want to exponentially improve things, old dossiers were duck taped together, our new capabilities should be sneering at this and want to prove they can generate much better ideas for all scales",
       "meaning": "The research engine is not fed, tuned to, or measured against the old prospector dossiers. It generates its own ideas from scratch, at every scale (one company, one market, the estate). The old corpus has one use: a baseline the engine must beat, shown side by side. Any plan whose first step is 'load the old dossiers' is the old system wearing a new name. Sharpens R31."
+    },
+    {
+      "id": "R33-research-crew-is-a-platform-layer",
+      "date": "2026-08-25",
+      "verbatim": "they are here to exponentially improve all parts of the estate including prospector, the capabilities need to be world class on their own and can be purposed to any part of platform and beyond as we add new product and capabilities. i need to be certain we are on the same page and you dont drift",
+      "meaning": "The research/science/ML capability is a platform layer in idp, one contract (a target at a scale), one estate-wide forecast ledger, serves every product; nothing in its prompt, runner or ledger names prospector. Spec: crew docs/rulings/R33-*.md"
     }
   ],
   "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R30; grep the estate for the id before you add one."
