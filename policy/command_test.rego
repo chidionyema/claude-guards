@@ -205,3 +205,19 @@ test_every_permitted_command_is_permitted if {
 test_no_rule_is_broken if {
 	count(broken) == 0
 }
+
+# crew#212: a docker build for a platform the engine does not run natively.
+test_foreign_platform_build_is_refused if {
+	count(deny) > 0 with input as {"command": "docker buildx build --platform linux/arm64 --pull=false -t backstage-keytar-proof:local --load .", "arch": "x86_64"}
+	count(deny) > 0 with input as {"command": "docker build --platform=linux/amd64 -t x .", "arch": "arm64"}
+	count(deny) > 0 with input as {"command": "DOCKER_DEFAULT_PLATFORM=linux/arm64 docker compose build", "arch": "x86_64"}
+}
+
+test_native_platform_build_is_permitted if {
+	count(deny) == 0 with input as {"command": "docker buildx build --platform linux/amd64 -t x .", "arch": "x86_64"}
+	count(deny) == 0 with input as {"command": "docker build -t x .", "arch": "x86_64"}
+	count(deny) == 0 with input as {"command": "docker buildx build --platform linux/arm64 -t x .  # foreign-platform-intended", "arch": "x86_64"}
+	count(deny) == 0 with input as {"command": "docker run --platform linux/arm64 alpine uname -m", "arch": "x86_64"}
+	count(broken) == 0 with input as {"command": "ls", "arch": "x86_64"}
+	count(broken) == 0 with input as {"command": "ls", "arch": "arm64"}
+}

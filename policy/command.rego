@@ -639,3 +639,51 @@ broken contains msg if {
 		[r.id, cmd],
 	)
 }
+
+# ---------------------------------------------------------------------------
+# Incident, 2026-08-25 02:40 (crew#212): `docker buildx build --platform linux/arm64`
+# ran for 75 minutes on the x86_64 colima VM. The build ran `yarn install` under
+# qemu-aarch64: VM memory fell to 83 MB free, load reached 99, the host throttled
+# to 51% and the founder's Finder and Save dialog froze. Founder: "this must never
+# happen again."
+#
+# The class: building for a platform the engine does not run natively. Emulation
+# costs 10-20x CPU and the VM has no memory headroom. The adapter passes the
+# machine's own arch as input.arch, so no arch is written here (LAW 46).
+# ---------------------------------------------------------------------------
+
+native_platform := {"x86_64": "amd64", "amd64": "amd64", "arm64": "arm64", "aarch64": "arm64"}[input.arch]
+
+foreign_platform_marker := "foreign-platform-intended"
+
+foreign_platform_re := `(?:--platform[= ]+|DOCKER_DEFAULT_PLATFORM=)["']?linux/([a-z0-9]+)`
+
+requested_platforms contains p if {
+	regex.match(`\b(?:docker\s+(?:buildx\s+)?build|docker\s+compose\s+.*\bbuild|DOCKER_DEFAULT_PLATFORM=)`, input.command)
+	some m in regex.find_all_string_submatch_n(foreign_platform_re, input.command, -1)
+	p := m[1]
+}
+
+deny contains msg if {
+	not contains(input.command, foreign_platform_marker)
+	some p in requested_platforms
+	p != native_platform
+	msg := sprintf(
+		"BLOCKED by rule-guard: a docker build for linux/%s on a %s engine runs under qemu emulation.\nOn 2026-08-25 one such build (`--platform linux/arm64`, backstage-keytar-proof) took the colima VM to 83 MB free and load 99 and froze the founder's Mac for over an hour (crew#212).\nBuild for the native platform (linux/%s), or let CI build the foreign one: .github/workflows already runs the multi-arch matrix on GitHub's runners.\n\nIf you mean it, append  # %s  to the command and say in your reply why this case is different.",
+		[p, input.arch, native_platform, foreign_platform_marker],
+	)
+}
+
+# The rule's opinion of itself: it must refuse a foreign build and permit a native one.
+broken contains msg if {
+	native := native_platform
+	foreign := {"amd64": "arm64", "arm64": "amd64"}[native]
+	not count(deny) > 0 with input as {"command": sprintf("docker buildx build --platform linux/%s -t x .", [foreign]), "arch": input.arch}
+	msg := "rule foreign_platform no longer refuses its own foreign-build example; until this is fixed it refuses nothing."
+}
+
+broken contains msg if {
+	native := native_platform
+	count(deny) > 0 with input as {"command": sprintf("docker buildx build --platform linux/%s -t x .", [native]), "arch": input.arch}
+	msg := "rule foreign_platform refuses a native build, which is an outage (LAW 38)."
+}

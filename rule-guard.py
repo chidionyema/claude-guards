@@ -41,7 +41,7 @@ backlog, not the pattern.
 from __future__ import annotations
 
 import json
-import os
+import os, platform
 import re
 import shutil
 import subprocess
@@ -687,7 +687,7 @@ def opa_ask(cmd: str) -> tuple[list[str], list[str], str | None]:
     for pat in _OPA_IGNORE:
         argv[3:3] = ["--ignore", pat]
     try:
-        out = subprocess.run(argv, input=json.dumps({"command": cmd}),
+        out = subprocess.run(argv, input=json.dumps({"command": cmd, "arch": platform.machine()}),
                              capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError) as exc:
         return [], [], f"opa eval did not run: {exc}"
