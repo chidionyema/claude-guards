@@ -39,9 +39,8 @@ import subprocess
 import sys
 
 CLAIM_RE = re.compile(r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)\b")
-NO_ISSUE_RE = re.compile(r"(?im)^\s*No-Issue:\s*\S")
+NO_ISSUE_RE = re.compile(r"(?im)^\s*No-Issue:\s*\S|\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+[\w.-]+/[\w.-]+#\d+\b")  # a cross-repo Closes owner/repo#N names its ticket (idp#70 -> crew#213 was refused 3x, 2026-08-25)
 GH_TIMEOUT = 20
-
 
 def _split_commands(cmd: str) -> list[list[str]]:
     parts: list[list[str]] = []
@@ -217,6 +216,7 @@ def selftest() -> int:
             {404: [409]},
             0,
         ),
+        ("a cross-repo claim names an issue and is allowed", 'gh pr create --title "fix: x" --body "Closes chidionyema/crew#213 (phase 1)"', {}, 0),
         (
             "a PR naming no issue is refused",
             'gh pr create --title "fix: x" --body "some prose"',

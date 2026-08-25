@@ -30,7 +30,7 @@ check "no plist carries another machine's home" 0 \
 check "every declared job rendered for this home" \
       "$(python3 -c 'import json;print(len(json.load(open("'"$HERE"'/../jobs/jobs.json"))))')" \
       "$(grep -rl "$D" "$D/Library/LaunchAgents" 2>/dev/null | wc -l | tr -d ' ')"
-check "the laws symlink resolves" "# The laws" "$(head -1 "$D/.claude/AGENTS.md" 2>/dev/null)"
+check "the laws symlink resolves" "# The laws" "$(grep -m1 "^# The laws" "$D/.claude/AGENTS.md" 2>/dev/null)"
 check "the guards came with the clone" yes \
       "$([ -x "$D/.claude/scripts/tracked.py" ] && echo yes || echo no)"
 check "the commit gate came with the clone" yes \
