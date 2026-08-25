@@ -162,7 +162,14 @@
    "verbatim": "any founder auth request must also be sent to telegram, dont assume founder is always on laptop. another team is working on new telegram setup so do nothing but ensure everyone is synced in on this",
    "meaning": "Whenever a session needs the founder to authenticate (a device code, an OAuth browser sign-in, an MFA prompt, a console login), it prints the request in the reply AND sends the same request to him on Telegram (Otto / The Architect, whichever the Telegram team lands). Never assume he is at the laptop. Until the new Telegram setup lands, no session builds a Telegram sender for this; the duty is to know the rule and follow it once the channel exists.",
    "enforced_by": "Not yet enforced by a guard: the Telegram channel is being rebuilt by another team (2026-08-25). Candidate guard once it lands: the auth-request phrases (one-time code, device code, sign in, oauth) in a reply above the fold must be matched by a Telegram send receipt in the same turn."
+  },
+  {
+   "id": "R26-no-local-vm-on-laptop",
+   "date": "2026-08-25",
+   "verbatim": "the last session there was a virtual machine running that took the laptop down, this is unacceptable, we are now on oracle and no reason for that to happen, ensure the virtual machine is not launched",
+   "meaning": "No session starts colima, lima, k3d, k3s, docker desktop or any VM on the founder's Mac. Compute for containers and k8s is the Oracle host. The homebrew.mxcl.colima LaunchAgent was booting the VM at every login (load 222 within 15 min of boot on 2026-08-25); it was unloaded and its plist moved to ~/.claude/state/disabled-launchagents/. Never re-create it, never run `brew services start colima`, never run `colima start`. Read-only `colima status` / `docker ps` are fine and should fail.",
+   "enforced_by": "~/.claude/scripts/no-local-vm-guard.sh (fails when a colima/limactl/qemu/vfkit process exists or a colima/lima plist is in ~/Library/LaunchAgents); run by drills and on SessionStart."
   }
  ],
- "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R25; grep the estate for the id before you add one."
+ "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R27; grep the estate for the id before you add one."
 }
