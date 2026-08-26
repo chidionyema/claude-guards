@@ -192,8 +192,23 @@ def _copy(src, dst):
     return True
 
 
+#: Generated entries whose live copy drifted from the committed one. The repo is the
+#: source for these, so the drift is reported, never mirrored (incident crew#13).
+STALE_GENERATED = []
+
+
 def pull_one(e):
     a, b, c = diff_one(e)
+    if e.get("generated"):
+        # Incident 2026-08-26 (crew#13, claude-guards#80 -> 442675d): a PR moved eight
+        # committed plists off ~/.hermes; nobody re-rendered the live directory; this
+        # job then copied the stale live plists back over the merged fix and pushed
+        # straight to main. For an entry the repo generates, the committed copy is
+        # the source and the live one is the derivative, so the copy only ever runs
+        # the other way. Record the drift and touch nothing.
+        if a or b or c:
+            STALE_GENERATED.append((e["repo"], e["generated"], a + b + c))
+        return 0, 0, 0
     if e.get("tree"):
         for f in a + c:
             _copy(os.path.join(e["live"], f), os.path.join(e["repo_abs"], f))
@@ -287,6 +302,15 @@ def sync():
     moved = 0
     for e in entries():
         moved += sum(pull_one(e))
+
+    if STALE_GENERATED:
+        board("stale-generated",
+              "tracked.py left %d generated entr%s alone because the live copy has "
+              "drifted from the committed source: %s. The fix runs the generator, "
+              "never a mirror back into git."
+              % (len(STALE_GENERATED), "y" if len(STALE_GENERATED) == 1 else "ies",
+                 "; ".join("%s (%d file(s), regenerate with `%s`)" % (r, len(f), g)
+                           for r, g, f in STALE_GENERATED)))
 
     if REFUSED:
         board("secret-refused",
