@@ -39,7 +39,6 @@ a-guard-that-greps-source-grades-its-comments-too.
 """
 from __future__ import annotations
 
-import io
 import json
 import os
 import pathlib
@@ -899,29 +898,6 @@ def cli_session() -> str:
     return os.environ.get("CLAUDE_SESSION_ID", "")
 
 
-def _stop_continuous_execution(payload: dict) -> int:
-    """LAW 48 (founder, 2026-08-26, crew#280): a reply that asks whether to fix a defect it found
-    is intercepted before it reaches the founder's screen. The phrase list and the both-ways
-    selftest live in pause-guard.py; this is the Goal Guard's Stop entry for it."""
-    if payload.get("stop_hook_active"):
-        return 0
-    try:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("pause_guard", Path(__file__).with_name("pause-guard.py"))
-        pg = importlib.util.module_from_spec(spec); spec.loader.exec_module(pg)
-        transcript = Path(str(payload.get("transcript_path", "")))
-        found = pg.offences(pg.last_assistant_text(transcript)) if transcript.is_file() else []
-    except Exception:  # noqa: BLE001 - a broken guard must not wedge the session
-        return 0
-    if not found:
-        return 0
-    reason = ("VIOLATION: Law of Continuous Execution. Do not ask to fix the bug. Fix it and report.\n"
-              + "\n".join(f"  line {n}: {l[:160]}" for n, l in found)
-              + "\nReport as: Found X broken. Fixed it in PR Y. Status is now green. (LAW 48, LAW 49)")
-    print(json.dumps({"decision": "block", "reason": reason}))
-    return 0
-
-
 def main() -> int:
     if "--selftest" in sys.argv:
         return selftest()
@@ -977,14 +953,6 @@ if __name__ == "__main__":
         raise SystemExit(main())
     _deadline()
     try:
-        _raw = sys.stdin.read()
-        try:
-            _payload = json.loads(_raw) if _raw.strip() else {}
-        except ValueError:
-            _payload = {}
-        if _payload.get("hook_event_name") == "Stop":
-            raise SystemExit(_stop_continuous_execution(_payload))
-        sys.stdin = io.StringIO(_raw)
         raise SystemExit(main())
     except SystemExit as e:
         raise SystemExit(0 if e.code not in (0, None) else 0) from None
