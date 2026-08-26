@@ -1890,10 +1890,10 @@ use (claude-guards#65). You are breaking it when you ask him to open a console.
 
 **Sharpened 2026-08-25, second miss.** Founder: "again i missed it, i manage 8 agents concurrently, did you send to telegram also? i said it needs to be loud, if it's blocking, and seamless" and "i should never miss a beat". The terminal push reached one of eight terminals. The protocol is now one command: `python3 ~/.claude/scripts/founder-blocker.py "<what he must do>" <url-or-word>` sends to the Telegram home channel, pins it, records the message_id in the telegram ledger and prints the `FOUNDER ACTION:` line for reply line 2. `blocker-guard.py` (Stop hook) refuses any reply carrying `FOUNDER ACTION:` without a ledgered send in the last hour, proved both ways in its own file. Residual: the guard proves a pinned message exists, not that he read it.
 
-## LAW 50 — The data map is discovered, never typed
+## LAW 50 — Every workload emits to the central collector; coverage is a backend query
 
-**Fires:** every run of `crew/science/datamap.py --check`, and the moment the estate grows a kind
-of world no domain enumerates.
+**Fires:** every workload admitted to a cluster, every Mac and cloud surface, and every coverage
+query the snapshot runs.
 
 Founder, 2026-08-26: "map all the data points in the estate, anything that produces data and
 anything that can be measured ... nothing is missed from infra to platform to agent transcripts to
@@ -1901,39 +1901,39 @@ apps and apis to our k8s and internals ... find a creative way to automate this 
 first and last time we ever need to do this and also a way to guarantee you don't miss anything.
 this needs to be encapsulated in law."
 
-**The incident.** `crew/science/datamap.py` on 2026-08-26 held `WHY_UNCOLLECTED` (18 entries)
-and `NEVER_EMITTED` (8 entries), both typed by hand in a session that has since ended. The
-inventory it graded had 192 rows; 38 carried `collected: False` and were graded, 154 carried no
-verdict. A new launchd job, a new sqlite table, a new HTTPRoute or a new MCP server appeared
-nowhere until a person remembered to type it. crew#320 and crew#319 were the open tickets.
+Founder, 2026-08-27: "Stop pushing custom code as the law. I won't make LAW 50 depend on Python
+scripts. Instead, LAW 50 will require that every workload emits telemetry to SigNoz (or OTel
+collector), and that the coverage is verified by querying the backend, not by scanning files ...
+The law will then be 'thou shalt emit to the central collector,' enforced by Kyverno and OPA,
+not by a Python gate ... No more custom code for discovery. The platform discovers itself."
+And, on whether the bootstrap list stays: "we need both temporary bootstrap and telemetry
+deployment."
 
-**The rule.** The map is the output of a program, and the program is closed-world:
+**The incident.** `crew/science/datamap.py` on 2026-08-26 held two hand-typed dicts (18 reasons
+a thing was not collected, 8 things never emitted) in a session that had ended; 154 of 192
+inventory rows had no verdict. The first fix (crew#394) replaced the dicts with a discovery
+program and a closed-world register, and the founder refused it as the law: a Python scanner is
+custom code doing what a telemetry backend already does, and it can only see files.
 
-- `crew/science/producers.py`: one function per domain, each enumerating every producer of its
-  kind from the world itself (inventory rows, sqlite tables, warehouse tables, Kubernetes
-  manifests and live objects, public hostnames, hooks, MCP servers, repos and workflows,
-  transcript directories, the act register). Adding a producer by typing its name is the
-  violation.
-- `crew/science/verdicts.json`: the register. Every producer must match an entry by key glob
-  (optionally kind glob; first match wins). COLLECTED names a reader; EXCLUDED names a why;
-  WIRED_NEVER, WRITER_DEAD and NEVER_EMITTED name a crew ticket. No match is UNEXPLAINED.
-- `crew/science/datamap.py --check`: red on one UNEXPLAINED producer, one gap without a ticket,
-  one BLIND domain not named in `blind_allowed`, or one domain that shrank by more than half
-  against `science/census.json`. `--file-tickets` opens the missing tickets itself and writes
-  the number back into the register.
-- Landed where sessions cannot walk past it: `scripts/verify.d/26-datamap-register.sh` in CI and
-  the `data map` row of `STATE.md` from `scripts/estate-snapshot`.
+**The rule.**
+- One backend (SigNoz, the Observability row of `crew/docs/STANDARDS.md`, in `idp`). Cluster
+  workloads emit to its collector directly or through the node agent
+  (`platform/observability/k8s-infra.yaml`, crew#388). Macs emit through a local OTel collector.
+  Cloud accounts through their audit and metrics export.
+- Coverage is `seen in the backend` against `known to the platform` (Backstage catalog plus the
+  Kubernetes API). The query and its counts are a row of `crew/STATE.md`; the row is red when a
+  known thing has no rows in the interval.
+- Enforcement is admission, not a script: Kyverno refuses a workload with no collector endpoint
+  or no catalog entity; OPA refuses a reply that claims a thing is measured without the query.
+- `crew/science/datamap.py --check` is the temporary bootstrap: what exists and what does not
+  emit yet, every gap a ticket. It retires surface by surface as the query takes over.
 
-**Proved both ways.** `tests/test_incident_datamap_was_a_hand_typed_list.py`: an unexplained
-producer turns the gate red; a ticketed gap leaves it green; a BLIND domain is allowed only by
-name; a domain that halves is SHAPE CHANGED; every domain raises rather than returns empty when
-its world is missing.
+**Residual.** A surface with no exporter at all (a Mac with no local collector, a cloud account
+with no export) is invisible to the backend query. Until its exporter lands, the bootstrap
+register is the only thing that names it, which is why the register stays until the last
+surface emits.
 
-**Residual.** A class of world with no domain is invisible to this law. That is why rule 4 in
-the resident section binds the PR that introduces the class, and why the list of domains is
-printed in every gate run: the reader can see what is enumerated and ask what is not.
-
-**You are breaking it when** you add a name to a list in `datamap.py`; when a domain returns an
-empty list instead of raising on a missing world; when you add a scheduler, store or account
-without a domain for it; when a gap entry has a `why` but no `ticket`; when `blind_allowed`
-grows without a ticket that will remove the entry.
+**You are breaking it when** you write a scanner where a backend query would do; when a workload
+ships with its own log file and no forwarder; when a coverage claim has no query in the same
+reply; when a Kyverno waiver admits a workload that will never appear in SigNoz; when the
+bootstrap register grows an entry for a surface that already emits.
