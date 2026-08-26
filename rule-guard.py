@@ -492,9 +492,25 @@ def _merge_verdict(pr: str, states: list[tuple[str, str]] | None,
     return None
 
 
+_SHELL_SEGMENT = re.compile(r"\|\||&&|[;|\n]")
+
+
+def _merge_repo_flag(cmd: str) -> re.Match | None:
+    """The --repo/-R flag on the merge invocation itself, not one from another gh call.
+
+    2026-08-26: `cd estate-secrets && gh pr merge 8 ...; gh issue comment 227 -R chidionyema/crew`
+    was refused with crew#8's `qa=failure`. The first -R anywhere in the line was applied to the
+    merge's check query. Only the shell segment holding the merge may name its repository.
+    """
+    for seg in _SHELL_SEGMENT.split(cmd):
+        if _GH_MERGE.search(seg):
+            return _GH_REPO_FLAG.search(seg)
+    return _GH_REPO_FLAG.search(cmd)
+
+
 def _pr_check_states(pr: str, cmd: str = "") -> list[tuple[str, str]] | None:
     """(name, state) for every check on `pr`, or None if the query itself failed."""
-    named = _GH_REPO_FLAG.search(cmd)
+    named = _merge_repo_flag(cmd)
     try:
         p = subprocess.run(
             [_real_tool("gh"), "pr", "checks", pr, "--json", "name,state",
