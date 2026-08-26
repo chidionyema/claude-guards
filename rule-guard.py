@@ -643,9 +643,58 @@ def rule_restart_kills_a_live_build(cmd: str) -> str | None:
             + _escape("runner-busy-intended"))
 
 
+# ---------------------------------------------------- a worktree path with no .git
+
+#: Session 4e5b5e8f, 2026-08-26: `git worktree remove .wt-bs-auth` timed out half way (node_modules)
+#: and had already deleted the worktree's `.git` link. The next `cd .wt-bs-auth && git checkout -B
+#: … && git reset --hard origin/main` walked up to the MAIN checkout ~/dev/code/idp and discarded
+#: its uncommitted tracked changes. The class: a git command aimed at a directory that is no
+#: longer a worktree root silently acts on whichever repository contains it.
+_SESSION_CWD: str | None = None
+
+
+def _orphaned_dir(path: str) -> str | None:
+    """`path` when it exists, has no .git entry, and git resolves it to a DIFFERENT toplevel."""
+    if not path or not os.path.isdir(path):
+        return None
+    if os.path.lexists(os.path.join(path, ".git")):
+        return None
+    root = _worktree_root(path)
+    if root and os.path.realpath(root) != os.path.realpath(path):
+        return root
+    return None
+
+
+def rule_git_in_orphaned_worktree(cmd: str) -> str | None:
+    if not re.search(r"(?:^|[\s;&|(])git\s", cmd):
+        return None
+    targets = []
+    for pat in (_LEADING_CD, _GIT_DASH_C):
+        for m in pat.finditer(cmd):
+            targets.append(_expand(m.group("path").strip("'\""), cmd))
+    if _SESSION_CWD and not targets:
+        targets.append(_SESSION_CWD)
+    for t in targets:
+        # only a directory that LOOKS like a task worktree: a `.wt-*` or `worktrees/` path
+        base = os.path.basename(os.path.normpath(t))
+        if not (base.startswith(".wt-") or "/worktrees/" in t or "/.wt-" in t):
+            continue
+        parent = _orphaned_dir(t)
+        if parent:
+            return (f"BLOCKED by rule-guard: `{t}` has no .git entry, so git there acts on `{parent}` "
+                    f"(the checkout that CONTAINS it), not on the worktree you meant.\n"
+                    f"  why              2026-08-26: an interrupted `git worktree remove` had deleted the\n"
+                    f"                   .git link; the next `git reset --hard` there wiped the main checkout\n"
+                    f"  instead          `git -C {parent} worktree prune`, `rm -rf {t}`, then\n"
+                    f"                   `git worktree add` a fresh one; never run git inside a dead worktree\n"
+                    f"  no override      there is no correct git command to run in a directory that is\n"
+                    f"                   not the repository you think it is.")
+    return None
+
+
 RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
          rule_commit_in_shared_checkout, rule_merge_red_pr,
-         rule_restart_kills_a_live_build)
+         rule_restart_kills_a_live_build, rule_git_in_orphaned_worktree)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
@@ -749,6 +798,26 @@ def decide(cmd: str, skip: tuple[str, ...] = ()) -> tuple[str, str] | None:
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
+    # rule_git_in_orphaned_worktree, both ways: a `.wt-*` dir with no .git inside a repo is
+    # refused; a real worktree (has .git) and a plain dir outside any repo are allowed.
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = os.path.join(tmp, "repo")
+        os.makedirs(os.path.join(repo, ".wt-dead"))
+        subprocess.run([_real_tool("git"), "init", "-q", repo], check=True, capture_output=True)
+        live = os.path.join(repo, ".wt-live")
+        os.makedirs(live)
+        open(os.path.join(live, ".git"), "w").write("gitdir: nowhere\n")
+        dead = os.path.join(repo, ".wt-dead")
+        for cmd, want in [(f"cd {dead} && git reset --hard origin/main", True),
+                          (f"git -C {dead} checkout -B x origin/main", True),
+                          (f"cd {live} && git status", False),
+                          (f"cd {dead} && ls", False),
+                          (f"cd {repo} && git status", False)]:
+            got = bool(rule_git_in_orphaned_worktree(cmd))
+            print(f"  {'ok  ' if got == want else 'FAIL'}  orphaned-worktree {'refuses' if want else 'allows'}: {cmd.replace(tmp, '<tmp>')}")
+            if got != want:
+                return 1
     cases = [
         ("gh workflow enable 337731742  # autoscale-intended", None),
         ("gh workflow disable 337731742", None),
@@ -1091,7 +1160,8 @@ def main() -> int:
     cmd = str(payload.get("tool_input", {}).get("command", ""))
     if not cmd:
         return 0
-    global _ACTIVE_REPO
+    global _ACTIVE_REPO, _SESSION_CWD
+    _SESSION_CWD = payload.get("cwd")
     _ACTIVE_REPO = _repo_for(cmd, payload.get("cwd"))
     verdict = decide(cmd)
     if verdict:
