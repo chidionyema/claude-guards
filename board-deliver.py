@@ -161,9 +161,9 @@ def apply_focus(entries: list[dict], gg=None) -> int:
             continue
         try:
             gg = gg or _goal_guard()
-            if gg.read_focus().get("text") == " ".join(text.split()):
+            if __import__('goal_focus').read_focus(gg).get("text") == " ".join(text.split()):
                 continue
-            total += len(gg.focus(text, "board:" + str(e.get("ts") or "")))
+            total += len(__import__('goal_focus').focus(gg, text, "board:" + str(e.get("ts") or "")))
         except Exception:
             pass                       # a focus that cannot be applied never blocks delivery
     return total
