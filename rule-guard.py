@@ -665,36 +665,24 @@ def _orphaned_dir(path: str) -> str | None:
     return None
 
 
-def rule_git_in_orphaned_worktree(cmd: str) -> str | None:
-    if not re.search(r"(?:^|[\s;&|(])git\s", cmd):
-        return None
-    targets = []
-    for pat in (_LEADING_CD, _GIT_DASH_C):
-        for m in pat.finditer(cmd):
-            targets.append(_expand(m.group("path").strip("'\""), cmd))
-    if _SESSION_CWD and not targets:
-        targets.append(_SESSION_CWD)
-    for t in targets:
-        # only a directory that LOOKS like a task worktree: a `.wt-*` or `worktrees/` path
-        base = os.path.basename(os.path.normpath(t))
-        if not (base.startswith(".wt-") or "/worktrees/" in t or "/.wt-" in t):
+def orphan_state(cmd: str) -> dict | None:
+    """Input for command.rego's orphaned_worktree rule: the `.wt-*`/worktrees dir this command
+    targets (cd, -C or the session cwd) when it has no .git entry, and the checkout git would
+    silently act on instead. Rego cannot stat, so the adapter answers that one question."""
+    targets = [_expand(m.group("path").strip("'\""), cmd)
+               for pat in (_LEADING_CD, _GIT_DASH_C) for m in pat.finditer(cmd)]
+    for t in targets or ([_SESSION_CWD] if _SESSION_CWD else []):
+        if not (os.path.basename(os.path.normpath(t)).startswith(".wt-") or "/worktrees/" in t):
             continue
         parent = _orphaned_dir(t)
         if parent:
-            return (f"BLOCKED by rule-guard: `{t}` has no .git entry, so git there acts on `{parent}` "
-                    f"(the checkout that CONTAINS it), not on the worktree you meant.\n"
-                    f"  why              2026-08-26: an interrupted `git worktree remove` had deleted the\n"
-                    f"                   .git link; the next `git reset --hard` there wiped the main checkout\n"
-                    f"  instead          `git -C {parent} worktree prune`, `rm -rf {t}`, then\n"
-                    f"                   `git worktree add` a fresh one; never run git inside a dead worktree\n"
-                    f"  no override      there is no correct git command to run in a directory that is\n"
-                    f"                   not the repository you think it is.")
+            return {"dir": t, "parent": parent}
     return None
 
 
 RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
          rule_commit_in_shared_checkout, rule_merge_red_pr,
-         rule_restart_kills_a_live_build, rule_git_in_orphaned_worktree)
+         rule_restart_kills_a_live_build)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
@@ -736,7 +724,8 @@ def opa_ask(cmd: str) -> tuple[list[str], list[str], str | None]:
     for pat in _OPA_IGNORE:
         argv[3:3] = ["--ignore", pat]
     try:
-        out = subprocess.run(argv, input=json.dumps({"command": cmd, "arch": platform.machine()}),
+        out = subprocess.run(argv, input=json.dumps({"command": cmd, "arch": platform.machine(),
+                                               "orphaned_worktree": orphan_state(cmd)}),
                              capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError) as exc:
         return [], [], f"opa eval did not run: {exc}"
@@ -798,24 +787,19 @@ def decide(cmd: str, skip: tuple[str, ...] = ()) -> tuple[str, str] | None:
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
-    # rule_git_in_orphaned_worktree, both ways: a `.wt-*` dir with no .git inside a repo is
-    # refused; a real worktree (has .git) and a plain dir outside any repo are allowed.
+    # orphan_state both ways: a `.wt-*` dir with no .git inside a repo names its parent; a live
+    # worktree (has .git) and the repo root give None. The refusal itself is Rego (opa test).
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
-        repo = os.path.join(tmp, "repo")
-        os.makedirs(os.path.join(repo, ".wt-dead"))
+        repo = os.path.join(tmp, "repo"); dead = os.path.join(repo, ".wt-dead"); live = os.path.join(repo, ".wt-live")
+        os.makedirs(dead); os.makedirs(live)
         subprocess.run([_real_tool("git"), "init", "-q", repo], check=True, capture_output=True)
-        live = os.path.join(repo, ".wt-live")
-        os.makedirs(live)
         open(os.path.join(live, ".git"), "w").write("gitdir: nowhere\n")
-        dead = os.path.join(repo, ".wt-dead")
         for cmd, want in [(f"cd {dead} && git reset --hard origin/main", True),
                           (f"git -C {dead} checkout -B x origin/main", True),
-                          (f"cd {live} && git status", False),
-                          (f"cd {dead} && ls", False),
-                          (f"cd {repo} && git status", False)]:
-            got = bool(rule_git_in_orphaned_worktree(cmd))
-            print(f"  {'ok  ' if got == want else 'FAIL'}  orphaned-worktree {'refuses' if want else 'allows'}: {cmd.replace(tmp, '<tmp>')}")
+                          (f"cd {live} && git status", False), (f"cd {repo} && git status", False)]:
+            got = orphan_state(cmd) is not None
+            print(f"  {'ok  ' if got == want else 'FAIL'}  orphan_state {'set' if want else 'unset'}: {cmd.replace(tmp, '<tmp>')}")
             if got != want:
                 return 1
     cases = [

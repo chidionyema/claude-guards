@@ -381,6 +381,34 @@ deny contains msg if {
 }
 
 # ---------------------------------------------------------------------------
+# A git command inside a worktree directory whose .git link is gone.
+#
+# Session 4e5b5e8f, 2026-08-26: `git worktree remove .wt-bs-auth` timed out half
+# way (node_modules) having already deleted the worktree's `.git` link. The next
+# `cd .wt-bs-auth && git checkout -B ... && git reset --hard origin/main` walked
+# up to the MAIN checkout ~/dev/code/idp and discarded its uncommitted tracked
+# changes. Rego cannot stat, so rule-guard.py's orphan_state() answers the one
+# question -- "is the targeted `.wt-*`/worktrees dir missing its .git entry, and
+# which checkout would git act on instead" -- and passes it as
+# input.orphaned_worktree = {"dir", "parent"}, or null. The refusal lives here.
+# ---------------------------------------------------------------------------
+
+deny contains msg if {
+	input.orphaned_worktree
+	regex.match(`(?:^|[\s;&|(])git\s`, input.command)
+	msg := sprintf(concat("", [
+		"BLOCKED by rule-guard: `%s` has no .git entry, so git there acts on `%s` ",
+		"(the checkout that CONTAINS it), not on the worktree you meant.\n",
+		"  why              2026-08-26: an interrupted `git worktree remove` had deleted the\n",
+		"                   .git link; the next `git reset --hard` there wiped the main checkout\n",
+		"  instead          `git -C %s worktree prune`, `rm -rf %s`, then\n",
+		"                   `git worktree add` a fresh one; never run git inside a dead worktree\n",
+		"  no override      there is no correct git command to run in a directory that is\n",
+		"                   not the repository you think it is.",
+	]), [input.orphaned_worktree.dir, input.orphaned_worktree.parent, input.orphaned_worktree.parent, input.orphaned_worktree.dir])
+}
+
+# ---------------------------------------------------------------------------
 # The policy's opinion of itself. See the header: an uncompilable regex makes
 # regex.match undefined rather than raising, so a rule can stop working and the
 # only visible symptom is that nothing is ever refused again.

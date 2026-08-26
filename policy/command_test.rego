@@ -221,3 +221,20 @@ test_native_platform_build_is_permitted if {
 	count(broken) == 0 with input as {"command": "ls", "arch": "x86_64"}
 	count(broken) == 0 with input as {"command": "ls", "arch": "arm64"}
 }
+
+# Session 4e5b5e8f, 2026-08-26: git in a worktree whose .git link is gone acts on the
+# parent checkout. The adapter passes the state; the refusal is here, both ways.
+orphan := {"dir": "/x/idp/.wt-dead", "parent": "/x/idp"}
+
+test_git_in_orphaned_worktree_is_refused if {
+	count(deny) > 0 with input as {"command": "cd /x/idp/.wt-dead && git reset --hard origin/main", "orphaned_worktree": orphan}
+	count(deny) > 0 with input as {"command": "git -C /x/idp/.wt-dead checkout -B x origin/main", "orphaned_worktree": orphan}
+	some m in deny with input as {"command": "git status", "orphaned_worktree": orphan}
+	contains(m, "acts on `/x/idp`")
+}
+
+test_git_in_live_worktree_is_permitted if {
+	count(deny) == 0 with input as {"command": "cd /x/idp/.wt-live && git status", "orphaned_worktree": null}
+	count(deny) == 0 with input as {"command": "cd /x/idp/.wt-dead && ls", "orphaned_worktree": orphan}
+	count(deny) == 0 with input as {"command": "git status"}
+}
