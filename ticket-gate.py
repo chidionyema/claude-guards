@@ -102,6 +102,15 @@ def _needs_ticket(tool: str, tool_input: dict) -> bool:
     return False
 
 
+# Text the harness puts in a user row that the founder never typed. The compaction summary
+# opened crew#323 as a ticket titled "This session is being continued..." (2026-08-26).
+NOT_FOUNDER_WORDS = (
+    "Caveat:",
+    "Stop hook",
+    "This session is being continued from a previous conversation",
+)
+
+
 def founder_words(transcript: str) -> str:
     """The first thing the founder actually typed in this session. Hook text arrives with
     role=user too, so it is excluded by shape, not by trusting the role field."""
@@ -124,7 +133,7 @@ def founder_words(transcript: str) -> str:
                     b.get("text", "") for b in content or []
                     if isinstance(b, dict) and b.get("type") == "text")
                 text = (text or "").strip()
-                if not text or text[0] in "<[" or text.startswith(("Caveat:", "Stop hook")):
+                if not text or text[0] in "<[" or text.startswith(NOT_FOUNDER_WORDS):
                     continue
                 return " ".join(text.split())[:180]
     except OSError:
