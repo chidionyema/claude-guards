@@ -56,6 +56,11 @@ jobs:
         # test files resolve a guard or fixture through it.
         run: |
           mkdir -p "$HOME/.claude" && ln -sfn "$GITHUB_WORKSPACE" "$HOME/.claude/scripts"
+          # rule-guard's selftest grades `git diff origin/main HEAD` against a real repo, and
+          # with no prospector checkout that repo is this one. actions/checkout leaves a
+          # depth-1 PR ref with no origin/main, so three two-ref cases found one ref and
+          # failed (run 33021781271, 95/98). Give it the ref it grades against.
+          git fetch -q --no-tags --depth=1 origin main:refs/remotes/origin/main || true
           python -m pip -q install pytest
           python -m pytest -q -p no:cacheprovider \
             --ignore=test_bridge_edges.py --ignore=test_bridge_live.py --ignore=test_kimi_bridge_reap.py \
