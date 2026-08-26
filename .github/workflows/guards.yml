@@ -45,7 +45,12 @@ jobs:
         # Four more pass alone and fail inside the full run (order coupling, measured
         # 2026-08-26: 63 passed, 3 failed, 3 errors together; each passes alone), so they run in a
         # second invocation rather than being ignored. Untangling the coupling is crew#69's residual.
+        # The tests locate the guards through $HOME/.claude/scripts, which is where this repo is
+        # checked out on every machine that runs it (tracked.json: live checkout). The runner has
+        # no such path, so the workspace is linked there; measured 2026-08-26 on #103: 22 of 40
+        # test files resolve a guard or fixture through it.
         run: |
+          mkdir -p "$HOME/.claude" && ln -sfn "$GITHUB_WORKSPACE" "$HOME/.claude/scripts"
           python -m pip -q install pytest
           python -m pytest -q -p no:cacheprovider \
             --ignore=test_bridge_edges.py --ignore=test_bridge_live.py --ignore=test_kimi_bridge_reap.py \
