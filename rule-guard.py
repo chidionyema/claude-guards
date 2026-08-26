@@ -494,7 +494,7 @@ def _merge_verdict(pr: str, states: list[tuple[str, str]] | None,
 
 def _pr_check_states(pr: str, cmd: str = "") -> list[tuple[str, str]] | None:
     """(name, state) for every check on `pr`, or None if the query itself failed."""
-    named = _GH_REPO_FLAG.search(cmd)
+    named = next((_GH_REPO_FLAG.search(s) for s in re.split(r"\|\||&&|[;|\n]", cmd) if _GH_MERGE.search(s)), None)  # the merge's own segment only
     try:
         p = subprocess.run(
             [_real_tool("gh"), "pr", "checks", pr, "--json", "name,state",
