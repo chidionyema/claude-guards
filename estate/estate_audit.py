@@ -1385,6 +1385,25 @@ def selftest() -> int:
     return 0
 
 
+def c_hook_router() -> list[dict]:
+    """crew#326: ~/.estate/guards/hooks/_router is every git hook on this machine. Twice
+    (2026-08-23 22:04, 2026-08-26 17:06) it stopped dispatching on the hook name and every
+    commit and push in every repo was refused. router-selftest proves it both ways."""
+    selftest = pathlib.Path(os.environ.get("ESTATE_HOME", str(HOME / ".estate"))) / "guards" / "bin" / "router-selftest"
+    proof = str(selftest)
+    if not selftest.exists():
+        return [row("agent", "git hook router dispatches per name", "NO SELFTEST", UNK, proof, str(selftest))]
+    rc, out = sh(f"'{selftest}'", timeout=60)
+    last = out.strip().splitlines()[-1] if out.strip() else "(no output)"
+    if any(s in out for s in UNMEASURED):
+        return [row("agent", "git hook router dispatches per name", out[:40], UNK, proof, out[-200:])]
+    return [row("agent", "git hook router dispatches per name", "OK" if rc == 0 else "BROKEN",
+                OK if rc == 0 else CRIT, proof, last[:200])]
+
+
+CHECKS.append(c_hook_router)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--html", nargs="?", const=str(DEFAULT_HTML))
@@ -1416,22 +1435,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-
-def c_hook_router() -> list[dict]:
-    """crew#326: ~/.estate/guards/hooks/_router is every git hook on this machine. Twice
-    (2026-08-23 22:04, 2026-08-26 17:06) it stopped dispatching on the hook name and every
-    commit and push in every repo was refused. router-selftest proves it both ways."""
-    selftest = pathlib.Path(os.environ.get("ESTATE_HOME", str(HOME / ".estate"))) / "guards" / "bin" / "router-selftest"
-    proof = str(selftest)
-    if not selftest.exists():
-        return [row("hooks", "git hook router dispatches per name", "NO SELFTEST", UNK, proof, str(selftest))]
-    rc, out = sh(f"'{selftest}'", timeout=60)
-    last = out.strip().splitlines()[-1] if out.strip() else "(no output)"
-    if any(s in out for s in UNMEASURED):
-        return [row("hooks", "git hook router dispatches per name", out[:40], UNK, proof, out[-200:])]
-    return [row("hooks", "git hook router dispatches per name", "OK" if rc == 0 else "BROKEN",
-                OK if rc == 0 else CRIT, proof, last[:200])]
-
-
-CHECKS.append(c_hook_router)

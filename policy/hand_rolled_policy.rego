@@ -63,7 +63,7 @@ legacy := {
 	# is still 6. strip_echo_payloads drops what echo/printf prints before the command reaches
 	# Rego, next to heredoc bodies and -m messages; Rego judges the command it is handed, so
 	# the stripping is the adapter's job. Both-ways cases are in the selftest.
-	"rule-guard.py": 1198,
+	"rule-guard.py": 1282, # crew#332: foreign_changes() asks git status and stats files; the refusal is Rego
 	# 1098 -> 1107 on 2026-08-26 (crew#323, claude-guards#92). No refusal was added: the gate
 	# graded a compaction summary ("This session is being continued from a previous
 	# conversation", "Caveat:", "Stop hook") as founder words and demanded a ticket for it.
@@ -94,7 +94,13 @@ legacy := {
 	# untracked since 2026-08-25 (LAW 24). Same reason as dod-guard: a Stop rule over the reply
 	# and the Telegram ledger, no OPA Stop runner exists. Same follow-up, same exit.
 	"blocker-guard.py": 94,
-	"feed-guard.py": 176,
+	# 176 -> 212 on 2026-08-26 (crew#331, #99). The rule itself (a handoff on a lane another
+	# live session holds is refused unless the holder is named on the OVERLAP line) went into
+	# policy/feed.rego with three tests. The 36 Python lines are the data OPA cannot read for
+	# itself: holders() walks feed.md for the sessions inside the 2h hold and hands them in as
+	# input.holders; sweep counts the last 24h a lane-hold rule would have refused (LAW 45
+	# step 4, printed 145 on the live feed); two selftest cases prove the guard both ways.
+	"feed-guard.py": 212,
 }
 
 # How many command refusals each guard still implements in Python. Same direction

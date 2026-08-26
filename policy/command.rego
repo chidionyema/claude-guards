@@ -425,6 +425,33 @@ deny contains msg if {
 }
 
 # ---------------------------------------------------------------------------
+# Discarding tracked edits that an earlier session made.
+#
+# Session 78caaa17, 2026-08-26 (crew#332): `git reset --hard` in ~/.estate
+# discarded another session's uncommitted REQUIREMENTS.jsonl edit. Rego cannot
+# stat, so rule-guard.py's foreign_changes() answers the one question -- "which
+# modified tracked files in the targeted checkout were last written BEFORE this
+# session began" -- and passes input.foreign_changes = {"repo", "files"}, or
+# null when the command does not discard, stashes first, or every edit is this
+# session's own. The refusal lives here.
+# ---------------------------------------------------------------------------
+
+deny contains msg if {
+	input.foreign_changes
+	not contains(input.command, "# discard-foreign-intended")
+	msg := sprintf(concat("", [
+		"BLOCKED by rule-guard: this discards tracked edits in `%s` that are OLDER than this ",
+		"session, so they are another session's work: %s\n",
+		"  why              2026-08-26: `git reset --hard` in ~/.estate wiped a peer session's\n",
+		"                   uncommitted REQUIREMENTS.jsonl edit (crew#332)\n",
+		"  instead          `git -C %s stash push -m 'from <session>'` in the SAME command, then\n",
+		"                   discard; or ask the owner (ListAgents, SendMessage) before you do\n",
+		"  override         append `# discard-foreign-intended` when you have confirmed with the\n",
+		"                   owner that the edit is abandoned.",
+	]), [input.foreign_changes.repo, concat(", ", input.foreign_changes.files), input.foreign_changes.repo])
+}
+
+# ---------------------------------------------------------------------------
 # The policy's opinion of itself. See the header: an uncompilable regex makes
 # regex.match undefined rather than raising, so a rule can stop working and the
 # only visible symptom is that nothing is ever refused again.

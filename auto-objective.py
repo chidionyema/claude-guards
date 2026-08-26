@@ -175,14 +175,21 @@ def scan() -> int:
         # board with P0/P1 labels and no owner while he reported it again.
         if RED_LABEL in [l.lower() for l in i.get("labels", [])] and not board.claimed(i):
             print(f"RED crew#{i['number']} red-alert with no owner"); n += 1
+            # crew#23: escalate fired 18 times and delivered 0, and nothing said so. A page is
+            # either PAGED (send_operator_alert returned True: sent or inboxed, receipt in the
+            # telegram ledger) or UNDELIVERED with the reason, on stdout and on the board ledger.
             try:
                 from estate import estate_alert as ea
-                ea.send_operator_alert(
+                sent = ea.send_operator_alert(
                     f"RED ALERT crew#{i['number']} has no owner: {i.get('title','')[:80]} "
                     f"https://github.com/{board.REPO}/issues/{i['number']}",
                     debounce_key=f"red-unowned-{i['number']}")
-            except Exception:
-                pass
+                why = "" if sent else "send_operator_alert returned False (suppressed, no creds, capped or failed)"
+            except Exception as exc:
+                sent, why = False, f"{type(exc).__name__}: {exc}"[:160]
+            print(f"PAGED crew#{i['number']}" if sent else f"UNDELIVERED crew#{i['number']} {why}")
+            board.ledger({"guard": "auto-objective", "event": "paged" if sent else "undelivered",
+                          "item": i["number"], "why": why})
         cs = i.get("comments", [])
         for k, c in enumerate(cs):
             b = (c.get("body") or "").lstrip()
@@ -295,6 +302,7 @@ def selftest() -> int:
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf): scan()
     ck("scan flags a stale unvalidated BLOCKED", "STALE crew#9" in buf.getvalue())
+    os.environ["ESTATE_ALERT_INBOX"] = str(Path(d) / "inbox.jsonl")   # the fixture page never reaches the real inbox
     fx.write_text(json.dumps([
         {"number": 11, "title": "red", "labels": ["red-alert"], "assignees": [], "comments": []},
         {"number": 12, "title": "red owned", "labels": ["red-alert"], "assignees": ["x"], "comments": []}]))
@@ -302,6 +310,21 @@ def selftest() -> int:
     with contextlib.redirect_stdout(buf): scan()
     ck("scan pages an unowned red-alert item", "RED crew#11" in buf.getvalue())
     ck("scan leaves an owned red-alert item alone", "RED crew#12" not in buf.getvalue())
+    # crew#23 both ways: a page that did not arrive is named, a page that did is a receipt
+    import types
+    from estate import estate_alert as ea
+    real = ea.send_operator_alert
+    try:
+        ea.send_operator_alert = lambda *a, **k: False
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf): scan()
+        ck("scan names an undelivered page", "UNDELIVERED crew#11" in buf.getvalue())
+        ea.send_operator_alert = lambda *a, **k: True
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf): scan()
+        ck("scan prints a receipt for a delivered page", "PAGED crew#11" in buf.getvalue())
+    finally:
+        ea.send_operator_alert = real
     print("PASS auto-objective" if ok else "FAIL auto-objective")
     return 0 if ok else 1
 
