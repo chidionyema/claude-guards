@@ -680,6 +680,60 @@ def orphan_state(cmd: str) -> dict | None:
     return None
 
 
+# ------------------------------------- discarding edits an earlier session made
+
+#: Session 78caaa17, 2026-08-26 (crew#332): `git reset --hard` in ~/.estate discarded another
+#: session's uncommitted REQUIREMENTS.jsonl edit. Nobody had run `git status` first, and the
+#: file was older than the session that wiped it. The class: a command that throws away tracked
+#: edits in a checkout where some of those edits predate this session, so they cannot be this
+#: session's own and nobody has asked whose they are. The adapter answers the one question Rego
+#: cannot -- "which modified tracked files here are older than this session" -- and Rego refuses.
+_SESSION_STARTED: float | None = None
+
+_DISCARDS = re.compile(
+    r"\bgit\s+(?:-C\s+\S+\s+)?(?:reset\s+(?:-\S+\s+)*--hard\b|checkout\s+(?:--\s|\.(?:\s|$)|-\s*-\s)"
+    r"|restore\s(?!.*--staged)|clean\s+(?:-\S*f|--force))")
+
+
+def _session_started(transcript_path: str | None) -> float | None:
+    """When this session began: the transcript file's birth time (macOS), else its ctime."""
+    if not transcript_path or not os.path.exists(transcript_path):
+        return None
+    st = os.stat(transcript_path)
+    return float(getattr(st, "st_birthtime", st.st_ctime))
+
+
+def foreign_changes(cmd: str) -> dict | None:
+    """Input for command.rego's foreign_changes rule: the modified tracked files in the checkout
+    this command targets whose last write is OLDER than this session, when the command discards
+    tracked edits and does not stash them first. Returns {"repo", "files"} or None."""
+    if _SESSION_STARTED is None or not _DISCARDS.search(cmd) or re.search(r"\bgit\s+stash\b", cmd):
+        return None
+    targets = [_expand(m.group("path").strip("'\""), cmd)
+               for pat in (_LEADING_CD, _GIT_DASH_C) for m in pat.finditer(cmd)]
+    target = (targets or [_SESSION_CWD or ""])[-1]
+    if not target or not os.path.isdir(target):
+        return None
+    try:
+        out = subprocess.run([_real_tool("git"), "-C", target, "status", "--porcelain",
+                              "--untracked-files=no"], capture_output=True, text=True, timeout=5)
+        top = subprocess.run([_real_tool("git"), "-C", target, "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0 or not top:
+        return None
+    old = []
+    for line in out.stdout.splitlines():
+        if len(line) < 4 or line[1] not in "MD" and line[0] not in "MD":
+            continue
+        rel = line[3:].split(" -> ")[-1].strip('"')
+        full = os.path.join(top, rel)
+        if os.path.exists(full) and os.stat(full).st_mtime < _SESSION_STARTED:
+            old.append(rel)
+    return {"repo": top, "files": sorted(old)} if old else None
+
+
 RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
          rule_commit_in_shared_checkout, rule_merge_red_pr,
          rule_restart_kills_a_live_build)
@@ -725,7 +779,8 @@ def opa_ask(cmd: str) -> tuple[list[str], list[str], str | None]:
         argv[3:3] = ["--ignore", pat]
     try:
         out = subprocess.run(argv, input=json.dumps({"command": cmd, "arch": platform.machine(),
-                                               "orphaned_worktree": orphan_state(cmd)}),
+                                               "orphaned_worktree": orphan_state(cmd),
+                                               "foreign_changes": foreign_changes(cmd)}),
                              capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError) as exc:
         return [], [], f"opa eval did not run: {exc}"
@@ -802,6 +857,34 @@ def selftest() -> int:
             print(f"  {'ok  ' if got == want else 'FAIL'}  orphan_state {'set' if want else 'unset'}: {cmd.replace(tmp, '<tmp>')}")
             if got != want:
                 return 1
+    # foreign_changes both ways: a tracked edit older than the session is named; the same edit
+    # made after the session started, a stash in the same command, and a read-only command are
+    # all None. The refusal itself is Rego (opa test).
+    global _SESSION_STARTED
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = os.path.join(tmp, "repo"); os.makedirs(repo)
+        git = _real_tool("git")
+        subprocess.run([git, "init", "-q", repo], check=True, capture_output=True)
+        f = os.path.join(repo, "REQ.jsonl"); open(f, "w").write("a\n")
+        subprocess.run([git, "-C", repo, "add", "REQ.jsonl"], check=True, capture_output=True)
+        subprocess.run([git, "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x"],
+                       check=True, capture_output=True)
+        open(f, "w").write("b\n"); os.utime(f, (1_000_000, 1_000_000))
+        _SESSION_STARTED = 2_000_000.0
+        for cmd, want in [(f"cd {repo} && git reset --hard origin/main", True),
+                          (f"git -C {repo} checkout -- REQ.jsonl", True),
+                          (f"cd {repo} && git stash && git reset --hard origin/main", False),
+                          (f"cd {repo} && git status", False)]:
+            got = foreign_changes(cmd) is not None
+            print(f"  {'ok  ' if got == want else 'FAIL'}  foreign_changes {'set' if want else 'unset'}: {cmd.replace(tmp, '<tmp>')}")
+            if got != want:
+                return 1
+        os.utime(f, (3_000_000, 3_000_000))
+        got = foreign_changes(f"cd {repo} && git reset --hard") is not None
+        print(f"  {'ok  ' if not got else 'FAIL'}  foreign_changes unset: edit newer than the session")
+        if got:
+            return 1
+        _SESSION_STARTED = None
     cases = [
         ("gh workflow enable 337731742  # autoscale-intended", None),
         ("gh workflow disable 337731742", None),
@@ -1168,8 +1251,9 @@ def main() -> int:
     cmd = str(payload.get("tool_input", {}).get("command", ""))
     if not cmd:
         return 0
-    global _ACTIVE_REPO, _SESSION_CWD
+    global _ACTIVE_REPO, _SESSION_CWD, _SESSION_STARTED
     _SESSION_CWD = payload.get("cwd")
+    _SESSION_STARTED = _session_started(payload.get("transcript_path"))
     _ACTIVE_REPO = _repo_for(cmd, payload.get("cwd"))
     verdict = decide(cmd)
     if verdict:
