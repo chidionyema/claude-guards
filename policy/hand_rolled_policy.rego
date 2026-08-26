@@ -63,7 +63,7 @@ legacy := {
 	# is still 6. strip_echo_payloads drops what echo/printf prints before the command reaches
 	# Rego, next to heredoc bodies and -m messages; Rego judges the command it is handed, so
 	# the stripping is the adapter's job. Both-ways cases are in the selftest.
-	"rule-guard.py": 1198,
+	"rule-guard.py": 1282,  # crew#332: foreign_changes() asks git status and stats files; the refusal is Rego
 	# 1098 -> 1107 on 2026-08-26 (crew#323, claude-guards#92). No refusal was added: the gate
 	# graded a compaction summary ("This session is being continued from a previous
 	# conversation", "Caveat:", "Stop hook") as founder words and demanded a ticket for it.
