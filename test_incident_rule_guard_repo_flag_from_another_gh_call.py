@@ -9,11 +9,13 @@ blocked on another repository's evidence until the merge itself was given `-R`.
 
 Sixth variant of the wrong-repo class. The rule: only the shell segment that holds the merge may
 name the merge's repository. A flag in any other segment is that command's business. Rung 4,
-incident test, named for the bug.
+incident test, named for the bug. It drives `_pr_check_states` itself and reads the argv it hands
+to `gh`, so a rewrite of the scoping cannot pass by keeping a helper name.
 """
 import importlib.machinery
 import importlib.util
 import os
+import subprocess
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 # Built from fragments on purpose: rule-guard grades the text of the command that runs this test.
@@ -30,6 +32,22 @@ def _load():
     return mod
 
 
+def _repo_flag_sent(rg, cmd):
+    seen = {}
+
+    def fake_run(argv, **kw):
+        seen["argv"] = argv
+        return subprocess.CompletedProcess(argv, 0, stdout="qa\tSUCCESS\n", stderr="")
+
+    rg.subprocess.run = fake_run
+    try:
+        assert rg._pr_check_states("8", cmd) == [("qa", "SUCCESS")]
+    finally:
+        rg.subprocess.run = subprocess.run
+    argv = seen["argv"]
+    return argv[argv.index("--repo") + 1] if "--repo" in argv else None
+
+
 def test_incident_rule_guard_repo_flag_from_another_gh_call():
     rg = _load()
 
@@ -37,18 +55,13 @@ def test_incident_rule_guard_repo_flag_from_another_gh_call():
     for cmd in (f"cd ~/dev/code/estate-secrets && {MERGE} 2>&1 | tail -1; {OTHER}",
                 f"{MERGE}\n{OTHER}",
                 f"{MERGE} || {OTHER}"):
-        assert rg._merge_repo_flag(cmd) is None, cmd
+        assert _repo_flag_sent(rg, cmd) is None, cmd
 
-    # must-fire half: a flag on the merge itself still wins, wherever the merge sits in the line
+    # must-fire half: a flag on the merge itself still reaches gh, wherever the merge sits
     for cmd in (f"{MERGE} -R {OWN}; {OTHER}",
                 f"{OTHER}; {MERGE} --repo {OWN}",
                 f"cd /tmp && {MERGE} --repo={OWN} | tail -1"):
-        m = rg._merge_repo_flag(cmd)
-        assert m is not None and m.group("slug") == OWN, cmd
-
-    # the check query reads the flag through the scoped helper, not the whole line
-    import inspect
-    assert "_merge_repo_flag(cmd)" in inspect.getsource(rg._pr_check_states)
+        assert _repo_flag_sent(rg, cmd) == OWN, cmd
 
 
 if __name__ == "__main__":
