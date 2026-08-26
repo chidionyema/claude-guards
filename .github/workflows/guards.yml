@@ -47,9 +47,9 @@ jobs:
         # (run 33017540558), every one a FileNotFoundError or a tool the runner does not carry.
         # They are production oracles for the Mac, not repository tests, and no scheduled job on
         # the Mac runs them either -- that is crew#69's open residual, not this workflow's.
-        # Four more pass alone and fail inside the full run (order coupling, measured
-        # 2026-08-26: 63 passed, 3 failed, 3 errors together; each passes alone), so they run in a
-        # second invocation rather than being ignored. Untangling the coupling is crew#69's residual.
+        # The order coupling seen on #103 (3 failed, 3 errors together, each passing alone) was
+        # one test restoring the global subprocess.run by re-reading the name it had just
+        # faked; fixed in #105, and the suite runs in one invocation again (71 passed locally).
         # The tests locate the guards through $HOME/.claude/scripts, which is where this repo is
         # checked out on every machine that runs it (tracked.json: live checkout). The runner has
         # no such path, so the workspace is linked there; measured 2026-08-26 on #103: 8 of 36
@@ -59,20 +59,11 @@ jobs:
           python -m pip -q install pytest
           python -m pytest -q -p no:cacheprovider \
             --ignore=test_bridge_edges.py --ignore=test_bridge_live.py --ignore=test_kimi_bridge_reap.py \
-            --ignore=tests/test_incident_crew326_hook_router.py \
-            --ignore=tests/test_incident_crew64_ignore_refusal_named.py \
-            --ignore=test_incident_tracked_committed_into_a_checkout_it_does_not_own.py \
-            --ignore=test_incident_rule_guard_tilde_cd_graded_the_wrong_repo.py \
             --ignore=test_incident_rule_guard_quiet_push.py \
             --ignore=test_incident_founder_blocker_claimed_a_self_serve_credential.py \
             --ignore=test_incident_crew69_every_script_is_wired.py \
             --ignore=test_incident_crew306_launchd_gh_path.py \
             --ignore=test_incident_crew280_pause_guard.py
-          python -m pytest -q -p no:cacheprovider \
-            tests/test_incident_crew326_hook_router.py \
-            tests/test_incident_crew64_ignore_refusal_named.py \
-            test_incident_tracked_committed_into_a_checkout_it_does_not_own.py \
-            test_incident_rule_guard_tilde_cd_graded_the_wrong_repo.py
 
       - name: the estate selftest
         run: python estate-selftest.py || echo "estate-selftest.py reported a problem"

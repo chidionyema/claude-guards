@@ -39,11 +39,15 @@ def _repo_flag_sent(rg, cmd):
         seen["argv"] = argv
         return subprocess.CompletedProcess(argv, 0, stdout="qa\tSUCCESS\n", stderr="")
 
+    # rg.subprocess is the one shared subprocess module, so this patch is global. The old
+    # restore line read `subprocess.run` AFTER the patch and so put the fake back; every
+    # later test's subprocess then answered "qa\tSUCCESS" (claude-guards#105, 2026-08-26).
+    real_run = subprocess.run
     rg.subprocess.run = fake_run
     try:
         assert rg._pr_check_states("8", cmd) == [("qa", "SUCCESS")]
     finally:
-        rg.subprocess.run = subprocess.run
+        rg.subprocess.run = real_run
     argv = seen["argv"]
     return argv[argv.index("--repo") + 1] if "--repo" in argv else None
 
