@@ -42,8 +42,8 @@ jobs:
         # Three files named test_*.py are standalone runners that call sys.exit at import
         # (test_bridge_edges.py, test_bridge_live.py, test_kimi_bridge_reap.py); pytest cannot
         # collect them, so they are named here rather than renamed.
-        # Three more pass alone and fail inside the full run (order coupling, measured
-        # 2026-08-26: 63 passed, 3 failed, 3 errors together; 5 passed alone), so they run in a
+        # Four more pass alone and fail inside the full run (order coupling, measured
+        # 2026-08-26: 63 passed, 3 failed, 3 errors together; each passes alone), so they run in a
         # second invocation rather than being ignored. Untangling the coupling is crew#69's residual.
         run: |
           python -m pip -q install pytest
@@ -51,11 +51,13 @@ jobs:
             --ignore=test_bridge_edges.py --ignore=test_bridge_live.py --ignore=test_kimi_bridge_reap.py \
             --ignore=tests/test_incident_crew326_hook_router.py \
             --ignore=tests/test_incident_crew64_ignore_refusal_named.py \
-            --ignore=test_incident_tracked_committed_into_a_checkout_it_does_not_own.py
+            --ignore=test_incident_tracked_committed_into_a_checkout_it_does_not_own.py \
+            --ignore=test_incident_rule_guard_tilde_cd_graded_the_wrong_repo.py
           python -m pytest -q -p no:cacheprovider \
             tests/test_incident_crew326_hook_router.py \
             tests/test_incident_crew64_ignore_refusal_named.py \
-            test_incident_tracked_committed_into_a_checkout_it_does_not_own.py
+            test_incident_tracked_committed_into_a_checkout_it_does_not_own.py \
+            test_incident_rule_guard_tilde_cd_graded_the_wrong_repo.py
 
       - name: the estate selftest
         run: python estate-selftest.py || echo "estate-selftest.py reported a problem"
