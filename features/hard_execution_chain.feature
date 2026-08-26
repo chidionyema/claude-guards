@@ -71,6 +71,12 @@ Feature: Hard execution chain (crew#306)
     When auto-objective --scan runs
     Then it prints RED crew#N and pages the operator, and an owned red-alert item is left alone
 
+  Scenario: estate_audit counts Telegram polling conflicts in the last 24 h (crew#30)
+    Given the gateway log holds polling conflict lines
+    When 0 are from the last 24 hours then the check is OK
+    When 1 to 19 are from the last 24 hours then the check is WARN
+    When 20 or more are from the last 24 hours then the check is CRIT
+    When the log is missing then the check is UNK
   Scenario: estate_watch marks the estate stale only after a missed 6 h audit slot (crew#25)
     Given the audit runs every 6 hours
     When the last receipt is 191 minutes old
