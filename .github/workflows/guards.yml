@@ -38,6 +38,12 @@ jobs:
       # LAW 45 step 5: an incident test that no workflow runs is a memory, not a guard. Measured
       # 2026-08-26 (crew#69): 37 test_*.py files on main and no job invoked pytest, so
       # test_incident_crew69_every_script_is_wired.py could only fail on a developer's Mac.
+      # rule-guard answers nine refusals from policy/command.rego through `opa eval`; with no
+      # opa on PATH the selftest's 'git push ... origin main' case reports BLIND and fails
+      # (run 33021928667, 97/98). The runner carries no opa, so it is installed here.
+      - uses: open-policy-agent/setup-opa@v2
+        with:
+          version: latest
       - name: every incident test runs
         # Three files named test_*.py are standalone runners that call sys.exit at import
         # (test_bridge_edges.py, test_bridge_live.py, test_kimi_bridge_reap.py); pytest cannot
