@@ -84,6 +84,11 @@
             "type": "command",
             "command": "python3 $HOME/.claude/scripts/memory-loop.py",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/canonical-root-guard.py",
+            "timeout": 15
           }
         ]
       },
