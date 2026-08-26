@@ -71,6 +71,11 @@ Feature: Hard execution chain (crew#306)
     When auto-objective --scan runs
     Then it prints RED crew#N and pages the operator, and an owned red-alert item is left alone
 
+  Scenario: estate_board claim writes a CLAIM comment and an unknown subcommand exits 2 (crew#307 incident)
+    When a session runs estate_board.py claim N
+    Then a comment starting with CLAIM is posted and "CLAIM crew#N posted" is printed
+    When a session runs estate_board.py with an unknown subcommand
+    Then it exits 2 with usage instead of exiting 0 silently
   Scenario: estate_audit counts Telegram polling conflicts in the last 24 h (crew#30)
     Given the gateway log holds polling conflict lines
     When 0 are from the last 24 hours then the check is OK
@@ -93,3 +98,9 @@ Feature: Hard execution chain (crew#306)
     When ~/.estate/guards/bin/router-selftest exits 0 then the row is ok
     When it exits non-zero then the row is critical
     When the selftest file is missing then the row is unknown, never ok
+
+  Scenario: aiden does not alert on a session that has never spoken (crew#52)
+    When a session has no assistant text and has been idle for 30 minutes
+    Then its state is IDLE and no WAITING alert is raised
+    When a session has assistant text and has been idle for 30 minutes
+    Then its state is WAITING

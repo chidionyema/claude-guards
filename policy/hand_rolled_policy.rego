@@ -60,7 +60,13 @@ legacy := {
 	# the checkout git would act on -- plus its both-ways selftest. This is the shape the
 	# header prescribes for a live question: adapter gathers, Rego decides.
 	"rule-guard.py": 1174,
-	"ticket-gate.py": 1098,
+	# 1098 -> 1107 on 2026-08-26 (crew#323, claude-guards#92). No refusal was added: the gate
+	# graded a compaction summary ("This session is being continued from a previous
+	# conversation", "Caveat:", "Stop hook") as founder words and demanded a ticket for it.
+	# The nine lines are the NOT_FOUNDER_WORDS prefix list and the startswith() that reads it.
+	# It is a transcript-shape rule, and no runner feeds transcripts to OPA yet; same follow-up
+	# and same exit as dod-guard below.
+	"ticket-gate.py": 1107,
 	"goal-guard.py": 960,
 	"tool-drip-guard.py": 641,
 	"close-guard.py": 536,
