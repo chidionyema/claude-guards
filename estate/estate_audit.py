@@ -506,8 +506,30 @@ def c_gaps() -> list[dict]:
             for t, d in g]
 
 
+def c_telegram_polling() -> list[dict]:
+    """crew#30: the Architect's bot was deaf 72% of the time for days and nothing measured it.
+    The symptom is 'Telegram polling conflict' in the gateway log. Count the last 24 h."""
+    log = pathlib.Path(os.environ.get("HERMES_V2_HOME", str(HOME / "dev" / "code" / "hermes-v2"))) / "logs" / "gateway.log"
+    proof = f"grep -c 'polling conflict' {log} (last 24 h by line timestamp)"
+    if not log.exists():
+        return [row("agent", "Telegram polling conflicts, 24 h", "NO LOG", UNK, proof, str(log))]
+    since = time.strftime("%Y-%m-%d %H:%M", time.localtime(time.time() - 86400))
+    n = 0
+    try:
+        with open(log, errors="replace") as fh:
+            for line in fh:
+                if "polling conflict" in line and line[:16] >= since:
+                    n += 1
+    except OSError as e:
+        return [row("agent", "Telegram polling conflicts, 24 h", "ERROR", UNK, proof, str(e))]
+    # one conflict every ~42 s was the deaf-72% incident (2,000/day); 20 is a fault, not a blip
+    return [row("agent", "Telegram polling conflicts, 24 h", str(n),
+                CRIT if n >= 20 else (WARN if n else OK), proof,
+                "a second getUpdates consumer holds the bot; inbound is delayed up to 30 s" if n else "")]
+
+
 CHECKS = [c_hooks, c_guards, c_skills_mcp, c_sessions, c_launchd,
-          c_endpoints, c_fly, c_access, c_secrets, c_machine, c_gaps]
+          c_endpoints, c_fly, c_access, c_secrets, c_machine, c_gaps, c_telegram_polling]
 
 
 #: How long the whole sweep may take before the slow checks are written off as
@@ -1394,3 +1416,22 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+def c_hook_router() -> list[dict]:
+    """crew#326: ~/.estate/guards/hooks/_router is every git hook on this machine. Twice
+    (2026-08-23 22:04, 2026-08-26 17:06) it stopped dispatching on the hook name and every
+    commit and push in every repo was refused. router-selftest proves it both ways."""
+    selftest = pathlib.Path(os.environ.get("ESTATE_HOME", str(HOME / ".estate"))) / "guards" / "bin" / "router-selftest"
+    proof = str(selftest)
+    if not selftest.exists():
+        return [row("hooks", "git hook router dispatches per name", "NO SELFTEST", UNK, proof, str(selftest))]
+    rc, out = sh(f"'{selftest}'", timeout=60)
+    last = out.strip().splitlines()[-1] if out.strip() else "(no output)"
+    if any(s in out for s in UNMEASURED):
+        return [row("hooks", "git hook router dispatches per name", out[:40], UNK, proof, out[-200:])]
+    return [row("hooks", "git hook router dispatches per name", "OK" if rc == 0 else "BROKEN",
+                OK if rc == 0 else CRIT, proof, last[:200])]
+
+
+CHECKS.append(c_hook_router)
