@@ -48,3 +48,19 @@ test_refuses_empty if {
 	some m in d
 	contains(m, "got 0")
 }
+
+# crew#331: must refuse a held lane whose holder OVERLAP does not name
+test_refuses_held_lane if {
+	count(feed.deny) == 1 with input as {"lines": good, "session": "bbbb", "lane": "idp", "holders": ["aaaa"]}
+}
+
+# crew#331: must permit when OVERLAP names the holder, and when nobody holds the lane
+test_permits_named_holder if {
+	named := array.concat(array.slice(good, 0, 5), ["🔀 OVERLAP: aaaa owns the drill", "📍 State: e"])
+	count(feed.deny) == 0 with input as {"lines": named, "session": "bbbb", "lane": "idp", "holders": ["aaaa"]}
+}
+
+test_permits_free_lane if {
+	count(feed.deny) == 0 with input as {"lines": good, "session": "bbbb", "lane": "idp", "holders": []}
+}
+

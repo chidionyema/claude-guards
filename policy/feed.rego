@@ -41,6 +41,20 @@ deny contains msg if {
 	msg := sprintf("required line missing or empty (crew#259): %s -- write \"none\" if there is nothing", [r])
 }
 
+# crew#331 (LANES rule 2): one lane per session. feed-guard.py passes `holders`, the other
+# sessions that wrote on this lane inside the last 2h; each must be named on the OVERLAP line.
+deny contains msg if {
+	some h in input.holders
+	not named_in_overlap(h)
+	msg := sprintf("lane %q is held by session %s (handoff inside 2h); name it on the 🔀 OVERLAP line or write on your own lane (crew#331)", [input.lane, h])
+}
+
+named_in_overlap(h) if {
+	some l in input.lines
+	startswith(l, "🔀")
+	contains(l, h)
+}
+
 marked(l) if {
 	some m in marks
 	startswith(l, m)

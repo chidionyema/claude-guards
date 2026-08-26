@@ -26,6 +26,7 @@ from pathlib import Path
 
 FEED = Path(os.environ.get("ESTATE_FEED") or os.path.expanduser("~/.estate/feed.md"))
 INTERVAL_S = 30 * 60
+HOLD_S = 2 * 60 * 60  # crew#331: a lane is held by whoever wrote on it inside this window
 # The handoff shape is policy/feed.rego (crew#259); this file only asks OPA about it.
 POLICY = Path(__file__).resolve().parent / "policy"
 HEAD = re.compile(r"^## (\S+) · session (\S+) · lane (.*)$")
@@ -65,9 +66,30 @@ def overdue(feed: Path, session: str, at: dt.datetime | None = None) -> int | No
     return age if age >= INTERVAL_S else None
 
 
+def holders(feed: Path, session: str, lane: str, at: dt.datetime | None = None) -> list[str]:
+    """Other sessions that wrote a handoff on this lane inside HOLD_S (crew#331, LANES rule 2)."""
+    at = at or now()
+    seen: dict[str, None] = {}
+    for when, who, ln, _ in entries(feed):
+        if ln == lane and who != session and 0 <= (at - when).total_seconds() < HOLD_S:
+            seen[who] = None
+    return list(seen)
+
+
+def collisions(feed: Path, at: dt.datetime | None = None) -> list[tuple[dt.datetime, str, str, str]]:
+    """Report mode for crew#331: every handoff whose lane another session held and whose OVERLAP did not name it."""
+    at = at or now()
+    out = []
+    for when, who, ln, lines in entries(feed):
+        held = [h for h in holders(feed, who, ln, when) if not any(l.startswith("🔀") and h in l for l in lines)]
+        if held and (at - when).total_seconds() < 24 * 3600:
+            out.append((when, who, ln, ",".join(held)))
+    return out
+
+
 def append(feed: Path, session: str, lane: str, body: str, at: dt.datetime | None = None) -> str | None:
     lines = [l.rstrip() for l in body.strip().splitlines() if l.strip()]
-    denied = denials(lines)
+    denied = denials(lines, session, lane, holders(feed, session, lane, at))
     if denied:
         return "; ".join(denied)
     at = at or now()
@@ -80,13 +102,13 @@ def append(feed: Path, session: str, lane: str, body: str, at: dt.datetime | Non
     return None
 
 
-def denials(lines: list[str]) -> list[str]:
+def denials(lines: list[str], session: str = "", lane: str = "", held_by: list[str] | None = None) -> list[str]:
     opa = shutil.which("opa")  # the shape lives in policy/feed.rego; this decides nothing itself
     if not opa:
         return ["BLIND: opa is not installed, the handoff shape was not checked"]
     out = subprocess.run([opa, "eval", "--format", "json", "--ignore", "fixtures", "--ignore", "*.json",
                           "--data", str(POLICY), "--stdin-input", "data.feed.deny"],
-                         input=json.dumps({"lines": lines}), capture_output=True, text=True, timeout=10)
+                         input=json.dumps({"lines": lines, "session": session, "lane": lane, "holders": held_by or []}), capture_output=True, text=True, timeout=10)
     if out.returncode != 0:
         return ["BLIND: opa eval failed: " + out.stderr.strip()[:120]]
     return sorted(json.loads(out.stdout)["result"][0]["expressions"][0]["value"])
@@ -143,8 +165,18 @@ def selftest() -> int:
         # another session is judged on its own entries
         ok &= overdue(f, "bbbb", t0) == -1
         ok &= len(entries(f)) == 1 and entries(f)[0][3] == good.split("\n")
+        # crew#331: bbbb may not take lane idp while aaaa holds it, unless OVERLAP names aaaa; after 2h it is free
+        t1 = t0 + dt.timedelta(minutes=10)
+        ok &= holders(f, "bbbb", "idp", t1) == ["aaaa"]
+        ok &= append(f, "bbbb", "idp", good, t1) is not None
+        names = good.replace("🔀 OVERLAP: none", "🔀 OVERLAP: aaaa owns the drill")
+        ok &= append(f, "bbbb", "idp", names, t1) is None
+        ok &= append(f, "cccc", "other-lane", good, t1) is None
+        ok &= holders(f, "dddd", "idp", t0 + dt.timedelta(hours=3)) == []
+        ok &= append(f, "dddd", "idp", good, t0 + dt.timedelta(hours=3)) is None
+        ok &= len(collisions(f, t0 + dt.timedelta(hours=3))) == 0
     print(f"{'ok  ' if ok else 'FAIL'}  feed-guard selftest: refuses no-entry and the old form (shape: policy/feed.rego), permits the new form, "
-          f"overdue at 31 min and not at 29, per session")
+          f"overdue at 31 min and not at 29, per session; refuses a held lane unless OVERLAP names the holder (crew#331)")
     return 0 if ok else 1
 
 
@@ -154,6 +186,7 @@ def main(argv: list[str]) -> int:
     a = sub.add_parser("append"); a.add_argument("--session", required=True); a.add_argument("--lane", required=True)
     s = sub.add_parser("status"); s.add_argument("--n", type=int, default=5)
     sub.add_parser("selftest")
+    sub.add_parser("sweep")
     for k in ("Stop", "SessionStart", "UserPromptSubmit"):
         sub.add_parser(k)
     args = ap.parse_args(argv)
@@ -166,6 +199,12 @@ def main(argv: list[str]) -> int:
         return 0
     if args.cmd == "selftest":
         return selftest()
+    if args.cmd == "sweep":
+        rows = collisions(FEED)
+        for when, who, ln, held in rows:
+            print(f"{when.strftime('%Y-%m-%dT%H:%MZ')} {who} lane {ln!r} held by {held}, OVERLAP names none of them")
+        print(f"sweep feed-guard: {len(rows)} handoff(s) in the last 24h a lane-hold rule would have refused (crew#331)")
+        return 0
     return hook(args.cmd or "Stop")
 
 
