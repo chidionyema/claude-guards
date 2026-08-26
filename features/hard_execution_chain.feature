@@ -88,3 +88,9 @@ Feature: Hard execution chain (crew#306)
     When ~/.estate/guards/bin/router-selftest exits 0 then the row is ok
     When it exits non-zero then the row is critical
     When the selftest file is missing then the row is unknown, never ok
+
+  Scenario: aiden does not alert on a session that has never spoken (crew#52)
+    When a session has no assistant text and has been idle for 30 minutes
+    Then its state is IDLE and no WAITING alert is raised
+    When a session has assistant text and has been idle for 30 minutes
+    Then its state is WAITING
