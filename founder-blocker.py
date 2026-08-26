@@ -42,12 +42,15 @@ CREDENTIAL = re.compile(r"(password|passwd|passphrase|secret|token|api[_ -]?key|
 # crew#281: the only step a person must take is one a token or an API cannot: a device in his hand.
 # A step that is not physical is staged with a default; the API side is code (idp platform/access).
 PHYSICAL = re.compile(r"\b(hardware key|security key|yubikey|passkey|touch id|face id|fingerprint|phone|handset|"
-                      r"device|laptop|usb|sim card|cable|plug|power|screen|badge|in (?:his|your) hand)\b", re.I)
+                      r"laptop|usb|sim card|cable|plug|badge|power (?:button|cord|socket)|in (?:his|your) hand)\b", re.I)
+# A console step dressed in a physical word ("device flow", "share your screen", "power-cycle from
+# the console") is the incident shape; a URL or a console word in the text refuses it outright.
+CONSOLE = re.compile(r"https?://|\b(console|dashboard|settings|portal|browser|web ?ui|device flow|sign[- ]?in page)\b", re.I)
 DEFAULT_TIMEOUT_MIN = 60
 
 
 def names_physical(text: str) -> bool:
-    return bool(PHYSICAL.search(text))
+    return bool(PHYSICAL.search(text)) and not CONSOLE.search(text)
 
 
 def staged_text(action: str, minutes: int) -> str:

@@ -26,11 +26,15 @@ def test_founder_blocker_refuses_a_console_step_and_permits_a_device_step():
         "create the OAuth App at https://github.com/settings/applications/new and paste the id into the vault",
         "add Account -> Zero Trust: Edit to the Cloudflare token in the dashboard",
         "approve the billing page at https://github.com/settings/billing",
+        # code-0d's review on claude-guards#65: physical words wrapped round a console step
+        "run the GitHub OAuth device flow at https://github.com/login/device and paste the code",
+        "share your screen in the Cloudflare dashboard and approve the token scope",
+        "power-cycle the node pool from the OCI console",
     ]
     physical = [
         "plug the hardware key into the laptop and touch it when it blinks",
         "open the authenticator on your phone and approve the sign-in",
-        "power the Mac mini back on; it is off at the plug",
+        "press the power button on the Mac mini; it is off at the plug",
     ]
     assert not any(fb.names_physical(t) for t in console), [t for t in console if fb.names_physical(t)]
     assert all(fb.names_physical(t) for t in physical), [t for t in physical if not fb.names_physical(t)]
