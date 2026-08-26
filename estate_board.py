@@ -255,5 +255,29 @@ if __name__ == "__main__":
            blocked_missing("BLOCKED: x\nTried: a\nError: b\nNeed: c\nWho: d") == [])
         ck("a bare BLOCKED reply lists all four", blocked_missing("BLOCKED: no") == list(BLOCKED_FIELDS))
         ck("goal_number reads crew#N", goal_number("crew#306: ship it") == 306)
+        # 2026-08-26 (crew#307): `estate_board.py claim 307` exited 0 and did nothing, so a P0
+        # red-alert sat unowned while four sessions believed it was claimed. Unknown args refuse.
+        import subprocess
+        r = subprocess.run([sys.executable, __file__, "frobnicate", "1"], capture_output=True, text=True)
+        ck("an unknown subcommand exits 2 and says so", r.returncode == 2 and "usage" in r.stderr)
+        r = subprocess.run([sys.executable, __file__, "claim", "50", "--session", "sess1234abcd",
+                            "--lane", "code", "--why", "cli"], capture_output=True, text=True,
+                           env={**os.environ, "ESTATE_BOARD_FIXTURE": str(p)})
+        ck("claim via CLI posts CLAIM and exits 0", r.returncode == 0 and "CLAIM" in r.stdout)
         print("PASS estate_board" if ok else "FAIL estate_board")
         sys.exit(0 if ok else 1)
+    import argparse
+    ap = argparse.ArgumentParser(prog="estate_board.py")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    for name in ("claim", "release"):
+        sp = sub.add_parser(name)
+        sp.add_argument("number", type=int)
+        sp.add_argument("--session", default=os.environ.get("CLAUDE_SESSION_ID", "cli"))
+        sp.add_argument("--why", default="cli")
+        if name == "claim":
+            sp.add_argument("--lane", default="code")
+    a = ap.parse_args()
+    okp = (claim(a.number, a.session, a.lane, a.why) if a.cmd == "claim"
+           else release(a.number, a.session, a.why))
+    print(f"{'CLAIM' if a.cmd == 'claim' else 'RELEASE'} crew#{a.number} {'posted' if okp else 'FAILED'}")
+    sys.exit(0 if okp else 1)
