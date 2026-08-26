@@ -77,3 +77,9 @@ Feature: Hard execution chain (crew#306)
     When 1 to 19 are from the last 24 hours then the check is WARN
     When 20 or more are from the last 24 hours then the check is CRIT
     When the log is missing then the check is UNK
+  Scenario: estate_watch marks the estate stale only after a missed 6 h audit slot (crew#25)
+    Given the audit runs every 6 hours
+    When the last receipt is 191 minutes old
+    Then estate_watch does not report STALE
+    When the last receipt is older than 7 hours
+    Then estate_watch reports STALE

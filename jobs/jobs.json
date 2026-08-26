@@ -236,7 +236,7 @@
         "/bin"
       ]
     },
-    "Nice": 5,
+    "Nice": 10,
     "ProcessType": "Background",
     "ProgramArguments": [
       "{PYTHON3_SYSTEM}",
@@ -246,7 +246,7 @@
     "RunAtLoad": true,
     "StandardErrorPath": "{HOME}/.claude/state/logs/tracked-guard.err.log",
     "StandardOutPath": "{HOME}/.claude/state/logs/tracked-guard.out.log",
-    "StartInterval": 1800,
+    "StartInterval": 1783,
     "WorkingDirectory": "{HOME}/.claude/scripts",
     "label": "ai.estate.tracked-guard"
   },
@@ -332,37 +332,50 @@
     "RunAtLoad": true,
     "StandardErrorPath": "{HOME}/.estate/logs/runaway-reaper.err.log",
     "StandardOutPath": "{HOME}/.estate/logs/runaway-reaper.out.log",
-    "StartInterval": 300,
+    "StartInterval": 307,
     "WorkingDirectory": "{HOME}/.estate",
-    "label": "ai.hermes.runaway-reaper"
+    "label": "ai.hermes.runaway-reaper",
+    "Nice": 10
   },
   "com.chidionyema.graphify-sweep": {
     "EnvironmentVariables": {
       "PATH": [
-        "{HOME}/.local/bin",
         "/usr/local/bin",
         "/usr/bin",
-        "/bin",
-        "/usr/sbin",
-        "/sbin"
+        "/bin"
       ]
     },
-    "Nice": 5,
+    "Nice": 10,
     "ProgramArguments": [
-      "{HOME}/Documents/code/prospector/.venv/bin/python",
-      "{HOME}/.claude/scripts/estate/launchd_receipt.py",
-      "--label",
-      "com.chidionyema.graphify-sweep",
-      "--",
-      "{HOME}/Documents/code/prospector/.venv/bin/python",
-      "{HOME}/Documents/code/prospector/scripts/graphify_sweep.py",
-      "--fix"
+      "{HOME}/.claude/scripts/hc-wrap.sh",
+      "graphify-sweep",
+      "{PYTHON3_USER}",
+      "{HOME}/dev/code/prospector-main/scripts/graphify_sweep.py",
+      "--fix",
+      "--root",
+      "{HOME}/dev/code"
     ],
-    "RunAtLoad": false,
-    "StandardErrorPath": "{HOME}/.claude/graphify-refresh.log",
-    "StandardOutPath": "{HOME}/.claude/graphify-refresh.log",
-    "StartInterval": 1800,
-    "label": "com.chidionyema.graphify-sweep"
+    "StandardErrorPath": "{HOME}/.claude/state/graphify-sweep.log",
+    "StandardOutPath": "{HOME}/.claude/state/graphify-sweep.log",
+    "label": "com.chidionyema.graphify-sweep",
+    "StartCalendarInterval": [
+      {
+        "Hour": 1,
+        "Minute": 57
+      },
+      {
+        "Hour": 7,
+        "Minute": 57
+      },
+      {
+        "Hour": 13,
+        "Minute": 57
+      },
+      {
+        "Hour": 19,
+        "Minute": 57
+      }
+    ]
   },
   "com.chidionyema.guard-selftest": {
     "EnvironmentVariables": {
@@ -394,7 +407,8 @@
       }
     ],
     "WorkingDirectory": "{HOME}/.claude/scripts",
-    "label": "com.chidionyema.guard-selftest"
+    "label": "com.chidionyema.guard-selftest",
+    "Nice": 10
   },
   "com.chidionyema.reflect": {
     "EnvironmentVariables": {
@@ -407,7 +421,7 @@
         "/sbin"
       ]
     },
-    "Nice": 5,
+    "Nice": 10,
     "ProgramArguments": [
       "{HOME}/Documents/code/prospector/.venv/bin/python",
       "{HOME}/.claude/scripts/estate/launchd_receipt.py",
@@ -418,11 +432,36 @@
       "{HOME}/.claude/scripts/reflect.py",
       "--json"
     ],
-    "RunAtLoad": true,
+    "RunAtLoad": false,
     "StandardErrorPath": "{HOME}/.claude/reflect.log",
     "StandardOutPath": "{HOME}/.claude/reflect.log",
-    "StartInterval": 14400,
-    "label": "com.chidionyema.reflect"
+    "label": "com.chidionyema.reflect",
+    "StartCalendarInterval": [
+      {
+        "Hour": 3,
+        "Minute": 9
+      },
+      {
+        "Hour": 7,
+        "Minute": 9
+      },
+      {
+        "Hour": 11,
+        "Minute": 9
+      },
+      {
+        "Hour": 15,
+        "Minute": 9
+      },
+      {
+        "Hour": 19,
+        "Minute": 9
+      },
+      {
+        "Hour": 23,
+        "Minute": 9
+      }
+    ]
   },
   "com.estate.bundlepush": {
     "EnvironmentVariables": {
@@ -444,8 +483,58 @@
     "RunAtLoad": false,
     "StandardErrorPath": "{HOME}/.claude/state/logs/estate-bundlepush.err.log",
     "StandardOutPath": "{HOME}/.claude/state/logs/estate-bundlepush.out.log",
-    "StartInterval": 3600,
-    "label": "com.estate.bundlepush"
+    "label": "com.estate.bundlepush",
+    "Nice": 10,
+    "StartCalendarInterval": [
+      {
+        "Hour": 0,
+        "Minute": 27
+      },
+      {
+        "Hour": 2,
+        "Minute": 27
+      },
+      {
+        "Hour": 4,
+        "Minute": 27
+      },
+      {
+        "Hour": 6,
+        "Minute": 27
+      },
+      {
+        "Hour": 8,
+        "Minute": 27
+      },
+      {
+        "Hour": 10,
+        "Minute": 27
+      },
+      {
+        "Hour": 12,
+        "Minute": 27
+      },
+      {
+        "Hour": 14,
+        "Minute": 27
+      },
+      {
+        "Hour": 16,
+        "Minute": 27
+      },
+      {
+        "Hour": 18,
+        "Minute": 27
+      },
+      {
+        "Hour": 20,
+        "Minute": 27
+      },
+      {
+        "Hour": 22,
+        "Minute": 27
+      }
+    ]
   },
   "com.estate.costsentinel": {
     "EnvironmentVariables": {
@@ -458,8 +547,10 @@
         "/sbin"
       ]
     },
-    "Nice": 5,
+    "Nice": 10,
     "ProgramArguments": [
+      "{HOME}/.claude/scripts/hc-wrap.sh",
+      "estate-costsentinel",
       "{PYTHON3_USER}",
       "{HOME}/.claude/scripts/estate/estate_cost_sentinel.py",
       "--digest"
@@ -467,7 +558,7 @@
     "RunAtLoad": true,
     "StandardErrorPath": "{HOME}/.claude/logs/cost-sentinel.err.log",
     "StandardOutPath": "{HOME}/.claude/logs/cost-sentinel.log",
-    "StartInterval": 900,
+    "StartInterval": 877,
     "label": "com.estate.costsentinel"
   },
   "com.estate.downshift": {
@@ -481,7 +572,7 @@
         "/sbin"
       ]
     },
-    "Nice": 5,
+    "Nice": 10,
     "ProgramArguments": [
       "{PYTHON3_USER}",
       "{HOME}/.claude/scripts/estate/estate_downshift.py"
@@ -489,7 +580,7 @@
     "RunAtLoad": true,
     "StandardErrorPath": "{HOME}/.claude/logs/downshift.err.log",
     "StandardOutPath": "{HOME}/.claude/logs/downshift.log",
-    "StartInterval": 900,
+    "StartInterval": 907,
     "label": "com.estate.downshift"
   },
   "com.founder.board": {
@@ -501,12 +592,61 @@
       "--html",
       "{HOME}/.claude/state/founder-board.html"
     ],
-    "RunAtLoad": true,
+    "RunAtLoad": false,
     "StandardErrorPath": "{HOME}/.claude/state/logs/founder-board.err",
     "StandardOutPath": "{HOME}/.claude/state/logs/founder-board.out",
-    "StartInterval": 3600,
     "WorkingDirectory": "{HOME}",
-    "label": "com.founder.board"
+    "label": "com.founder.board",
+    "StartCalendarInterval": [
+      {
+        "Hour": 0,
+        "Minute": 43
+      },
+      {
+        "Hour": 2,
+        "Minute": 43
+      },
+      {
+        "Hour": 4,
+        "Minute": 43
+      },
+      {
+        "Hour": 6,
+        "Minute": 43
+      },
+      {
+        "Hour": 8,
+        "Minute": 43
+      },
+      {
+        "Hour": 10,
+        "Minute": 43
+      },
+      {
+        "Hour": 12,
+        "Minute": 43
+      },
+      {
+        "Hour": 14,
+        "Minute": 43
+      },
+      {
+        "Hour": 16,
+        "Minute": 43
+      },
+      {
+        "Hour": 18,
+        "Minute": 43
+      },
+      {
+        "Hour": 20,
+        "Minute": 43
+      },
+      {
+        "Hour": 22,
+        "Minute": 43
+      }
+    ]
   },
   "com.founder.boardserve": {
     "KeepAlive": true,
@@ -518,7 +658,9 @@
     "StandardErrorPath": "{HOME}/.claude/state/logs/board-serve.err",
     "StandardOutPath": "{HOME}/.claude/state/logs/board-serve.out",
     "WorkingDirectory": "{HOME}",
-    "label": "com.founder.boardserve"
+    "label": "com.founder.boardserve",
+    "Nice": 10,
+    "ProcessType": "Background"
   },
   "com.founder.configsyntaxsweep": {
     "ProgramArguments": [
@@ -526,12 +668,30 @@
       "{HOME}/.claude/scripts/config-syntax-sweep.py",
       "--broadcast-on-red"
     ],
-    "RunAtLoad": true,
+    "RunAtLoad": false,
     "StandardErrorPath": "{HOME}/.claude/state/logs/config-syntax-sweep.err.log",
     "StandardOutPath": "{HOME}/.claude/state/logs/config-syntax-sweep.out.log",
-    "StartInterval": 21600,
     "_why_user_python": "PYTHON3_SYSTEM is /usr/bin/python3, which is 3.9.6 on this Mac and has no tomllib (stdlib from 3.11). The module now degrades to BLIND rather than crashing, but BLIND on every .toml file is not the job. 3.14.6 is at /usr/local/bin/python3.",
-    "label": "com.founder.configsyntaxsweep"
+    "label": "com.founder.configsyntaxsweep",
+    "Nice": 10,
+    "StartCalendarInterval": [
+      {
+        "Hour": 2,
+        "Minute": 17
+      },
+      {
+        "Hour": 8,
+        "Minute": 17
+      },
+      {
+        "Hour": 14,
+        "Minute": 17
+      },
+      {
+        "Hour": 20,
+        "Minute": 17
+      }
+    ]
   },
   "com.founder.estateaudit": {
     "EnvironmentVariables": {
@@ -551,11 +711,29 @@
       "--html",
       "--state"
     ],
-    "RunAtLoad": true,
+    "RunAtLoad": false,
     "StandardErrorPath": "{HOME}/.claude/state/logs/estate-audit.err.log",
     "StandardOutPath": "{HOME}/.claude/state/logs/estate-audit.out.log",
-    "StartInterval": 3600,
-    "label": "com.founder.estateaudit"
+    "label": "com.founder.estateaudit",
+    "Nice": 10,
+    "StartCalendarInterval": [
+      {
+        "Hour": 1,
+        "Minute": 21
+      },
+      {
+        "Hour": 7,
+        "Minute": 21
+      },
+      {
+        "Hour": 13,
+        "Minute": 21
+      },
+      {
+        "Hour": 19,
+        "Minute": 21
+      }
+    ]
   },
   "com.founder.estatepush": {
     "EnvironmentVariables": {
@@ -568,16 +746,65 @@
         "/sbin"
       ]
     },
-    "Nice": 5,
+    "Nice": 10,
     "ProgramArguments": [
       "{BASH}",
       "{HOME}/.claude/scripts/estate/estate_push.sh"
     ],
-    "RunAtLoad": true,
+    "RunAtLoad": false,
     "StandardErrorPath": "{HOME}/.claude/state/logs/estate-push.err.log",
     "StandardOutPath": "{HOME}/.claude/state/logs/estate-push.out.log",
-    "StartInterval": 3600,
-    "label": "com.founder.estatepush"
+    "label": "com.founder.estatepush",
+    "StartCalendarInterval": [
+      {
+        "Hour": 0,
+        "Minute": 19
+      },
+      {
+        "Hour": 2,
+        "Minute": 19
+      },
+      {
+        "Hour": 4,
+        "Minute": 19
+      },
+      {
+        "Hour": 6,
+        "Minute": 19
+      },
+      {
+        "Hour": 8,
+        "Minute": 19
+      },
+      {
+        "Hour": 10,
+        "Minute": 19
+      },
+      {
+        "Hour": 12,
+        "Minute": 19
+      },
+      {
+        "Hour": 14,
+        "Minute": 19
+      },
+      {
+        "Hour": 16,
+        "Minute": 19
+      },
+      {
+        "Hour": 18,
+        "Minute": 19
+      },
+      {
+        "Hour": 20,
+        "Minute": 19
+      },
+      {
+        "Hour": 22,
+        "Minute": 19
+      }
+    ]
   },
   "com.founder.estatewatch": {
     "ProgramArguments": [
@@ -587,8 +814,9 @@
     "RunAtLoad": true,
     "StandardErrorPath": "{HOME}/.claude/state/logs/estate-watch.err.log",
     "StandardOutPath": "{HOME}/.claude/state/logs/estate-watch.out.log",
-    "StartInterval": 1800,
-    "label": "com.founder.estatewatch"
+    "StartInterval": 1811,
+    "label": "com.founder.estatewatch",
+    "Nice": 10
   },
   "com.founder.stuckdetector": {
     "Nice": 10,
@@ -600,7 +828,7 @@
     "RunAtLoad": true,
     "StandardErrorPath": "{HOME}/.claude/state/logs/stuck-detector.err",
     "StandardOutPath": "{HOME}/.claude/state/logs/stuck-detector.jsonl",
-    "StartInterval": 300,
+    "StartInterval": 311,
     "WorkingDirectory": "{HOME}",
     "label": "com.founder.stuckdetector"
   },
@@ -623,7 +851,8 @@
     "StandardErrorPath": "{HOME}/.prospector/logs/com.prospector-control.failover-watch.log",
     "StandardOutPath": "{HOME}/.prospector/logs/com.prospector-control.failover-watch.log",
     "StartInterval": 60,
-    "label": "com.prospector-control.failover-watch"
+    "label": "com.prospector-control.failover-watch",
+    "Nice": 10
   },
   "com.prospector-control.receipt-bridge": {
     "EnvironmentVariables": {
@@ -650,8 +879,9 @@
     "RunAtLoad": true,
     "StandardErrorPath": "{HOME}/.prospector/logs/com.prospector-control.receipt-bridge.log",
     "StandardOutPath": "{HOME}/.prospector/logs/com.prospector-control.receipt-bridge.log",
-    "StartInterval": 900,
-    "label": "com.prospector-control.receipt-bridge"
+    "StartInterval": 919,
+    "label": "com.prospector-control.receipt-bridge",
+    "Nice": 10
   },
   "com.prospector.backup": {
     "EnvironmentVariables": {
@@ -667,6 +897,8 @@
       "PROSPECTOR_STORE_DIR": "{HOME}/Documents/code/prospector/store"
     },
     "ProgramArguments": [
+      "{HOME}/.claude/scripts/hc-wrap.sh",
+      "prospector-backup",
       "{HOME}/Documents/code/prospector-live/.venv/bin/python",
       "{HOME}/.claude/scripts/estate/launchd_receipt.py",
       "--label",
@@ -683,7 +915,8 @@
       "Minute": 40
     },
     "WorkingDirectory": "{HOME}/Documents/code/prospector-live",
-    "label": "com.prospector.backup"
+    "label": "com.prospector.backup",
+    "Nice": 10
   },
   "com.prospector.estate-inventory": {
     "EnvironmentVariables": {
@@ -708,12 +941,18 @@
       "--out",
       "{HOME}/Documents/code/prospector-live/store/estate_inventory.json"
     ],
-    "RunAtLoad": true,
+    "RunAtLoad": false,
     "StandardErrorPath": "{HOME}/Documents/code/prospector-live/store/estate_inventory.log",
     "StandardOutPath": "{HOME}/Documents/code/prospector-live/store/estate_inventory.log",
-    "StartInterval": 86400,
     "WorkingDirectory": "{HOME}/Documents/code/prospector-live",
-    "label": "com.prospector.estate-inventory"
+    "label": "com.prospector.estate-inventory",
+    "Nice": 10,
+    "StartCalendarInterval": [
+      {
+        "Hour": 6,
+        "Minute": 41
+      }
+    ]
   },
   "com.prospector.launchd-held": {
     "EnvironmentVariables": {
@@ -738,12 +977,30 @@
       "{HOME}/Documents/code/prospector/scripts/launchd_plists.py",
       "--assert-held"
     ],
-    "RunAtLoad": true,
+    "RunAtLoad": false,
     "StandardErrorPath": "{HOME}/Documents/code/prospector/store/scheduler/launchd-held.log",
     "StandardOutPath": "{HOME}/Documents/code/prospector/store/scheduler/launchd-held.log",
-    "StartInterval": 3600,
     "WorkingDirectory": "/tmp",
-    "label": "com.prospector.launchd-held"
+    "label": "com.prospector.launchd-held",
+    "Nice": 10,
+    "StartCalendarInterval": [
+      {
+        "Hour": 1,
+        "Minute": 45
+      },
+      {
+        "Hour": 7,
+        "Minute": 45
+      },
+      {
+        "Hour": 13,
+        "Minute": 45
+      },
+      {
+        "Hour": 19,
+        "Minute": 45
+      }
+    ]
   },
   "com.prospector.log-rotation": {
     "EnvironmentVariables": {
@@ -764,12 +1021,30 @@
       "ops.automations.log_rotation",
       "--fix"
     ],
-    "RunAtLoad": true,
+    "RunAtLoad": false,
     "StandardErrorPath": "{HOME}/Documents/code/prospector/store/log_rotation.log",
     "StandardOutPath": "{HOME}/Documents/code/prospector/store/log_rotation.log",
-    "StartInterval": 21600,
     "WorkingDirectory": "{HOME}/Documents/code/prospector-live",
-    "label": "com.prospector.log-rotation"
+    "label": "com.prospector.log-rotation",
+    "Nice": 10,
+    "StartCalendarInterval": [
+      {
+        "Hour": 4,
+        "Minute": 25
+      },
+      {
+        "Hour": 10,
+        "Minute": 25
+      },
+      {
+        "Hour": 16,
+        "Minute": 25
+      },
+      {
+        "Hour": 22,
+        "Minute": 25
+      }
+    ]
   },
   "com.prospector.offsite-backup": {
     "EnvironmentVariables": {
@@ -785,6 +1060,8 @@
       "PROSPECTOR_STORE_DIR": "{HOME}/Documents/code/prospector/store"
     },
     "ProgramArguments": [
+      "{HOME}/.claude/scripts/hc-wrap.sh",
+      "prospector-offsite-backup",
       "{HOME}/Documents/code/prospector-live/.venv/bin/python",
       "-m",
       "ops.automations.offsite_backup",
@@ -797,7 +1074,8 @@
       "Minute": 50
     },
     "WorkingDirectory": "{HOME}/Documents/code/prospector-live",
-    "label": "com.prospector.offsite-backup"
+    "label": "com.prospector.offsite-backup",
+    "Nice": 10
   },
   "com.prospector.process-audit": {
     "EnvironmentVariables": {
@@ -826,9 +1104,27 @@
     "RunAtLoad": false,
     "StandardErrorPath": "{HOME}/Documents/code/prospector/store/scheduler/process-audit.err.log",
     "StandardOutPath": "{HOME}/Documents/code/prospector/store/scheduler/process-audit.out.log",
-    "StartInterval": 3600,
     "WorkingDirectory": "/tmp",
-    "label": "com.prospector.process-audit"
+    "label": "com.prospector.process-audit",
+    "Nice": 10,
+    "StartCalendarInterval": [
+      {
+        "Hour": 1,
+        "Minute": 53
+      },
+      {
+        "Hour": 7,
+        "Minute": 53
+      },
+      {
+        "Hour": 13,
+        "Minute": 53
+      },
+      {
+        "Hour": 19,
+        "Minute": 53
+      }
+    ]
   },
   "com.valvesoftware.steamclean": {
     "Program": "{HOME}/Library/Application Support/Steam/SteamApps/steamclean",
