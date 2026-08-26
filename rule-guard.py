@@ -711,7 +711,7 @@ def normalise(cmd: str) -> str:
     asserted to pass by a green selftest and refused in production. A test that grades a
     different code path than the hook is not a test of the hook.
     """
-    return strip_commit_messages(strip_heredocs(cmd))
+    return strip_echo_payloads(strip_commit_messages(strip_heredocs(cmd)))
 
 
 def opa_ask(cmd: str) -> tuple[list[str], list[str], str | None]:
@@ -860,6 +860,11 @@ def selftest() -> int:
         ("git commit -m 'the rule is: git add -A is banned'", None),
         ('git commit --message="never git add -A"', None),
         ("python3 - <<'PY'\nprint('the git add -A rule')\nPY\n", None),
+        # crew#51: what echo or printf prints is text, not a command. The sentence that
+        # explains a rule must not trip it; the command chained after it still must.
+        ('echo "do not git add store/x.json" >> notes.md', None),
+        ("printf 'git add -A is banned\\n' > a.txt", None),
+        ('echo "prose" && git add store/x.json', "rule_runtime_state"),
         ("flyctl apps list", None),
         ("flyctl status -a prospector-store-web", None),
         ("flyctl logs -a prospector-engine", None),
@@ -1113,6 +1118,25 @@ def strip_heredocs(cmd: str) -> str:
 
 _COMMIT_MSG = re.compile(r"""(-m|--message|--body|--title|--caption)(=|\s+)(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
                          re.DOTALL)
+
+
+_ECHO_PAYLOAD = re.compile(r"""\b(echo|printf)(\s+-[a-zA-Z]+)*\s+(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
+                           re.DOTALL)
+
+
+def strip_echo_payloads(cmd: str) -> str:
+    """Drop the quoted argument of `echo` and `printf` before the rules judge a command.
+
+    crew#51, found 2026-08-23 while wiring ticket-gate.py: `echo "do not run git push"` was
+    read as a push and refused. What echo prints is text the shell never executes, exactly
+    like a heredoc body or a commit message, and a guard that refuses the sentence that
+    explains it is a guard people learn to bypass.
+
+    Only the quoted argument goes; the echo itself, any redirect after it, and anything
+    chained with && or ; are still judged. An unquoted payload is left alone: it is one
+    shell word per token and a guarded verb in it is as likely a mistake as prose.
+    """
+    return _ECHO_PAYLOAD.sub(lambda m: f"{m.group(1)}{m.group(2) or ''} {m.group('q')}{m.group('q')}", cmd)
 
 
 def strip_commit_messages(cmd: str) -> str:

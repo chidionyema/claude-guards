@@ -59,7 +59,11 @@ legacy := {
 	# state Rego cannot gather -- orphan_state() stats the targeted `.wt-*` dir and names
 	# the checkout git would act on -- plus its both-ways selftest. This is the shape the
 	# header prescribes for a live question: adapter gathers, Rego decides.
-	"rule-guard.py": 1174,
+	# 1174 -> 1198 on 2026-08-26 (session 78caaa17, crew#51). No refusal was added: rules_count
+	# is still 6. strip_echo_payloads drops what echo/printf prints before the command reaches
+	# Rego, next to heredoc bodies and -m messages; Rego judges the command it is handed, so
+	# the stripping is the adapter's job. Both-ways cases are in the selftest.
+	"rule-guard.py": 1198,
 	# 1098 -> 1107 on 2026-08-26 (crew#323, claude-guards#92). No refusal was added: the gate
 	# graded a compaction summary ("This session is being continued from a previous
 	# conversation", "Caveat:", "Stop hook") as founder words and demanded a ticket for it.

@@ -89,6 +89,11 @@ Feature: Hard execution chain (crew#306)
     When the last receipt is older than 7 hours
     Then estate_watch reports STALE
 
+  Scenario: rule-guard does not judge what echo or printf prints (crew#51)
+    When a command is echo "do not git add store/x.json" >> notes.md
+    Then rule-guard lets it through
+    When a command is echo "prose" && git add store/x.json
+    Then rule-guard refuses it with rule_runtime_state
   Scenario: the estate audit goes red when the shared git hook router stops dispatching (crew#326)
     When ~/.estate/guards/bin/router-selftest exits 0 then the row is ok
     When it exits non-zero then the row is critical
