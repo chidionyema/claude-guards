@@ -26,7 +26,6 @@ that owns it on 2026-08-23:
                                  them. ~/.claude/scripts is also a git submodule of ~/.claude.
   ~/AGENTS.md                    laws-link-guard.py owns this topology and treats "moved, with a
                                  symlink left behind" as damage to repair.
-  ~/.hermes/scripts              launchd_receipt.py wraps scheduled jobs from here.
   ~/Documents/code/prospector    com.chidionyema.reflect (StartInterval 14400) hardcodes
                                  .venv/bin/python and store/ops/method_metrics.json under this
                                  tree. Moving it silently kills the estate's only running
@@ -43,7 +42,6 @@ import sys
 CANON = pathlib.Path.home() / "dev" / "code"
 EXEMPT = (
     pathlib.Path.home() / ".claude",
-    pathlib.Path.home() / ".hermes",
     pathlib.Path.home() / ".codex",
     pathlib.Path.home() / ".gemini",
     pathlib.Path.home() / "Documents" / "code" / "prospector",
@@ -101,7 +99,8 @@ def selftest() -> int:
         # is a guard that gets switched off, and then it protects nothing.
         ("~/.claude is carved out: the path is the product", home / ".claude", "exempt"),
         ("~/.claude/scripts is carved out: 29 launchd jobs name it", home / ".claude/scripts", "exempt"),
-        ("~/.hermes/scripts is carved out: launchd wrapper", home / ".hermes/scripts", "exempt"),
+        # crew#13: ~/.hermes is retired; the launchd wrapper lives in ~/.claude/scripts/estate now
+        ("~/.hermes/scripts is no longer carved out", home / ".hermes/scripts", "outside"),
         ("prospector is carved out: com.chidionyema.reflect hardcodes it",
          home / "Documents/code/prospector", "exempt"),
         ("a session scratchpad worktree is carved out",
