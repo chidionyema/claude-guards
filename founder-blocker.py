@@ -15,6 +15,9 @@ Usage: founder-blocker.py "<action, one sentence>" [<url or word>] [--session ID
   default            STAGED with the estate timeout (estate-defaults.yaml handoff_protocol.timeout_minutes, else 60)
   --staged N         STAGED with N minutes
   --physical         FOUNDER ACTION: permitted only when the text names the physical thing
+  --register ROW     with --physical: the Capabilities register row (~/AGENTS.md) you checked, or `none`.
+                     A row that exists is a self-serve path and the send is refused (crew#325: four
+                     sessions sent "create the GitHub App" for a deploy key any session can mint).
 Exit 0 with a message_id on screen, or 1 BLIND/REFUSED with the reason. Never raises.
 """
 from __future__ import annotations
@@ -32,6 +35,35 @@ from estate import estate_alert as ea
 from estate import telegram_ledger
 
 SOURCE = "founder-blocker"
+REGISTER = os.path.expanduser("~/AGENTS.md")
+REGISTER_HEAD = "# Capabilities register"
+
+
+def register_rows(path: str = REGISTER) -> list[tuple[str, str]]:
+    """(need, self-serve path) rows of the Capabilities register table in ~/AGENTS.md; [] if absent."""
+    try:
+        text = open(path, encoding="utf-8").read()
+    except OSError:
+        return []
+    if REGISTER_HEAD not in text:
+        return []
+    rows = []
+    for line in text.split(REGISTER_HEAD, 1)[1].splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) >= 2 and cells[0] not in ("Need", "") and not set(cells[0]) <= set("-"):
+            rows.append((cells[0], cells[1]))
+    return rows
+
+
+def register_match(claim: str, rows: list[tuple[str, str]]) -> tuple[str, str] | None:
+    """The row whose Need column the claim names (case-insensitive, either contains the other)."""
+    c = claim.strip().lower()
+    for need, path in rows:
+        n = need.lower()
+        if c and (c in n or n in c):
+            return need, path
+    return None
+
 
 # Incident 2026-08-26 (crew#269): a session pushed the catalogue password to the founder over
 # Telegram in a FOUNDER ACTION. Founder: "not in line with our security principles". The class:
@@ -107,8 +139,23 @@ def _api(tok: str, method: str, **p):
 
 
 def send(action: str, target: str = "", session: str = "", *, staged_minutes: int | None = None,
-         physical: bool = False) -> int:
+         physical: bool = False, register: str | None = None) -> int:
     """Returns Telegram message_id (>0) or 0 when blind or refused."""
+    if physical:
+        rows = register_rows()
+        if register is None:
+            telegram_ledger.record(SOURCE, "refused", action, key="register-unchecked")
+            table = "\n".join(f"  {n}  ->  {p}" for n, p in rows) or "  (register unreadable: ~/AGENTS.md has no Capabilities register)"
+            print("REFUSED: FOUNDER ACTION: needs --register <row|none>: name the Capabilities register row "
+                  "you checked (crew#325: a day went to 'create the GitHub App' that a deploy key replaced). "
+                  "Rows:\n" + table, file=sys.stderr)
+            return 0
+        hit = None if register.strip().lower() == "none" else register_match(register, rows)
+        if hit:
+            telegram_ledger.record(SOURCE, "refused", action, key="self-serve:" + hit[0][:40])
+            print(f"REFUSED: a self-serve path exists for '{hit[0]}': {hit[1]}\nDo that instead; "
+                  "FOUNDER ACTION: is only for what no session can do.", file=sys.stderr)
+            return 0
     if physical and not names_physical(action):
         telegram_ledger.record(SOURCE, "refused", action, key="not-physical")
         print("REFUSED: FOUNDER ACTION: is for a physical step only (crew#281). This text names no "
@@ -152,11 +199,11 @@ def send(action: str, target: str = "", session: str = "", *, staged_minutes: in
     return mid
 
 
-def parse_argv(argv: list[str]) -> tuple[list[str], str, int | None, bool]:
-    """(positional args, session, staged minutes, physical). Exits 2 on an unknown flag: `--help`
+def parse_argv(argv: list[str]) -> tuple[list[str], str, int | None, bool, str | None]:
+    """(positional args, session, staged minutes, physical, register row or None). Exits 2 on an unknown flag: `--help`
     once went to Telegram as "STAGED: --help is ready" (msg 14081, 2026-08-26). A flag is never
     the founder's message."""
-    sess, args, minutes, physical = "", [], None, False
+    sess, args, minutes, physical, register = "", [], None, False, None
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -166,6 +213,10 @@ def parse_argv(argv: list[str]) -> tuple[list[str], str, int | None, bool]:
             sess = argv[i + 1]; i += 1
         elif a == "--physical":
             physical = True
+        elif a.startswith("--register="):
+            register = a.split("=", 1)[1]
+        elif a == "--register" and i + 1 < len(argv):
+            register = argv[i + 1]; i += 1
         elif a == "--staged":
             minutes = 0
             if i + 1 < len(argv) and argv[i + 1].isdigit():
@@ -176,12 +227,12 @@ def parse_argv(argv: list[str]) -> tuple[list[str], str, int | None, bool]:
         else:
             args.append(a)
         i += 1
-    return args, sess, minutes, physical
+    return args, sess, minutes, physical, register
 
 
 if __name__ == "__main__":
-    args, sess, minutes, physical = parse_argv(sys.argv[1:])
+    args, sess, minutes, physical, register = parse_argv(sys.argv[1:])
     if not args:
         print(__doc__); sys.exit(2)
     sys.exit(0 if send(args[0], args[1] if len(args) > 1 else "", sess,
-                       staged_minutes=minutes or None, physical=physical) else 1)
+                       staged_minutes=minutes or None, physical=physical, register=register) else 1)
