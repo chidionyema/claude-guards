@@ -60,3 +60,24 @@ def test_incident_crew395_claim_list_under_a_focus_never_offers_the_off_mission_
     kept = [i["number"] for i in gg.focus_filter(items, "crew#284: finish KINI")]
     assert kept == [284, 306]
     assert gg.focus_filter(items, "") == items
+
+
+def test_incident_crew395_a_founder_focus_line_on_the_board_rewrites_goals_once(tmp_path, monkeypatch):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("goal_guard", GG)
+    gg = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gg)
+    gg.STATE_DIR = tmp_path / "goal"
+    gg.LEDGER = tmp_path / "ledger.jsonl"
+    gg.write_state("live-cccc", {"goal": "crew#66: eradicate fly", "run": 0, "last_progress": "",
+                                 "last_progress_at": 0, "fired": 0, "calls": 0})
+    spec2 = importlib.util.spec_from_file_location("board_deliver", os.path.join(HERE, "board-deliver.py"))
+    bd = importlib.util.module_from_spec(spec2)
+    spec2.loader.exec_module(bd)
+    entries = [{"from": "founder", "text": "FOCUS: crew#284: finish KINI", "ts": "2026-08-26T23:30:00Z"},
+               {"from": "some-session", "text": "FOCUS: crew#66: fly again", "ts": "2026-08-26T23:31:00Z"}]
+    assert bd.apply_focus(entries, gg) == 1
+    assert gg.read_state("live-cccc")["goal"] == "crew#284: finish KINI"
+    # a second session delivering the same board is not a second rewrite
+    assert bd.apply_focus(entries, gg) == 0
+    assert sum(1 for l in gg.LEDGER.read_text().splitlines() if '"kind":"focus"' in l) == 1

@@ -132,6 +132,43 @@ def body(entry: dict) -> str:
     return " ".join(p for p in parts if p).strip()
 
 
+FOCUS_WORD = "FOCUS:"
+
+
+def _goal_guard():
+    import importlib.util
+    here = pathlib.Path(__file__).resolve().parent
+    spec = importlib.util.spec_from_file_location("goal_guard", here / "goal-guard.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def apply_focus(entries: list[dict], gg=None) -> int:
+    """crew#395: a founder board line starting FOCUS: rewrites every live session's goal the
+    moment any session reads the board, whichever channel wrote it. Idempotent: the same
+    text already standing in FOCUS.json is not applied again, so N sessions delivering the
+    same line make one rewrite and one ledger row. Returns the sessions rewritten."""
+    total = 0
+    for e in entries:
+        if sender(e).lower() != "founder":
+            continue
+        text = body(e).strip()
+        if not text.startswith(FOCUS_WORD):
+            continue
+        text = text[len(FOCUS_WORD):].strip()
+        if not text:
+            continue
+        try:
+            gg = gg or _goal_guard()
+            if gg.read_focus().get("text") == " ".join(text.split()):
+                continue
+            total += len(gg.focus(text, "board:" + str(e.get("ts") or "")))
+        except Exception:
+            pass                       # a focus that cannot be applied never blocks delivery
+    return total
+
+
 def main() -> int:
     me = session_id()
     entries = read_board()
@@ -188,6 +225,7 @@ def main() -> int:
         seen_text.add(key)
         unique.append(e)
     fresh = unique
+    apply_focus(fresh)
 
     shown, dropped = fresh[:MAX_SHOWN], max(0, len(fresh) - MAX_SHOWN)
 
