@@ -23,7 +23,9 @@ import time
 from pathlib import Path
 
 HOME = Path(tempfile.mkdtemp(prefix="edge-test-"))
-PORT = 8794
+# Port 0: the kernel picks a free port, so two runs of this file, or this file and the live
+# bridge, never collide (2026-08-26: a second run died with "Address already in use").
+PORT = 0
 os.environ.update({"BRIDGE_HOME": str(HOME), "BRIDGE_PORT": str(PORT),
                    "BRIDGE_TIMEOUT": "300"})
 sys.path.insert(0, str(Path.home() / ".claude" / "scripts"))
@@ -90,6 +92,7 @@ STUB = StubBridge()
 kb.BRIDGE = STUB
 threading.Thread(target=STUB.run, daemon=True).start()  # the REAL run loop
 SRV = kb.ThreadingHTTPServer(("127.0.0.1", PORT), kb.Handler)
+PORT = SRV.server_address[1]
 threading.Thread(target=SRV.serve_forever, daemon=True).start()
 time.sleep(0.4)
 
