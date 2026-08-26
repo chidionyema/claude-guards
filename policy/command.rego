@@ -81,6 +81,22 @@ rules := [
 		]),
 	},
 	{
+		"id": "quiet_push",
+		# 2026-08-26, session 78caaa17: `git push -q ... 2>&1 | tail -1` printed nothing when
+		# the pre-push hook refused, and the reply said "pushed". The reviewer found the
+		# commit absent from the remote. A push whose refusal is invisible is not a push.
+		"re": `\bgit\s+push\b[^|;&\n\r]*(?:\s-q\b|\s--quiet\b)`,
+		"marker": "quiet-push-intended",
+		"must_match": "git push -q origin main",
+		"must_not_match": "git push origin main 2>&1 | tail -3",
+		"msg": concat("", [
+			"BLOCKED by rule-guard: `git push -q` hides a refused push.\n",
+			"On 2026-08-26 a pre-push hook refused and the reply reported the commit as pushed. ",
+			"Drop -q and keep the last lines, then confirm the sha on the remote:  ",
+			"git push origin HEAD 2>&1 | tail -3 && gh api repos/OWNER/REPO/commits/SHA --jq .sha",
+		]),
+	},
+	{
 		"id": "no_verify",
 		# `[^|;&]*` also crosses NEWLINES, so in a multi-line script it scanned
 		# past the end of the commit and matched a `-n` on any later line --
