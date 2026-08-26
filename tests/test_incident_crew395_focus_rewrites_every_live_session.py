@@ -81,3 +81,20 @@ def test_incident_crew395_a_founder_focus_line_on_the_board_rewrites_goals_once(
     # a second session delivering the same board is not a second rewrite
     assert bd.apply_focus(entries, gg) == 0
     assert sum(1 for l in gg.LEDGER.read_text().splitlines() if '"kind":"focus"' in l) == 1
+
+
+def test_incident_crew395_blocked_on_a_direction_the_focus_already_gives_is_refused(tmp_path):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("dod_guard", os.path.join(HERE, "dod-guard.py"))
+    dg = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(dg)
+    dg.FOCUS_FILE = tmp_path / "FOCUS.json"
+    asks = ("BLOCKED: the board has 138 items.\nTried: the claim list.\nError: none.\n"
+            "Need: the founder to decide which item comes first.\nWho: founder.\n")
+    hand = ("BLOCKED: vault seed needs a tap.\nTried: gh workflow run vault-seed.yml.\n"
+            "Error: touch required.\nNeed: a YubiKey tap from the founder.\nWho: founder.\n")
+    assert dg.offences(asks) == []                      # no focus: nothing to hold it to
+    dg.FOCUS_FILE.write_text(json.dumps({"text": "crew#284: finish KINI"}))
+    out = dg.offences(asks)
+    assert len(out) == 1 and "crew#284: finish KINI" in out[0]
+    assert dg.offences(hand) == []                      # a physical hand is not a direction
