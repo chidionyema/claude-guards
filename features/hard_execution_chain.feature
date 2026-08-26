@@ -70,3 +70,9 @@ Feature: Hard execution chain (crew#306)
     Given an open crew item labelled red-alert with no assignee and no CLAIM comment
     When auto-objective --scan runs
     Then it prints RED crew#N and pages the operator, and an owned red-alert item is left alone
+
+  Scenario: estate_board claim writes a CLAIM comment and an unknown subcommand exits 2 (crew#307 incident)
+    When a session runs estate_board.py claim N
+    Then a comment starting with CLAIM is posted and "CLAIM crew#N posted" is printed
+    When a session runs estate_board.py with an unknown subcommand
+    Then it exits 2 with usage instead of exiting 0 silently
