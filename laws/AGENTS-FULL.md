@@ -1889,3 +1889,51 @@ device in his hand only (`--physical`); `blocker-guard.py` and `dod-guard.py` re
 use (claude-guards#65). You are breaking it when you ask him to open a console.
 
 **Sharpened 2026-08-25, second miss.** Founder: "again i missed it, i manage 8 agents concurrently, did you send to telegram also? i said it needs to be loud, if it's blocking, and seamless" and "i should never miss a beat". The terminal push reached one of eight terminals. The protocol is now one command: `python3 ~/.claude/scripts/founder-blocker.py "<what he must do>" <url-or-word>` sends to the Telegram home channel, pins it, records the message_id in the telegram ledger and prints the `FOUNDER ACTION:` line for reply line 2. `blocker-guard.py` (Stop hook) refuses any reply carrying `FOUNDER ACTION:` without a ledgered send in the last hour, proved both ways in its own file. Residual: the guard proves a pinned message exists, not that he read it.
+
+## LAW 50 — The data map is discovered, never typed
+
+**Fires:** every run of `crew/science/datamap.py --check`, and the moment the estate grows a kind
+of world no domain enumerates.
+
+Founder, 2026-08-26: "map all the data points in the estate, anything that produces data and
+anything that can be measured ... nothing is missed from infra to platform to agent transcripts to
+apps and apis to our k8s and internals ... find a creative way to automate this so this is the
+first and last time we ever need to do this and also a way to guarantee you don't miss anything.
+this needs to be encapsulated in law."
+
+**The incident.** `crew/science/datamap.py` on 2026-08-26 held `WHY_UNCOLLECTED` (18 entries)
+and `NEVER_EMITTED` (8 entries), both typed by hand in a session that has since ended. The
+inventory it graded had 192 rows; 38 carried `collected: False` and were graded, 154 carried no
+verdict. A new launchd job, a new sqlite table, a new HTTPRoute or a new MCP server appeared
+nowhere until a person remembered to type it. crew#320 and crew#319 were the open tickets.
+
+**The rule.** The map is the output of a program, and the program is closed-world:
+
+- `crew/science/producers.py`: one function per domain, each enumerating every producer of its
+  kind from the world itself (inventory rows, sqlite tables, warehouse tables, Kubernetes
+  manifests and live objects, public hostnames, hooks, MCP servers, repos and workflows,
+  transcript directories, the act register). Adding a producer by typing its name is the
+  violation.
+- `crew/science/verdicts.json`: the register. Every producer must match an entry by key glob
+  (optionally kind glob; first match wins). COLLECTED names a reader; EXCLUDED names a why;
+  WIRED_NEVER, WRITER_DEAD and NEVER_EMITTED name a crew ticket. No match is UNEXPLAINED.
+- `crew/science/datamap.py --check`: red on one UNEXPLAINED producer, one gap without a ticket,
+  one BLIND domain not named in `blind_allowed`, or one domain that shrank by more than half
+  against `science/census.json`. `--file-tickets` opens the missing tickets itself and writes
+  the number back into the register.
+- Landed where sessions cannot walk past it: `scripts/verify.d/26-datamap-register.sh` in CI and
+  the `data map` row of `STATE.md` from `scripts/estate-snapshot`.
+
+**Proved both ways.** `tests/test_incident_datamap_was_a_hand_typed_list.py`: an unexplained
+producer turns the gate red; a ticketed gap leaves it green; a BLIND domain is allowed only by
+name; a domain that halves is SHAPE CHANGED; every domain raises rather than returns empty when
+its world is missing.
+
+**Residual.** A class of world with no domain is invisible to this law. That is why rule 4 in
+the resident section binds the PR that introduces the class, and why the list of domains is
+printed in every gate run: the reader can see what is enumerated and ask what is not.
+
+**You are breaking it when** you add a name to a list in `datamap.py`; when a domain returns an
+empty list instead of raising on a missing world; when you add a scheduler, store or account
+without a domain for it; when a gap entry has a `why` but no `ticket`; when `blind_allowed`
+grows without a ticket that will remove the entry.
