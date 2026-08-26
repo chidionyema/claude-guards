@@ -148,6 +148,15 @@
     "--check"
    ],
    "max_age_days": 1
+  },
+  {
+   "id": "static-secret-gate",
+   "what_breaks": "A long-lived credential (OCI API pem, gh oauth token, plaintext .env) sits on this Mac or in the estate tree; one stolen laptop or one leaked file is every account at once.",
+   "why": "crew#227 CP7 identity: every static credential is replaced by a short-lived, identity-bound one (OIDC -> UPST, ESO from OCI Vault, Keychain). idp#102 shipped bin/static-secret-gate and idp-ci proves it both ways on fixtures, but a fixture proof never says how many real credentials remain. This drill runs the gate live; it is red until the count is 0 and that red row is the honest state of CP7 (LAW 28).",
+   "cmd": [
+    "{IDP}/bin/static-secret-gate"
+   ],
+   "max_age_days": 1
   }
  ],
  "retired": [
