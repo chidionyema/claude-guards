@@ -70,6 +70,8 @@ def retry_decision(payload: dict, pending: list[str]) -> dict | None:
         board.ledger({"guard": "idle-guard-v2", "event": "blind", "session": (payload.get("session_id") or "")[:8]})
         return None
     items = board.unclaimed(issues)
+    gg = _gg()
+    items = gg.focus_filter(items, gg.read_focus().get("text", ""))  # crew#395: a focus narrows the claim list
     if not items:
         return None
     board.ledger({"guard": "idle-guard-v2", "event": "false_idle", "session": (payload.get("session_id") or "")[:8],
@@ -104,6 +106,14 @@ def decide(payload: dict, gg=None) -> dict | None:
     goal = st.get("goal", "")
     num = board.goal_number(goal)
 
+    if user.strip().startswith("FOCUS:"):
+        # crew#395: a founder FOCUS: line rewrites every live session's goal, this one
+        # included, before any session reads a transcript and asks. Nothing waits on him.
+        text = user.strip()[len("FOCUS:"):].strip()
+        done = gg.focus(text, f"terminal:{session[:8]}") if text else []
+        board.ledger({"guard": "auto-objective", "event": "focus", "session": session[:8],
+                      "sessions": len(done), "goal": text[:200]})
+        return None
     word = board.founder_word(user)
     if word in ("STOP", "RELEASE"):
         if num and st.get("auto_claimed") == num:
