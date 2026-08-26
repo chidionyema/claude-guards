@@ -28,5 +28,5 @@ def test_incident_founder_blocker_sent_a_flag(monkeypatch):
             fb.parse_argv(argv)
         assert e.value.code == 2, argv
     assert fb.parse_argv(["Raise the node pool", "--staged", "30", "--session", "abc"]) == (
-        ["Raise the node pool"], "abc", 30, False)
-    assert fb.parse_argv(["Tap the YubiKey", "--physical"]) == (["Tap the YubiKey"], "", None, True)
+        ["Raise the node pool"], "abc", 30, False, None)
+    assert fb.parse_argv(["Tap the YubiKey", "--physical"]) == (["Tap the YubiKey"], "", None, True, None)

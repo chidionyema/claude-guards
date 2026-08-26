@@ -450,3 +450,17 @@ messages verbatim.
 output already acted on; any standing directive already in a memory file — cite the filename.
 
 **Never drop:** a decision, a file path, a command or an error string.
+
+# Capabilities register — read before writing `FOUNDER ACTION:` (crew#325, 2026-08-26)
+
+Founder, 2026-08-26: "we have lost a whole day because of this ... everyone claiming founder
+dependency." Four sessions wrote "founder action: create the GitHub App" for a credential any
+session can mint. A `FOUNDER ACTION:` line is refused unless the item names the row here it
+checked and why it does not apply. Append a row the moment you find a self-serve path.
+
+| Need | Self-serve path | Since |
+|------|-----------------|-------|
+| Flux git writer credential (idp-writer) | deploy key: `ssh-keygen -t ed25519`, `gh api repos/chidionyema/idp/keys -F read_only=false`, store as `SEED_FLUX_WRITER_IDENTITY_B64`/`SEED_FLUX_WRITER_PUB`, `gh workflow run vault-seed.yml -f entry=flux-writer`. No GitHub App. | idp#248 |
+| Any vault secret | `gh secret set SEED_<KEY>` then `gh workflow run vault-seed.yml -f entry=<entry>` (`.github/workflows/vault-seed.yml`); litellm-upstream by `oke-check` apply | idp#243, idp#241 |
+| Repo admin operations (deploy keys, secrets, rulesets) | `gh` in any session acts as the founder's account; it is repo admin | always |
+| Cluster/OCI state without kubectl | `gh workflow run oke-check.yml -f mode=check` rows (the estate MCP reads the laptop catalog, not the cluster) | idp#241 |
