@@ -643,6 +643,43 @@ def rule_restart_kills_a_live_build(cmd: str) -> str | None:
             + _escape("runner-busy-intended"))
 
 
+# ---------------------------------------------------- a worktree path with no .git
+
+#: Session 4e5b5e8f, 2026-08-26: `git worktree remove .wt-bs-auth` timed out half way (node_modules)
+#: and had already deleted the worktree's `.git` link. The next `cd .wt-bs-auth && git checkout -B
+#: … && git reset --hard origin/main` walked up to the MAIN checkout ~/dev/code/idp and discarded
+#: its uncommitted tracked changes. The class: a git command aimed at a directory that is no
+#: longer a worktree root silently acts on whichever repository contains it.
+_SESSION_CWD: str | None = None
+
+
+def _orphaned_dir(path: str) -> str | None:
+    """`path` when it exists, has no .git entry, and git resolves it to a DIFFERENT toplevel."""
+    if not path or not os.path.isdir(path):
+        return None
+    if os.path.lexists(os.path.join(path, ".git")):
+        return None
+    root = _worktree_root(path)
+    if root and os.path.realpath(root) != os.path.realpath(path):
+        return root
+    return None
+
+
+def orphan_state(cmd: str) -> dict | None:
+    """Input for command.rego's orphaned_worktree rule: the `.wt-*`/worktrees dir this command
+    targets (cd, -C or the session cwd) when it has no .git entry, and the checkout git would
+    silently act on instead. Rego cannot stat, so the adapter answers that one question."""
+    targets = [_expand(m.group("path").strip("'\""), cmd)
+               for pat in (_LEADING_CD, _GIT_DASH_C) for m in pat.finditer(cmd)]
+    for t in targets or ([_SESSION_CWD] if _SESSION_CWD else []):
+        if not (os.path.basename(os.path.normpath(t)).startswith(".wt-") or "/worktrees/" in t):
+            continue
+        parent = _orphaned_dir(t)
+        if parent:
+            return {"dir": t, "parent": parent}
+    return None
+
+
 RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
          rule_commit_in_shared_checkout, rule_merge_red_pr,
          rule_restart_kills_a_live_build)
@@ -687,7 +724,8 @@ def opa_ask(cmd: str) -> tuple[list[str], list[str], str | None]:
     for pat in _OPA_IGNORE:
         argv[3:3] = ["--ignore", pat]
     try:
-        out = subprocess.run(argv, input=json.dumps({"command": cmd, "arch": platform.machine()}),
+        out = subprocess.run(argv, input=json.dumps({"command": cmd, "arch": platform.machine(),
+                                               "orphaned_worktree": orphan_state(cmd)}),
                              capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError) as exc:
         return [], [], f"opa eval did not run: {exc}"
@@ -749,6 +787,21 @@ def decide(cmd: str, skip: tuple[str, ...] = ()) -> tuple[str, str] | None:
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
+    # orphan_state both ways: a `.wt-*` dir with no .git inside a repo names its parent; a live
+    # worktree (has .git) and the repo root give None. The refusal itself is Rego (opa test).
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = os.path.join(tmp, "repo"); dead = os.path.join(repo, ".wt-dead"); live = os.path.join(repo, ".wt-live")
+        os.makedirs(dead); os.makedirs(live)
+        subprocess.run([_real_tool("git"), "init", "-q", repo], check=True, capture_output=True)
+        open(os.path.join(live, ".git"), "w").write("gitdir: nowhere\n")
+        for cmd, want in [(f"cd {dead} && git reset --hard origin/main", True),
+                          (f"git -C {dead} checkout -B x origin/main", True),
+                          (f"cd {live} && git status", False), (f"cd {repo} && git status", False)]:
+            got = orphan_state(cmd) is not None
+            print(f"  {'ok  ' if got == want else 'FAIL'}  orphan_state {'set' if want else 'unset'}: {cmd.replace(tmp, '<tmp>')}")
+            if got != want:
+                return 1
     cases = [
         ("gh workflow enable 337731742  # autoscale-intended", None),
         ("gh workflow disable 337731742", None),
@@ -1091,7 +1144,8 @@ def main() -> int:
     cmd = str(payload.get("tool_input", {}).get("command", ""))
     if not cmd:
         return 0
-    global _ACTIVE_REPO
+    global _ACTIVE_REPO, _SESSION_CWD
+    _SESSION_CWD = payload.get("cwd")
     _ACTIVE_REPO = _repo_for(cmd, payload.get("cwd"))
     verdict = decide(cmd)
     if verdict:

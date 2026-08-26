@@ -54,7 +54,12 @@ legacy := {
 	# could not be run. rules_count is unchanged: `grep -c '^def rule_'` is the same before
 	# and after, because no rule was added. Six of the six lines are the flag pattern, its
 	# two-line comment, and passing the name through to gh.
-	"rule-guard.py": 1120,
+	# 1120 -> 1174 on 2026-08-26 (session 4e5b5e8f). No refusal was added: rules_count is
+	# still 6 and the refusal is command.rego's orphaned_worktree rule. The lines are the
+	# state Rego cannot gather -- orphan_state() stats the targeted `.wt-*` dir and names
+	# the checkout git would act on -- plus its both-ways selftest. This is the shape the
+	# header prescribes for a live question: adapter gathers, Rego decides.
+	"rule-guard.py": 1174,
 	"ticket-gate.py": 1098,
 	"goal-guard.py": 960,
 	"tool-drip-guard.py": 641,
