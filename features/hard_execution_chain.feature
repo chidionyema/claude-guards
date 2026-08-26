@@ -77,3 +77,8 @@ Feature: Hard execution chain (crew#306)
     Then estate_watch does not report STALE
     When the last receipt is older than 7 hours
     Then estate_watch reports STALE
+
+  Scenario: the estate audit goes red when the shared git hook router stops dispatching (crew#326)
+    When ~/.estate/guards/bin/router-selftest exits 0 then the row is ok
+    When it exits non-zero then the row is critical
+    When the selftest file is missing then the row is unknown, never ok
