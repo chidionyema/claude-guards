@@ -102,11 +102,17 @@ def render(job, home):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true")
+    # --selftest is --check under the name estate-selftest.py discovers, so the twice-daily
+    # guard-selftest job alerts when the manifest drifts from the live plists (crew#312:
+    # 23 jobs had drifted and nothing said so until a person ran --check).
+    ap.add_argument("--selftest", action="store_true", help="same as --check")
     ap.add_argument("--write", action="store_true")
     ap.add_argument("--into", default=LIVE)
     ap.add_argument("--platform", default="launchd")
     ap.add_argument("--home", default=os.path.expanduser("~"))
     a = ap.parse_args()
+    if a.selftest:
+        a.check = True
 
     if a.platform == "windows":
         # Delegated rather than reimplemented: Task Scheduler XML shares no keys
