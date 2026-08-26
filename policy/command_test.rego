@@ -238,3 +238,16 @@ test_git_in_live_worktree_is_permitted if {
 	count(deny) == 0 with input as {"command": "cd /x/idp/.wt-dead && ls", "orphaned_worktree": orphan}
 	count(deny) == 0 with input as {"command": "git status"}
 }
+
+foreign := {"repo": "/x/.estate", "files": ["REQUIREMENTS.jsonl"]}
+
+test_discarding_a_peer_sessions_edit_is_refused if {
+	count(deny) > 0 with input as {"command": "cd /x/.estate && git reset --hard origin/main", "foreign_changes": foreign}
+	some m in deny with input as {"command": "git -C /x/.estate checkout -- REQUIREMENTS.jsonl", "foreign_changes": foreign}
+	contains(m, "REQUIREMENTS.jsonl")
+}
+
+test_discarding_your_own_edits_or_with_the_marker_is_allowed if {
+	count(deny) == 0 with input as {"command": "cd /x/.estate && git reset --hard origin/main", "foreign_changes": null}
+	count(deny) == 0 with input as {"command": "cd /x/.estate && git reset --hard origin/main  # discard-foreign-intended", "foreign_changes": foreign}
+}
