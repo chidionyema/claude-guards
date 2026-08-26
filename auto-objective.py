@@ -1,0 +1,244 @@
+#!/usr/bin/env python3
+"""Stop hook (crew#306 CP1 + CP4). A session with no ACTIVE goal does not end: it is handed
+the oldest open unclaimed crew item, the claim is posted, and the stop is refused until the
+agent has executed against it or declared a validated BLOCKED:.
+
+Founder, 2026-08-26: "The session cannot end. The agent must execute or declare BLOCKED:.
+Only escape: founder says STOP."
+
+Words the founder can say (last user message, exact):
+  STOP       goal cleared, claim released, session may end
+  RELEASE    same, and the item is reassigned by the next session that stops goalless
+  BLOCKED:   he authorises the blocker himself
+
+A BLOCKED: reply from the agent must carry Tried: Error: Need: Who:. With all four it is
+posted on the claimed issue and the stop is permitted; without them it is refused and a
+`false_blocker` row goes on the ledger.
+
+Fails open only on BLIND: the board unreadable, the transcript unreadable. A kill switch
+exists for an outage: touch ~/.claude/state/auto-objective.off.
+
+Selftest: python3 auto-objective.py --selftest.  Scan (CP4): python3 auto-objective.py --scan.
+"""
+from __future__ import annotations
+
+import importlib.util
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import estate_board as board  # noqa: E402
+
+OFF = Path(os.path.expanduser("~/.claude/state/auto-objective.off"))
+BLOCKED_STALE_S = 3600
+
+
+def _gg():
+    spec = importlib.util.spec_from_file_location("goal_guard", HERE / "goal-guard.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def decide(payload: dict, gg=None) -> dict | None:
+    """None permits; a dict is the block decision."""
+    if OFF.exists():
+        return None
+    gg = gg or _gg()
+    session = payload.get("session_id") or ""
+    transcript = payload.get("transcript_path") or ""
+    if not session or not transcript or not os.path.exists(transcript):
+        return None
+    st = gg.read_state(session)
+    lane = os.environ.get("CLAUDE_LANE", "default")
+    user, reply = board.last_texts(transcript)
+    goal = st.get("goal", "")
+    num = board.goal_number(goal)
+
+    word = board.founder_word(user)
+    if word in ("STOP", "RELEASE"):
+        if num and st.get("auto_claimed") == num:
+            board.release(num, session, f"founder said {word}")
+        st["goal"] = ""; st["auto_claimed"] = 0
+        gg.write_state(session, st)
+        board.ledger({"guard": "auto-objective", "event": word.lower(), "session": session[:8], "item": num})
+        return None
+    if word == "BLOCKED":
+        board.ledger({"guard": "auto-objective", "event": "founder_blocked", "session": session[:8], "item": num})
+        return None
+
+    if reply.lstrip().startswith(board.BLOCKED):
+        missing = board.blocked_missing(reply)
+        if missing:
+            board.ledger({"guard": "auto-objective", "event": "false_blocker", "session": session[:8],
+                          "item": num, "missing": missing})
+            return {"decision": "block",
+                    "reason": f"[auto-objective] BLOCKED: is not validated. Missing {', '.join(missing)}. "
+                              "Give what you tried, the exact error, what you need and who can "
+                              "unblock, one line each, then stop again. A false blocker is a rogue "
+                              "session and is on the ledger."}
+        if num:
+            board.comment(num, reply.strip()[:4000])
+        st["blocked_at"] = int(time.time())
+        gg.write_state(session, st)
+        board.ledger({"guard": "auto-objective", "event": "blocked", "session": session[:8], "item": num})
+        return None
+
+    if goal:
+        if st.get("auto_claimed") and not st.get("last_progress_at", 0) > st.get("auto_claimed_at", 0):
+            return {"decision": "block",
+                    "reason": f"[auto-objective] OBJECTIVE {goal} was assigned and nothing has been "
+                              "executed against it. Execute now, or declare BLOCKED: with Tried: "
+                              "Error: Need: Who:. Founder word STOP is the only other exit."}
+        return None
+
+    item = board.oldest_unclaimed()
+    if item == "BLIND":
+        board.ledger({"guard": "auto-objective", "event": "blind", "session": session[:8]})
+        return None
+    if item is None:
+        board.ledger({"guard": "auto-objective", "event": "board_empty", "session": session[:8]})
+        return None
+    num = item["number"]
+    goal = f"crew#{num}: {item['title']}"
+    st["goal"] = goal; st["auto_claimed"] = num; st["auto_claimed_at"] = int(time.time())
+    gg.write_state(session, st)
+    board.claim(num, session, lane, "auto-objective: session stopped with no ACTIVE goal")
+    board.ledger({"guard": "auto-objective", "event": "assigned", "session": session[:8], "item": num})
+    return {"decision": "block",
+            "reason": f"[auto-objective] No ACTIVE goal, so one is assigned: {goal} "
+                      f"(https://github.com/{board.REPO}/issues/{num}). The claim comment is posted. "
+                      "Read the issue, define done in commands, execute. This session does not end "
+                      "until progress is on disk or you declare BLOCKED: with Tried: Error: Need: Who:."}
+
+
+def scan() -> int:
+    """CP4: every BLOCKED: comment older than 1h with no VALID:/INVALID: reply reaches the
+    founder; every INVALID: reply flags the session on the ledger. Prints one line per finding."""
+    issues = board.open_issues()
+    if issues is None:
+        print("BLIND board unreadable"); return 0
+    now = time.time()
+    n = 0
+    for i in issues:
+        cs = i.get("comments", [])
+        for k, c in enumerate(cs):
+            b = (c.get("body") or "").lstrip()
+            if not b.startswith(board.BLOCKED):
+                continue
+            later = [(x.get("body") or "").lstrip() for x in cs[k + 1:]]
+            verdict = next((l for l in later if l.startswith((board.VALID, board.INVALID))), "")
+            try:
+                age = now - time.mktime(time.strptime(c.get("created_at", "")[:19], "%Y-%m-%dT%H:%M:%S")) + time.timezone
+            except Exception:
+                age = 0
+            if verdict.startswith(board.INVALID):
+                board.ledger({"guard": "auto-objective", "event": "rogue_blocker", "item": i["number"]})
+                print(f"ROGUE crew#{i['number']} blocker judged INVALID"); n += 1
+            elif not verdict and age > BLOCKED_STALE_S:
+                print(f"STALE crew#{i['number']} BLOCKED {int(age/60)}m with no VALID:/INVALID:"); n += 1
+                try:
+                    from estate import estate_alert as ea
+                    ea.send_operator_alert(
+                        f"BLOCKED on crew#{i['number']} for {int(age/60)}m, nobody validated it. "
+                        f"Reply VALID: or INVALID: on https://github.com/{board.REPO}/issues/{i['number']}",
+                        debounce_key=f"blocked-stale-{i['number']}")
+                except Exception:
+                    pass
+    print(f"scan: {n} finding(s)")
+    return 0
+
+
+def selftest() -> int:
+    import tempfile
+    ok = True
+    def ck(label, cond):
+        nonlocal ok
+        ok = ok and bool(cond); print(("PASS " if cond else "FAIL ") + label)
+    d = Path(tempfile.mkdtemp(prefix="autoobj-"))
+    fx = d / "fx.json"
+    os.environ["ESTATE_BOARD_FIXTURE"] = str(fx)
+    gg = _gg(); gg.STATE_DIR = d / "goal"; gg.LEDGER = d / "gl.jsonl"
+    board.LEDGER = d / "ledger.jsonl"
+    global OFF
+    OFF = d / "off"
+
+    def tr(user="", reply=""):
+        p = d / f"t{time.time_ns()}.jsonl"
+        rows = []
+        if user:
+            rows.append({"type": "user", "message": {"role": "user", "content": user}})
+        if reply:
+            rows.append({"type": "assistant", "message": {"role": "assistant",
+                                                          "content": [{"type": "text", "text": reply}]}})
+        p.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+        return str(p)
+
+    def run(sess, **kw):
+        return decide({"session_id": sess, "transcript_path": tr(**kw)}, gg)
+
+    fx.write_text(json.dumps([{"number": 41, "title": "old item", "labels": [], "assignees": [], "comments": []},
+                              {"number": 42, "title": "newer", "labels": [], "assignees": [], "comments": []}]))
+    r = run("s1", reply="WORKING: nothing")
+    ck("goalless stop is refused and the oldest item is assigned", r and "crew#41" in r["reason"])
+    ck("the goal is on disk for goal-guard", gg.read_state("s1")["goal"].startswith("crew#41"))
+    ck("the claim comment was posted", "CLAIM " in open(str(fx) + ".posted.jsonl").read())
+    r = run("s1", reply="WORKING: still nothing")
+    ck("second stop with zero progress is refused again", r and "nothing has been executed" in r["reason"])
+    st = gg.read_state("s1"); st["last_progress_at"] = int(time.time()) + 1; gg.write_state("s1", st)
+    ck("once progress is on disk the stop is permitted", run("s1", reply="INVENTORY: x") is None)
+    r = run("s2", reply="BLOCKED: gh is down")
+    ck("a bare BLOCKED: is refused and names the missing fields", r and "Tried:" in r["reason"])
+    ck("false blocker is on the ledger", "false_blocker" in board.LEDGER.read_text())
+    r = run("s2", reply="BLOCKED: gh down\nTried: gh auth\nError: 401\nNeed: token\nWho: founder")
+    ck("a validated BLOCKED: permits the stop", r is None)
+    ck("founder STOP clears the goal and permits", run("s1", user="STOP", reply="x") is None
+       and gg.read_state("s1")["goal"] == "")
+    ck("released claim is posted", "RELEASE " in open(str(fx) + ".posted.jsonl").read())
+    fx.write_text("garbage")
+    ck("BLIND board permits (fail open)", run("s3", reply="x") is None)
+    fx.write_text("[]")
+    ck("empty board permits", run("s4", reply="x") is None)
+    fx.write_text(json.dumps([{"number": 7, "title": "t", "labels": [], "assignees": [], "comments": []}]))
+    OFF.write_text("")
+    ck("kill switch permits everything", run("s5", reply="x") is None)
+    OFF.unlink()
+    ck("a session with no transcript is left alone", decide({"session_id": "s6", "transcript_path": "/nope"}, gg) is None)
+    fx.write_text(json.dumps([{"number": 9, "title": "t", "labels": [], "assignees": [], "comments": [
+        {"body": "BLOCKED: x", "created_at": "2026-01-01T00:00:00Z"}]}]))
+    import io, contextlib
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf): scan()
+    ck("scan flags a stale unvalidated BLOCKED", "STALE crew#9" in buf.getvalue())
+    print("PASS auto-objective" if ok else "FAIL auto-objective")
+    return 0 if ok else 1
+
+
+def main() -> int:
+    if "--selftest" in sys.argv:
+        return selftest()
+    if "--scan" in sys.argv:
+        return scan()
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        return 0
+    try:
+        r = decide(payload)
+    except Exception:
+        try:
+            import guard_report; guard_report.broken(__file__, 0)
+        except Exception:
+            pass
+        return 0
+    if r:
+        print(json.dumps(r))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
