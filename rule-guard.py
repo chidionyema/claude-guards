@@ -1111,7 +1111,7 @@ def strip_heredocs(cmd: str) -> str:
     return "".join(out)
 
 
-_COMMIT_MSG = re.compile(r"""(-m|--message)(=|\s+)(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
+_COMMIT_MSG = re.compile(r"""(-m|--message|--body|--title|--caption)(=|\s+)(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
                          re.DOTALL)
 
 
