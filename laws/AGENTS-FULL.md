@@ -1850,3 +1850,42 @@ a plist, unit file or cron line names an absolute path to a script instead of be
 rendered from a template; when a "temporary" fallback path is a real path on this laptop;
 when the fixture that proves the guard is excluded by a comment rather than by its
 directory; when you fix the 17 files you touched and do not print the count for the rest.
+
+
+## LAW 47 — A founder blocker is loud, visible and one action
+
+Founder, 2026-08-25, verbatim: "you need to be clear and make things easy and intuitive, i miss too
+many things i need to do, if something depends on me and is blocking, it needs to be loud, visible
+and super friction free for me to act, law."
+
+Incident: crew#227 CP3. The apply needed a policy change only the tenancy owner can make. The
+session started the bootstrap in the background with its output piped through `tail`, so the
+Oracle sign-in URL went into a file nobody read, and the reply said "the tab should be open". He
+had signed in at 20:37 without the session noticing, and the run it was waiting on had been killed.
+
+Rank: 5c, a sharpening of LAW 5 (unblock yourself): when you genuinely cannot, the hand-back is
+itself a deliverable and it is graded on whether he could act in one move.
+
+Protocol. The moment a step depends on him: (1) PushNotification, under 200 characters, leading
+with the action. (2) Line 1 of the reply is `BLOCKED:` and line 2 starts `FOUNDER ACTION:` with the
+exact URL, button or word, and where it is (which tab, which app). (3) Run the prompting command in
+the foreground or capture its URL to the reply, never through `tail` into a task file. (4) Poll the
+thing his action changes (a token file, an approval state) so the session resumes the instant he
+acts, without him having to say so.
+
+You are breaking it when the ask is below a `---`; when the URL is in a log; when you write
+"should be open"; when he has to ask what he needs to do.
+
+Sharpened 2026-08-26 (crew#281, "lazy consensus"). Founder, verbatim: "Before asking the founder a
+question, evaluate: Can this be auto-configured with a safe default? Can it be staged for
+confirmation? If yes, stage it. The phrase FOUNDER ACTION: is now heavily restricted." Incident: a
+session sent him a FOUNDER ACTION to create a GitHub OAuth App in a browser; the client is created
+by Terraform through Cloudflare Access instead (idp#150). So: read `idp/estate-defaults.yaml`
+first; a decision it makes is not a question. A step a token or an API can take is code. A step
+that needs his word is `STAGED: <action> is ready. Reply 'go' to execute immediately, 'hold' to
+review. Auto-activating in <N> minutes.`, sent with `founder-blocker.py "<action>" --staged [N]`,
+and the staging session executes at N minutes unless `hold` arrives. `FOUNDER ACTION:` is for a
+device in his hand only (`--physical`); `blocker-guard.py` and `dod-guard.py` refuse every other
+use (claude-guards#65). You are breaking it when you ask him to open a console.
+
+**Sharpened 2026-08-25, second miss.** Founder: "again i missed it, i manage 8 agents concurrently, did you send to telegram also? i said it needs to be loud, if it's blocking, and seamless" and "i should never miss a beat". The terminal push reached one of eight terminals. The protocol is now one command: `python3 ~/.claude/scripts/founder-blocker.py "<what he must do>" <url-or-word>` sends to the Telegram home channel, pins it, records the message_id in the telegram ledger and prints the `FOUNDER ACTION:` line for reply line 2. `blocker-guard.py` (Stop hook) refuses any reply carrying `FOUNDER ACTION:` without a ledgered send in the last hour, proved both ways in its own file. Residual: the guard proves a pinned message exists, not that he read it.

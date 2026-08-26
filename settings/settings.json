@@ -94,12 +94,25 @@
             "command": "python3 $HOME/.claude/scripts/friction-relay.py"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/feed-guard.py SessionStart"
+          }
+        ]
       }
     ],
     "Stop": [
       {
         "matcher": "",
         "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/opa-hook.py",
+            "timeout": 15
+          },
           {
             "type": "command",
             "command": "python3 $HOME/.claude/scripts/secret-scrub.py",
@@ -113,6 +126,11 @@
           {
             "type": "command",
             "command": "python3 $HOME/.claude/scripts/jargon-guard.py",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/dod-guard.py",
             "timeout": 10
           },
           {
@@ -132,8 +150,25 @@
           },
           {
             "type": "command",
+            "command": "python3 $HOME/.claude/scripts/founder-deliver.py",
+            "timeout": 20
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/blocker-guard.py"
+          },
+          {
+            "type": "command",
             "command": "python3 $HOME/.claude/scripts/idle-guard.py",
             "timeout": 15
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/feed-guard.py Stop"
           }
         ]
       }
@@ -165,6 +200,14 @@
             "type": "command",
             "command": "python3 $HOME/.claude/scripts/board-deliver.py",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/feed-guard.py UserPromptSubmit"
           }
         ]
       }

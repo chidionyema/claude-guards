@@ -160,6 +160,10 @@
     "api.github.com": {
       "is": "the crew docs/rulings listing the policy job reads (claude-guards#60); same outage surface as github.com",
       "covered_by": "github-gone"
+    },
+    "gist.github.com": {
+      "is": "gh's credential helper entry in shell/gitconfig; same outage surface as github.com",
+      "covered_by": "github-gone"
     }
   },
   "credentials": {
