@@ -37,6 +37,32 @@ import sys
 from pathlib import Path
 
 STATE = Path.home() / ".claude" / "state" / "dod-guard.json"
+FOCUS_FILE = Path.home() / ".claude" / "state" / "goal" / "FOCUS.json"   # written by goal-guard --focus
+# crew#395: a BLOCKED: whose Need: asks the founder for a direction is a false blocker while a
+# FOCUS: stands -- the direction is the focus. A Need: for a hand only he has (a YubiKey tap,
+# a billing authorisation) is not a direction and passes.
+_ASKS_FOUNDER = re.compile(r"\b(founder|him|his)\b", re.I)
+_ASKS_DIRECTION = re.compile(r"\b(decid\w*|decision|direction|priorit\w*|which (?:one|item|ticket|lane|goal)|"
+                             r"choose|choice|go-ahead|tell me|say (?:go|which|what)|what to (?:do|work on)|"
+                             r"confirm (?:the|which|what) (?:goal|priority|lane|item|ticket))\b", re.I)
+
+
+def standing_focus() -> str:
+    try:
+        return str(json.loads(FOCUS_FILE.read_text()).get("text") or "")
+    except Exception:
+        return ""
+
+
+def blocked_on_an_answered_goal(fold: str) -> str:
+    """The standing focus when a BLOCKED: reply's Need: asks the founder for a direction; else ''."""
+    focus = standing_focus()
+    if not focus:
+        return ""
+    for line in fold.splitlines():
+        if line.strip().startswith("Need:") and _ASKS_FOUNDER.search(line) and _ASKS_DIRECTION.search(line):
+            return focus
+    return ""
 MAX_BLOCKS_PER_SESSION = 3
 
 HANDOFF = ("Built:", "Use:", "Expect:", "Not done:", "Evidence:")
@@ -89,6 +115,12 @@ def offences(text: str) -> list[str]:
             out.append("STAGED: needs the sentence `Reply 'go' to execute immediately, 'hold' to review.`")
         if not re.search(r"Auto-activating in \d+ minutes", fold):
             out.append("STAGED: needs `Auto-activating in <N> minutes.` with a number.")
+    elif kind == "BLOCKED":
+        focus = blocked_on_an_answered_goal(fold)
+        if focus:
+            out.append("BLOCKED: asks the founder for a direction he has already given. The standing "
+                       f"focus is: {focus[:160]!r}. Work that, or run goal_graph.py --add under it; "
+                       "do not stop for an answer that is on disk.")
     if kind in ("DONE", "INVENTORY") and has_line(fold, "Evidence:") and not evidence_is_checkable(fold):
         out.append("`Evidence:` must contain a URL, a commit hash, a file path or a `command`.")
     return out
@@ -155,7 +187,21 @@ def selftest() -> int:
     staged = ("STAGED: platform/access apply (idp#150) is ready. Reply 'go' to execute immediately, 'hold' to "
               "review. Auto-activating in 60 minutes.\n")
     staged_bad = "STAGED: platform/access apply is ready, say go.\n"
+    import tempfile
+    global FOCUS_FILE
+    FOCUS_FILE = Path(tempfile.mkdtemp()) / "FOCUS.json"
+    blocked_dir = ("BLOCKED: the board has 138 items.\nTried: the claim list.\nError: none.\n"
+                   "Need: the founder to decide which item comes first.\nWho: founder.\n")
+    blocked_hand = ("BLOCKED: vault seed needs a tap.\nTried: gh workflow run vault-seed.yml.\n"
+                    "Error: touch required.\nNeed: a YubiKey tap from the founder.\nWho: founder.\n")
     ok = True
+    # crew#395, both ways: no focus -> the direction question passes; focus set -> it is refused,
+    # and a Need: for a physical hand still passes.
+    ok &= not offences(blocked_dir); print(f"blocked_dir/no-focus: {'PASS' if not offences(blocked_dir) else 'BLOCK'} {'ok' if not offences(blocked_dir) else 'WRONG'}")
+    FOCUS_FILE.write_text(json.dumps({"text": "crew#284: finish KINI"}))
+    got = bool(offences(blocked_dir)); ok &= got; print(f"blocked_dir/focus: {'BLOCK' if got else 'PASS'} {'ok' if got else 'WRONG'}")
+    got = bool(offences(blocked_hand)); ok &= not got; print(f"blocked_hand/focus: {'BLOCK' if got else 'PASS'} {'ok' if not got else 'WRONG'}")
+    FOCUS_FILE.unlink()
     for name, text, expect_block in (("bad", bad, True), ("bad2", bad2, True), ("good", good, False),
                                      ("good2", good2, False), ("working", working, False),
                                      ("staged", staged, False), ("staged_bad", staged_bad, True)):
