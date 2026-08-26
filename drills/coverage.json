@@ -5,7 +5,7 @@
 
   "_the_three_slots": "restart -- it stops and comes back on this machine. rebuild -- this Mac dies and it comes back on a new one. replace -- the vendor behind it is gone and the estate still works. Asking all three separately is the change: asked as one question, Aiden and the Kimi bridge both read as covered, because recovery-posture passes and it grades every job on this Mac.",
 
-  "_what_is_deliberately_left_red": "Three groups, and none of them is an oversight. 58 ledgers and 9 data trees that no offsite copy carries. 21 guards that only fire inside Claude Code, which is LAW 34's exact concern and already has a number on it (issue #53). 12 scheduled jobs that jobs/jobs.json cannot re-render, so they do not exist on a new machine. Writing a dismissal for any of those would turn a real hole into a green line, which is the failure this file exists to stop.",
+  "_what_is_deliberately_left_red": "Three groups, and none of them is an oversight: ledgers and data trees that no offsite copy carries; guards that only fire inside Claude Code, which is LAW 34's exact concern and already has a number on it (issue #53); scheduled jobs that jobs/jobs.json cannot re-render, so they do not exist on a new machine. The counts are whatever the SUMMARY line prints today; a number written here goes stale (the first version said 58/9/21/12 and was wrong within two days). Writing a dismissal for any of those would turn a real hole into a green line, which is the failure this file exists to stop.",
 
   "rules": [
     {
