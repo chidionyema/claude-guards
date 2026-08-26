@@ -35,6 +35,7 @@ import estate_board as board  # noqa: E402
 
 OFF = Path(os.path.expanduser("~/.claude/state/auto-objective.off"))
 BLOCKED_STALE_S = 3600
+RED_LABEL = "red-alert"
 
 
 def _gg():
@@ -169,6 +170,19 @@ def scan() -> int:
     now = time.time()
     n = 0
     for i in issues:
+        # LAW 50 rule 3: a red-alert item (the founder reported it more than once) with nobody
+        # on it is paged every tick until claimed. 2026-08-26: the catalogue 404 sat on the
+        # board with P0/P1 labels and no owner while he reported it again.
+        if RED_LABEL in [l.lower() for l in i.get("labels", [])] and not board.claimed(i):
+            print(f"RED crew#{i['number']} red-alert with no owner"); n += 1
+            try:
+                from estate import estate_alert as ea
+                ea.send_operator_alert(
+                    f"RED ALERT crew#{i['number']} has no owner: {i.get('title','')[:80]} "
+                    f"https://github.com/{board.REPO}/issues/{i['number']}",
+                    debounce_key=f"red-unowned-{i['number']}")
+            except Exception:
+                pass
         cs = i.get("comments", [])
         for k, c in enumerate(cs):
             b = (c.get("body") or "").lstrip()
@@ -187,14 +201,23 @@ def scan() -> int:
                 print(f"STALE crew#{i['number']} BLOCKED {int(age/60)}m with no VALID:/INVALID:"); n += 1
                 try:
                     from estate import estate_alert as ea
-                    ea.send_operator_alert(
-                        f"BLOCKED on crew#{i['number']} for {int(age/60)}m, nobody validated it. "
-                        f"Reply VALID: or INVALID: on https://github.com/{board.REPO}/issues/{i['number']}",
-                        debounce_key=f"blocked-stale-{i['number']}")
+                    # Founder, 2026-08-26, after four hours of "nobody validated it" on crew#301:
+                    # "how do i know i need to unblock?" The ping carries the action, not the age.
+                    ea.send_operator_alert(stale_blocked_text(i["number"], age, b),
+                                           debounce_key=f"blocked-stale-{i['number']}")
                 except Exception:
                     pass
     print(f"scan: {n} finding(s)")
     return 0
+
+
+def stale_blocked_text(number: int, age_s: float, blocked_body: str) -> str:
+    """The stale-BLOCKED ping is the action, never the age alone (founder, 2026-08-26, crew#301:
+    "how do i know i need to unblock?"). Quotes the Need:/Who: lines of the BLOCKED comment; a
+    comment without them is named rogue in the ping itself."""
+    need = " ".join(l.strip() for l in blocked_body.splitlines() if l.strip().startswith(("Need:", "Who:")))
+    return (f"BLOCKED on crew#{number} for {int(age_s/60)}m. {need or 'No Need:/Who: line; the session is rogue.'} "
+            f"Reply VALID: or INVALID: on https://github.com/{board.REPO}/issues/{number}")
 
 
 def selftest() -> int:
@@ -272,6 +295,13 @@ def selftest() -> int:
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf): scan()
     ck("scan flags a stale unvalidated BLOCKED", "STALE crew#9" in buf.getvalue())
+    fx.write_text(json.dumps([
+        {"number": 11, "title": "red", "labels": ["red-alert"], "assignees": [], "comments": []},
+        {"number": 12, "title": "red owned", "labels": ["red-alert"], "assignees": ["x"], "comments": []}]))
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf): scan()
+    ck("scan pages an unowned red-alert item", "RED crew#11" in buf.getvalue())
+    ck("scan leaves an owned red-alert item alone", "RED crew#12" not in buf.getvalue())
     print("PASS auto-objective" if ok else "FAIL auto-objective")
     return 0 if ok else 1
 
