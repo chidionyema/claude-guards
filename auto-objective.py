@@ -203,15 +203,21 @@ def scan() -> int:
                     from estate import estate_alert as ea
                     # Founder, 2026-08-26, after four hours of "nobody validated it" on crew#301:
                     # "how do i know i need to unblock?" The ping carries the action, not the age.
-                    need = " ".join(l.strip() for l in b.splitlines() if l.strip().startswith(("Need:", "Who:")))
-                    ea.send_operator_alert(
-                        f"BLOCKED on crew#{i['number']} for {int(age/60)}m. {need or 'No Need:/Who: line; the session is rogue.'} "
-                        f"Reply VALID: or INVALID: on https://github.com/{board.REPO}/issues/{i['number']}",
-                        debounce_key=f"blocked-stale-{i['number']}")
+                    ea.send_operator_alert(stale_blocked_text(i["number"], age, b),
+                                           debounce_key=f"blocked-stale-{i['number']}")
                 except Exception:
                     pass
     print(f"scan: {n} finding(s)")
     return 0
+
+
+def stale_blocked_text(number: int, age_s: float, blocked_body: str) -> str:
+    """The stale-BLOCKED ping is the action, never the age alone (founder, 2026-08-26, crew#301:
+    "how do i know i need to unblock?"). Quotes the Need:/Who: lines of the BLOCKED comment; a
+    comment without them is named rogue in the ping itself."""
+    need = " ".join(l.strip() for l in blocked_body.splitlines() if l.strip().startswith(("Need:", "Who:")))
+    return (f"BLOCKED on crew#{number} for {int(age_s/60)}m. {need or 'No Need:/Who: line; the session is rogue.'} "
+            f"Reply VALID: or INVALID: on https://github.com/{board.REPO}/issues/{number}")
 
 
 def selftest() -> int:
