@@ -106,10 +106,49 @@ def check_runners(d, mm):
             if not os.path.exists(a):
                 holes.append(f"{label}: target missing: {a}")
             elif covered(a, mm, gen) is None:
-                holes.append(f"{label}: not in git: {a}")
+                holes.append(f"{label}: not in git: {a}{refused_by(a)}")
             else:
                 ok += 1
+    # Git executes the hooks in core.hooksPath on every commit and push, so they are
+    # runners too. They sit in ~/.estate, whose .gitignore is "*" then "!guards/**":
+    # a file that rule refuses is executed, untracked, and reported as nothing (crew#64).
+    for a in hook_runners():
+        if covered(a, mm, gen) is None:
+            holes.append(f"hooks: not in git: {a}{refused_by(a)}")
+        else:
+            ok += 1
     return ok, holes
+
+
+def refused_by(path):
+    """Why git refuses to track path, or "" when no ignore rule does.
+
+    An untracked file you can see is a nuisance; one an ignore rule refuses without
+    saying so is the trap (crew#64: ~/.estate/.gitignore line 7 is "*", and a commit of
+    three files silently dropped scripts/inventory.py while reporting success).
+    """
+    d = path if os.path.isdir(path) else os.path.dirname(path)
+    rc, out, _ = sh(["git", "-C", d, "check-ignore", "-v", "--no-index", path])
+    if rc != 0 or not out.strip():
+        return ""
+    # check-ignore prints "<source>:<line>:<pattern>\t<path>"
+    parts = out.strip().split("\t")[0].split(":")
+    if len(parts) >= 3:
+        src, line, pat = parts[0], parts[1], ":".join(parts[2:])
+        # -v also reports a negation ("!guards/**") that admits the file; that is not a refusal.
+        if pat.startswith("!"):
+            return ""
+        return f" (refused by {src}:{line} `{pat}`)"
+    return " (refused by an ignore rule)"
+
+
+def hook_runners():
+    rc, out, _ = sh(["git", "config", "--global", "core.hooksPath"])
+    d = os.path.expanduser(out.strip()) if rc == 0 and out.strip() else ""
+    if not d or not os.path.isdir(d):
+        return []
+    return sorted(os.path.join(d, f) for f in os.listdir(d)
+                  if not f.startswith(".") and os.access(os.path.join(d, f), os.X_OK))
 
 
 def check_declared(d, mm):

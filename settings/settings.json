@@ -130,7 +130,11 @@
           },
           {
             "type": "command",
-            "command": "python3 $HOME/.claude/scripts/dod-guard.py",
+            "command": "python3 $HOME/.claude/scripts/dod-guard.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/assertion-guard.py",
             "timeout": 10
           },
           {
