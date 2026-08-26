@@ -65,3 +65,8 @@ Feature: Hard execution chain (crew#306)
     Given a command containing git push -q or --quiet
     When rule-guard judges it
     Then it is refused unless the command carries quiet-push-intended
+
+  Scenario: a red-alert item with no owner is paged every tick
+    Given an open crew item labelled red-alert with no assignee and no CLAIM comment
+    When auto-objective --scan runs
+    Then it prints RED crew#N and pages the operator, and an owned red-alert item is left alone
