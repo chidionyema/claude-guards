@@ -53,8 +53,29 @@ def names_physical(text: str) -> bool:
     return bool(PHYSICAL.search(text)) and not CONSOLE.search(text)
 
 
+_TEMPLATE_TAIL = re.compile(
+    r"\s*(is ready\.?|reply '[^']*'[^.]*\.?|auto-activating in \d+ minutes?\.?)\s*$", re.I)
+
+
+def normalise_action(action: str) -> str:
+    """The caller passes the action phrase; this script owns the STAGED sentence.
+
+    2026-08-26 (session 9f8f4f5f, msg 14076): a caller pasted the whole template as the
+    action and the channel read "STAGED: STAGED: ... Auto-activating in 60 minutes is ready.
+    Reply 'go' ... Auto-activating in 60 minutes." Strip a leading STAGED:/FOUNDER ACTION:
+    label and any trailing template phrases, repeatedly, so the sentence is composed once.
+    """
+    a = action.strip()
+    while True:
+        before = a
+        a = re.sub(r"^\s*(STAGED|FOUNDER ACTION)\s*:\s*", "", a, flags=re.I)
+        a = _TEMPLATE_TAIL.sub("", a).strip()
+        if a == before:
+            return a.rstrip(".")
+
+
 def staged_text(action: str, minutes: int) -> str:
-    return (f"STAGED: {action.strip().rstrip('.')} is ready. Reply 'go' to execute immediately, "
+    return (f"STAGED: {normalise_action(action)} is ready. Reply 'go' to execute immediately, "
             f"'hold' to review. Auto-activating in {minutes} minutes.")
 
 
