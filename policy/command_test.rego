@@ -16,6 +16,8 @@ import rego.v1
 
 # Commands the estate has decided must be refused.
 refuse := [
+	"OCI_CLI_PROFILE=otto oci session authenticate --no-browser", # rule_oci_session_authenticate (crew#345)
+	"oci session refresh --profile estate-bootstrap", # rule_oci_session_authenticate (crew#345)
 	# NOT a permit case any more, and the generator was reading a stale file.
 	# origin/main's selftest still expects this to pass, because on origin/main
 	# nothing refuses a direct push to main. A peer session added
@@ -99,6 +101,8 @@ refuse := [
 # Commands that must go through. A guard that refuses correct work is an
 # outage (LAW 38), and half of these exist because one did.
 permit := [
+	"oci os object head --bucket-name estate-drill-receipts --name state/cluster", # crew#345 substitute
+	"oci session authenticate --no-browser  # oci-session-intended: bootstrap once, crew#345", # marker
 	"gh workflow enable 337731742  # autoscale-intended", # allowed
 	"gh workflow disable 337731742", # allowed
 	"bash deploy/runners.sh scale 12", # allowed
