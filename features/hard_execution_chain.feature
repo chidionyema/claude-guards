@@ -70,3 +70,10 @@ Feature: Hard execution chain (crew#306)
     Given an open crew item labelled red-alert with no assignee and no CLAIM comment
     When auto-objective --scan runs
     Then it prints RED crew#N and pages the operator, and an owned red-alert item is left alone
+
+  Scenario: estate_watch marks the estate stale only after a missed 6 h audit slot (crew#25)
+    Given the audit runs every 6 hours
+    When the last receipt is 191 minutes old
+    Then estate_watch does not report STALE
+    When the last receipt is older than 7 hours
+    Then estate_watch reports STALE
