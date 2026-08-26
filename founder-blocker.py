@@ -6,8 +6,16 @@ reads. This sends the blocker to the home channel, pins it, records the message_
 telegram ledger (blocker-guard.py refuses a FOUNDER ACTION: reply without that row) and prints
 the FOUNDER ACTION: line to paste as reply line 2.
 
-Usage: founder-blocker.py "<what he must do, one sentence>" [<url or word>] [--session ID]
-Exit 0 with a message_id on screen, or 1 BLIND with the reason. Never raises.
+Founder directive 2026-08-26 (crew#281, "lazy consensus"): FOUNDER ACTION: is restricted to a
+physical step, a device in his hand. Everything else is staged with a default and a timer:
+  STAGED: <action> is ready. Reply 'go' to execute immediately, 'hold' to review. Auto-activating in N minutes.
+The staging session owns the timer: it executes at N minutes unless 'hold' arrives.
+
+Usage: founder-blocker.py "<action, one sentence>" [<url or word>] [--session ID] [--staged [N]] [--physical]
+  default            STAGED with the estate timeout (estate-defaults.yaml handoff_protocol.timeout_minutes, else 60)
+  --staged N         STAGED with N minutes
+  --physical         FOUNDER ACTION: permitted only when the text names the physical thing
+Exit 0 with a message_id on screen, or 1 BLIND/REFUSED with the reason. Never raises.
 """
 from __future__ import annotations
 
@@ -31,6 +39,33 @@ SOURCE = "founder-blocker"
 CREDENTIAL = re.compile(r"(password|passwd|passphrase|secret|token|api[_ -]?key|private[_ -]?key)\s*[:=]\s*\S{6,}", re.I)
 
 
+# crew#281: the only step a person must take is one a token or an API cannot: a device in his hand.
+# A step that is not physical is staged with a default; the API side is code (idp platform/access).
+PHYSICAL = re.compile(r"\b(hardware key|security key|yubikey|passkey|touch id|face id|fingerprint|phone|handset|"
+                      r"device|laptop|usb|sim card|cable|plug|power|screen|badge|in (?:his|your) hand)\b", re.I)
+DEFAULT_TIMEOUT_MIN = 60
+
+
+def names_physical(text: str) -> bool:
+    return bool(PHYSICAL.search(text))
+
+
+def staged_text(action: str, minutes: int) -> str:
+    return (f"STAGED: {action.strip().rstrip('.')} is ready. Reply 'go' to execute immediately, "
+            f"'hold' to review. Auto-activating in {minutes} minutes.")
+
+
+def default_timeout() -> int:
+    """handoff_protocol.timeout_minutes from the estate's defaults file when one is on disk; else 60."""
+    for root in (os.environ.get("ESTATE_CODE"), os.path.join(os.path.expanduser("~"), "dev", "code")):
+        f = os.path.join(root or "", "idp", "estate-defaults.yaml")
+        if root and os.path.exists(f):
+            m = re.search(r"^\s*timeout_minutes:\s*(\d+)", open(f, encoding="utf-8").read(), re.M)
+            if m:
+                return int(m.group(1))
+    return DEFAULT_TIMEOUT_MIN
+
+
 def carries_credential(text: str) -> bool:
     return bool(CREDENTIAL.search(text)) or "BEGIN " in text and "PRIVATE KEY" in text
 
@@ -42,13 +77,24 @@ def _api(tok: str, method: str, **p):
         return json.load(r)
 
 
-def send(action: str, target: str = "", session: str = "") -> int:
-    """Returns Telegram message_id (>0) or 0 when blind."""
+def send(action: str, target: str = "", session: str = "", *, staged_minutes: int | None = None,
+         physical: bool = False) -> int:
+    """Returns Telegram message_id (>0) or 0 when blind or refused."""
+    if physical and not names_physical(action):
+        telegram_ledger.record(SOURCE, "refused", action, key="not-physical")
+        print("REFUSED: FOUNDER ACTION: is for a physical step only (crew#281). This text names no "
+              "device in his hand. Stage it instead: founder-blocker.py \"<action>\" --staged [N], and the "
+              "API side is code, never a console.", file=sys.stderr)
+        return 0
     tok, chat = ea._env("TELEGRAM_BOT_TOKEN"), ea._env("TELEGRAM_HOME_CHANNEL")
     if not tok or not chat:
         print("BLIND: TELEGRAM_BOT_TOKEN or TELEGRAM_HOME_CHANNEL missing", file=sys.stderr)
         return 0
-    text = "FOUNDER ACTION: " + action.strip()
+    if physical:
+        outcome, key, text = "sent", "physical:" + action[:50], "FOUNDER ACTION: " + action.strip()
+    else:
+        minutes = staged_minutes or default_timeout()
+        outcome, key, text = "staged", f"staged:{minutes}:" + action[:40], staged_text(action, minutes)
     if target:
         text += "\n" + target.strip()
     if carries_credential(text):
@@ -71,14 +117,14 @@ def send(action: str, target: str = "", session: str = "") -> int:
         pinned = "pinned"
     except (OSError, ValueError, urllib.error.URLError, KeyError) as e:
         pinned = f"not pinned ({e})"
-    telegram_ledger.record(SOURCE, "sent", text, key=action[:60], msg_id=mid)
+    telegram_ledger.record(SOURCE, outcome, text, key=key, msg_id=mid)
     print(f"telegram message_id={mid} {pinned}")
     print(text.splitlines()[0] + (" — " + target if target else ""))
     return mid
 
 
 if __name__ == "__main__":
-    argv, sess, args = sys.argv[1:], "", []
+    argv, sess, args, minutes, physical = sys.argv[1:], "", [], None, False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -86,9 +132,16 @@ if __name__ == "__main__":
             sess = a.split("=", 1)[1]
         elif a == "--session" and i + 1 < len(argv):
             sess = argv[i + 1]; i += 1
+        elif a == "--physical":
+            physical = True
+        elif a == "--staged":
+            minutes = 0
+            if i + 1 < len(argv) and argv[i + 1].isdigit():
+                minutes = int(argv[i + 1]); i += 1
         else:
             args.append(a)
         i += 1
     if not args:
         print(__doc__); sys.exit(2)
-    sys.exit(0 if send(args[0], args[1] if len(args) > 1 else "", sess) else 1)
+    sys.exit(0 if send(args[0], args[1] if len(args) > 1 else "", sess,
+                       staged_minutes=minutes or None, physical=physical) else 1)

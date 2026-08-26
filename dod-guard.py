@@ -51,7 +51,7 @@ def above_the_fold(text: str) -> str:
 
 def first_word(text: str) -> str:
     line = text.strip().splitlines()[0] if text.strip() else ""
-    m = re.match(r"\s*\**\s*(DONE|INVENTORY|WORKING|BLOCKED):", line)
+    m = re.match(r"\s*\**\s*(DONE|INVENTORY|WORKING|BLOCKED|STAGED):", line)
     return m.group(1) if m else ""
 
 
@@ -83,6 +83,12 @@ def offences(text: str) -> list[str]:
         missing = [h for h in HANDOFF if not has_line(fold, h)]
         if missing:
             out.append("INVENTORY: needs all five handoff lines; missing " + ", ".join(f"`{m}`" for m in missing))
+    elif kind == "STAGED":
+        # crew#281: a staged handoff carries its own default and timer, in the founder's words.
+        if not re.search(r"Reply 'go' to execute immediately, 'hold' to review", fold):
+            out.append("STAGED: needs the sentence `Reply 'go' to execute immediately, 'hold' to review.`")
+        if not re.search(r"Auto-activating in \d+ minutes", fold):
+            out.append("STAGED: needs `Auto-activating in <N> minutes.` with a number.")
     if kind in ("DONE", "INVENTORY") and has_line(fold, "Evidence:") and not evidence_is_checkable(fold):
         out.append("`Evidence:` must contain a URL, a commit hash, a file path or a `command`.")
     return out
@@ -128,7 +134,7 @@ def save_state(state: dict) -> None:
 def report(found: list[str]) -> str:
     lines = ["BLOCKED by dod-guard (Definition of Done v2.1, founder 2026-08-25):"]
     lines += [f"  - {f}" for f in found]
-    lines.append("  Shape: line 1 DONE:/INVENTORY:/WORKING:/BLOCKED:. INVENTORY carries Built:, Use:, "
+    lines.append("  Shape: line 1 DONE:/INVENTORY:/WORKING:/BLOCKED:/STAGED:. INVENTORY carries Built:, Use:, "
                  "Expect:, Not done:, Evidence:. DONE additionally carries Founder receipt:.")
     return "\n".join(lines)
 
@@ -146,9 +152,13 @@ def selftest() -> int:
              "Founder receipt: crew#219 comment 5414486390, 'works'.\n"
              "Evidence: https://github.com/chidionyema/idp/pull/104\n")
     working = "WORKING: waiting on CI.\n"
+    staged = ("STAGED: platform/access apply (idp#150) is ready. Reply 'go' to execute immediately, 'hold' to "
+              "review. Auto-activating in 60 minutes.\n")
+    staged_bad = "STAGED: platform/access apply is ready, say go.\n"
     ok = True
     for name, text, expect_block in (("bad", bad, True), ("bad2", bad2, True), ("good", good, False),
-                                     ("good2", good2, False), ("working", working, False)):
+                                     ("good2", good2, False), ("working", working, False),
+                                     ("staged", staged, False), ("staged_bad", staged_bad, True)):
         got = bool(offences(text))
         print(f"{name}: {'BLOCK' if got else 'PASS'} {'ok' if got == expect_block else 'WRONG'}")
         ok &= got == expect_block
