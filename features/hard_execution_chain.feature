@@ -60,3 +60,8 @@ Feature: Hard execution chain (crew#306)
     Given a process whose PATH is /usr/bin:/bin
     When auto-objective --scan asks the board for open items
     Then it resolves gh from a standard install dir and does not print BLIND
+
+  Scenario: a quiet push cannot be reported as pushed
+    Given a command containing git push -q or --quiet
+    When rule-guard judges it
+    Then it is refused unless the command carries quiet-push-intended
