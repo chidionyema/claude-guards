@@ -147,8 +147,11 @@ def send(action: str, target: str = "", session: str = "", *, staged_minutes: in
     return mid
 
 
-if __name__ == "__main__":
-    argv, sess, args, minutes, physical = sys.argv[1:], "", [], None, False
+def parse_argv(argv: list[str]) -> tuple[list[str], str, int | None, bool]:
+    """(positional args, session, staged minutes, physical). Exits 2 on an unknown flag: `--help`
+    once went to Telegram as "STAGED: --help is ready" (msg 14081, 2026-08-26). A flag is never
+    the founder's message."""
+    sess, args, minutes, physical = "", [], None, False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -162,9 +165,17 @@ if __name__ == "__main__":
             minutes = 0
             if i + 1 < len(argv) and argv[i + 1].isdigit():
                 minutes = int(argv[i + 1]); i += 1
+        elif a.startswith("-"):
+            print(f"REFUSED: unknown flag {a!r}\n" + (__doc__ or ""), file=sys.stderr)
+            sys.exit(2)
         else:
             args.append(a)
         i += 1
+    return args, sess, minutes, physical
+
+
+if __name__ == "__main__":
+    args, sess, minutes, physical = parse_argv(sys.argv[1:])
     if not args:
         print(__doc__); sys.exit(2)
     sys.exit(0 if send(args[0], args[1] if len(args) > 1 else "", sess,
