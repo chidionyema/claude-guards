@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>LC_ALL</key>
+		<string>en_US.UTF-8</string>
+	</dict>
+	<key>ExitTimeOut</key>
+	<integer>120</integer>
+	<key>KeepAlive</key>
+	<true/>
+	<key>Label</key>
+	<string>homebrew.mxcl.postgresql@17</string>
+	<key>LimitLoadToSessionType</key>
+	<array>
+		<string>Aqua</string>
+		<string>Background</string>
+		<string>LoginWindow</string>
+		<string>StandardIO</string>
+		<string>System</string>
+	</array>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/opt/postgresql@17/bin/postgres</string>
+		<string>-D</string>
+		<string>/usr/local/var/postgresql@17</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/usr/local/var/log/postgresql@17.log</string>
+	<key>StandardOutPath</key>
+	<string>/usr/local/var/log/postgresql@17.log</string>
+	<key>WorkingDirectory</key>
+	<string>/usr/local</string>
+</dict>
+</plist>
