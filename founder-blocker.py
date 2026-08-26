@@ -53,8 +53,13 @@ def names_physical(text: str) -> bool:
     return bool(PHYSICAL.search(text)) and not CONSOLE.search(text)
 
 
+# Only the template's own approval clause is stripped: "[is ready.] Reply '<word>' to execute
+# now|immediately, 'hold' to cancel|review. [Auto-activating in N minutes.]" A looser pattern
+# (guards#69 review, 2026-08-26) cut "reply 'ok' once the migration completes" out of a real
+# action. Text that merely resembles the template is the founder's and stays.
 _TEMPLATE_TAIL = re.compile(
-    r"\s*(is ready\.?|reply '[^']*'[^.]*\.?|auto-activating in \d+ minutes?\.?)\s*$", re.I)
+    r"\s*\.?\s*(is ready\.\s*)?Reply '[^']*' to execute (now|immediately),\s*'hold' to (cancel|review)\."
+    r"(\s*Auto-activating in \d+ minutes?\.?)?\s*$", re.I)
 
 
 def normalise_action(action: str) -> str:

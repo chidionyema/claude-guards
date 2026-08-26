@@ -31,3 +31,12 @@ def test_staged_text_is_composed_once_whatever_the_caller_pastes():
     # the good case: a plain action keeps its words, only a trailing full stop goes
     assert fb.normalise_action("run bin/idp-oci-bootstrap in your session.") == "run bin/idp-oci-bootstrap in your session"
     assert fb.normalise_action("FOUNDER ACTION: tap the YubiKey") == "tap the YubiKey"
+
+
+def test_allow_action_that_only_resembles_the_template():
+    """guards#69 review: a real instruction ending in reply '...' / is ready must survive."""
+    fb = _load("founder_blocker", "founder-blocker.py")
+    for a in ("scale the DB, then reply 'ok' once the migration completes",
+              "confirm the node pool is ready",
+              "auto-activating in 5 minutes is what the old job did"):
+        assert fb.normalise_action(a) == a, a
