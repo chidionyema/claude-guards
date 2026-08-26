@@ -2,6 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>ai.estate.session-timeout</string>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string></dict>
   <key>ProgramArguments</key><array>
     <string>/bin/sh</string><string>-c</string>
     <string>python3 "$HOME/.claude/scripts/session-timeout.py"; python3 "$HOME/.claude/scripts/auto-objective.py" --scan</string>

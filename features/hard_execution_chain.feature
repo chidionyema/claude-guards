@@ -55,3 +55,8 @@ Feature: Hard execution chain (crew#306)
   Scenario: A board that cannot be read never reads as empty
     When the board is unreadable
     Then every hook permits and writes blind to the ledger
+
+  Scenario: the board is readable from a launchd job
+    Given a process whose PATH is /usr/bin:/bin
+    When auto-objective --scan asks the board for open items
+    Then it resolves gh from a standard install dir and does not print BLIND

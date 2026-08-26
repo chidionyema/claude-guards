@@ -17,10 +17,27 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
+
+
+# launchd jobs start with PATH=/usr/bin:/bin, where gh is not. Standard install
+# dirs, not machine names (LAW 46). Incident: crew#306 --scan printed BLIND every 5 min.
+_GH_DIRS = ("/usr/local/bin", "/opt/homebrew/bin")
+
+
+def gh_bin() -> str:
+    found = shutil.which("gh")
+    if found:
+        return found
+    for d in _GH_DIRS:
+        cand = os.path.join(d, "gh")
+        if os.access(cand, os.X_OK):
+            return cand
+    return "gh"
 
 REPO = os.environ.get("ESTATE_BOARD_REPO", "chidionyema/crew")
 META_ISSUES = {102, 133}          # ESTATE BOARD, THE BOARD -- lists of work, not work
@@ -62,7 +79,7 @@ def open_issues() -> list[dict] | None:
             return None
     try:
         out = subprocess.run(
-            ["gh", "issue", "list", "-R", REPO, "--state", "open", "--limit", "200",
+            [gh_bin(), "issue", "list", "-R", REPO, "--state", "open", "--limit", "200",
              "--json", "number,title,labels,assignees,comments,createdAt"],
             capture_output=True, text=True, timeout=40)
         if out.returncode != 0:
@@ -125,7 +142,7 @@ def comment(number: int, body: str) -> bool:
         except Exception:
             return False
     try:
-        r = subprocess.run(["gh", "issue", "comment", str(number), "-R", REPO, "--body", body],
+        r = subprocess.run([gh_bin(), "issue", "comment", str(number), "-R", REPO, "--body", body],
                            capture_output=True, text=True, timeout=40)
         return r.returncode == 0
     except Exception:
