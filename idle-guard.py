@@ -21,10 +21,6 @@ On Stop, it reads the session transcript and works out which backgrounded comman
 launched and which have since reported completion. If any are still in flight, it blocks the
 stop ONCE and tells the agent to start the next independent piece of work.
 
-v2 (crew#306, founder 2026-08-26): the retry is no longer free. "Nothing independent to do"
-is graded against the board; while unclaimed open items exist the stop is refused again and
-the false claim is on the ledger. See retry_decision().
-
 WHY IT CAN ONLY BLOCK ONCE
 --------------------------
 Claude Code sets stop_hook_active on the retry. If the agent comes back and still wants to
@@ -45,8 +41,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys as _sys
-_sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import re
 import shutil
 import subprocess
@@ -199,43 +193,15 @@ REASON = (
 )
 
 
-def retry_decision(payload: dict, pending: list[str]) -> dict | None:
-    """v2 (crew#306 CP2). The retry used to be a free pass. Now it is a claim -- "nothing
-    independent to do" -- and the board grades the claim: while unclaimed open items exist,
-    the claim is false, the stop is refused again and `false_idle` goes on the ledger.
-    Escapes: a validated BLOCKED: reply, or the founder saying STOP / RELEASE."""
-    import estate_board as board
-    transcript = payload.get("transcript_path") or ""
-    user, reply = board.last_texts(transcript)
-    if board.founder_word(user):
-        return None
-    if reply.lstrip().startswith(board.BLOCKED) and not board.blocked_missing(reply):
-        return None
-    issues = board.open_issues()
-    if issues is None:
-        board.ledger({"guard": "idle-guard", "event": "blind", "session": (payload.get("session_id") or "")[:8]})
-        return None
-    items = board.unclaimed(issues)
-    if not items:
-        return None
-    board.ledger({"guard": "idle-guard", "event": "false_idle",
-                  "session": (payload.get("session_id") or "")[:8],
-                  "runs": pending, "unclaimed": [i["number"] for i in items[:5]]})
-    names = ", ".join(f"crew#{i['number']} {i['title'][:40]}" for i in items[:3])
-    return {"decision": "block",
-            "reason": f"[idle-guard v2] {len(pending)} run(s) still in flight and you asked to stop "
-                      f"again. The board has {len(items)} unclaimed open item(s): {names}. "
-                      "\"Nothing independent to do\" is false while that list is not empty, and it is "
-                      "on the ledger. Claim one and start it now, or declare BLOCKED: with Tried: "
-                      "Error: Need: Who:."}
-
-
 def main() -> int:
     if "--selftest" in sys.argv:
         return selftest()
     try:
         payload = json.load(sys.stdin)
     except Exception:
+        return 0
+    # The retry. The agent has already been asked once; let it stop.
+    if payload.get("stop_hook_active"):
         return 0
     path = payload.get("transcript_path") or ""
     if not path or not os.path.exists(path):
@@ -245,14 +211,6 @@ def main() -> int:
     except Exception:
         return 0
     if not pending:
-        return 0
-    if payload.get("stop_hook_active"):
-        try:
-            r = retry_decision(payload, pending)
-        except Exception:
-            r = None
-        if r:
-            print(json.dumps(r))
         return 0
     print(json.dumps({
         "decision": "block",
@@ -361,33 +319,6 @@ def selftest() -> int:
     #     holding the file open, so it IS in flight.
     p = transcript([rec("Command running in background with ID: live1")])
     cases.append(("no exit line but a live writer is in flight", in_flight(p) == ["live1"]))
-
-    # v2: the retry is graded against the board (fixture, so nothing shells out).
-    import estate_board as board
-    fx = os.path.join(sandbox, "fx.json")
-    os.environ["ESTATE_BOARD_FIXTURE"] = fx
-    board.LEDGER = __import__("pathlib").Path(sandbox) / "ledger.jsonl"
-    with open(fx, "w") as fh:
-        json.dump([{"number": 5, "title": "open work", "labels": [], "assignees": [], "comments": []}], fh)
-    p = transcript([rec("Command running in background with ID: live1"),
-                    {"type": "assistant", "message": {"role": "assistant",
-                     "content": [{"type": "text", "text": "WORKING: nothing independent left"}]}}])
-    r = retry_decision({"transcript_path": p, "session_id": "s1"}, ["live1"])
-    cases.append(("v2: retry with unclaimed board items is refused", bool(r) and "crew#5" in r["reason"]))
-    cases.append(("v2: false_idle is on the ledger", "false_idle" in board.LEDGER.read_text()))
-    p = transcript([rec("Command running in background with ID: live1"),
-                    {"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text",
-                     "text": "BLOCKED: x\nTried: a\nError: b\nNeed: c\nWho: d"}]}}])
-    cases.append(("v2: a validated BLOCKED: permits", retry_decision({"transcript_path": p}, ["live1"]) is None))
-    p = transcript([rec("STOP")])
-    cases.append(("v2: founder STOP permits", retry_decision({"transcript_path": p}, ["live1"]) is None))
-    with open(fx, "w") as fh:
-        json.dump([], fh)
-    p = transcript([rec("Command running in background with ID: live1")])
-    cases.append(("v2: empty board permits the retry", retry_decision({"transcript_path": p}, ["live1"]) is None))
-    with open(fx, "w") as fh:
-        fh.write("garbage")
-    cases.append(("v2: BLIND board permits (fail open)", retry_decision({"transcript_path": p}, ["live1"]) is None))
 
     for fh in held:
         fh.close()

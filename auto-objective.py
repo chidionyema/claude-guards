@@ -44,11 +44,55 @@ def _gg():
     return mod
 
 
+def _in_flight(transcript: str) -> list[str]:
+    try:
+        spec = importlib.util.spec_from_file_location("idle_guard", HERE / "idle-guard.py")
+        mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+        return mod.in_flight(transcript)
+    except Exception:
+        return []
+
+
+def retry_decision(payload: dict, pending: list[str]) -> dict | None:
+    """CP2, idle-guard v2. idle-guard.py blocks once while runs are in flight and lets the retry
+    through; that retry is the claim "nothing independent to do", and here the board grades it.
+    While unclaimed open items exist the claim is false, the stop is refused again and
+    `false_idle` goes on the ledger. Escapes: a validated BLOCKED:, or founder STOP / RELEASE.
+    Lives here, not in idle-guard.py: hand-rolled guards are frozen at their line count."""
+    user, reply = board.last_texts(payload.get("transcript_path") or "")
+    if board.founder_word(user):
+        return None
+    if reply.lstrip().startswith(board.BLOCKED) and not board.blocked_missing(reply):
+        return None
+    issues = board.open_issues()
+    if issues is None:
+        board.ledger({"guard": "idle-guard-v2", "event": "blind", "session": (payload.get("session_id") or "")[:8]})
+        return None
+    items = board.unclaimed(issues)
+    if not items:
+        return None
+    board.ledger({"guard": "idle-guard-v2", "event": "false_idle", "session": (payload.get("session_id") or "")[:8],
+                  "runs": pending, "unclaimed": [i["number"] for i in items[:5]]})
+    names = ", ".join(f"crew#{i['number']} {i['title'][:40]}" for i in items[:3])
+    return {"decision": "block",
+            "reason": f"[idle-guard v2] {len(pending)} run(s) still in flight and you asked to stop "
+                      f"again. The board has {len(items)} unclaimed open item(s): {names}. "
+                      "\"Nothing independent to do\" is false while that list is not empty, and it is "
+                      "on the ledger. Claim one and start it now, or declare BLOCKED: with Tried: "
+                      "Error: Need: Who:."}
+
+
 def decide(payload: dict, gg=None) -> dict | None:
     """None permits; a dict is the block decision."""
     if OFF.exists():
         return None
     gg = gg or _gg()
+    if payload.get("stop_hook_active"):
+        pending = _in_flight(payload.get("transcript_path") or "")
+        if pending:
+            r = retry_decision(payload, pending)
+            if r:
+                return r
     session = payload.get("session_id") or ""
     transcript = payload.get("transcript_path") or ""
     if not session or not transcript or not os.path.exists(transcript):
@@ -208,6 +252,20 @@ def selftest() -> int:
     ck("kill switch permits everything", run("s5", reply="x") is None)
     OFF.unlink()
     ck("a session with no transcript is left alone", decide({"session_id": "s6", "transcript_path": "/nope"}, gg) is None)
+    fx.write_text(json.dumps([{"number": 9, "title": "t", "labels": [], "assignees": [], "comments": [
+        {"body": "BLOCKED: x", "created_at": "2026-01-01T00:00:00Z"}]}]))
+    fx.write_text(json.dumps([{"number": 5, "title": "open work", "labels": [], "assignees": [], "comments": []}]))
+    p = tr(reply="WORKING: nothing independent left")
+    r = retry_decision({"transcript_path": p, "session_id": "s7"}, ["live1"])
+    ck("v2: retry with runs in flight and unclaimed items is refused", r and "crew#5" in r["reason"])
+    ck("v2: false_idle is on the ledger", "false_idle" in board.LEDGER.read_text())
+    ck("v2: a validated BLOCKED: permits the retry",
+       retry_decision({"transcript_path": tr(reply="BLOCKED: x\nTried: a\nError: b\nNeed: c\nWho: d")}, ["live1"]) is None)
+    ck("v2: founder STOP permits the retry", retry_decision({"transcript_path": tr(user="STOP")}, ["live1"]) is None)
+    fx.write_text("[]")
+    ck("v2: empty board permits the retry", retry_decision({"transcript_path": p}, ["live1"]) is None)
+    fx.write_text("garbage")
+    ck("v2: BLIND board permits (fail open)", retry_decision({"transcript_path": p}, ["live1"]) is None)
     fx.write_text(json.dumps([{"number": 9, "title": "t", "labels": [], "assignees": [], "comments": [
         {"body": "BLOCKED: x", "created_at": "2026-01-01T00:00:00Z"}]}]))
     import io, contextlib
