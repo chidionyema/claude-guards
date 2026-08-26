@@ -69,7 +69,16 @@ legacy := {
 	"scope-guard.py": 146,
 	"laws-link-guard.py": 145,
 	"canonical-root-guard.py": 133,
-	"dod-guard.py": 192,
+	# 192 -> 202 on 2026-08-26 (crew#281 CP2, claude-guards#65): STAGED: is a fifth reply word and
+	# must carry the founder's go/hold sentence and a minute count. It is a Stop-hook rule over
+	# the reply text; opa-hook.py runs only on PreToolUse (Artifact) and no Stop runner feeds a
+	# transcript to OPA yet, so the rule cannot be Rego today. Follow-up on crew#281: a Stop
+	# runner, then dod-guard and blocker-guard move to policy/reply.rego and leave this list.
+	"dod-guard.py": 202,
+	# Added 2026-08-26 at 94 lines, the first time it is committed: settings.json has run it
+	# untracked since 2026-08-25 (LAW 24). Same reason as dod-guard: a Stop rule over the reply
+	# and the Telegram ledger, no OPA Stop runner exists. Same follow-up, same exit.
+	"blocker-guard.py": 94,
 	"feed-guard.py": 176,
 }
 
