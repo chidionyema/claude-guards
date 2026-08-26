@@ -311,7 +311,7 @@
   },
   "ai.hermes.runaway-reaper": {
     "EnvironmentVariables": {
-      "HERMES_HOME": "{HOME}/.hermes",
+      "ESTATE_HOME": "{HOME}/.estate",
       "HOME": "{HOME}",
       "PATH": [
         "/usr/local/bin",
@@ -322,18 +322,18 @@
     },
     "ProgramArguments": [
       "{PYTHON3_USER}",
-      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "{HOME}/.claude/scripts/estate/launchd_receipt.py",
       "--label",
       "ai.hermes.runaway-reaper",
       "--",
       "/bin/bash",
-      "{HOME}/.hermes/scripts/runaway-reaper.sh"
+      "{HOME}/.claude/scripts/estate/runaway-reaper.sh"
     ],
     "RunAtLoad": true,
-    "StandardErrorPath": "{HOME}/.hermes/logs/runaway-reaper.err.log",
-    "StandardOutPath": "{HOME}/.hermes/logs/runaway-reaper.out.log",
+    "StandardErrorPath": "{HOME}/.estate/logs/runaway-reaper.err.log",
+    "StandardOutPath": "{HOME}/.estate/logs/runaway-reaper.out.log",
     "StartInterval": 300,
-    "WorkingDirectory": "{HOME}/.hermes",
+    "WorkingDirectory": "{HOME}/.estate",
     "label": "ai.hermes.runaway-reaper"
   },
   "com.chidionyema.graphify-sweep": {
@@ -350,7 +350,7 @@
     "Nice": 5,
     "ProgramArguments": [
       "{HOME}/Documents/code/prospector/.venv/bin/python",
-      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "{HOME}/.claude/scripts/estate/launchd_receipt.py",
       "--label",
       "com.chidionyema.graphify-sweep",
       "--",
@@ -410,7 +410,7 @@
     "Nice": 5,
     "ProgramArguments": [
       "{HOME}/Documents/code/prospector/.venv/bin/python",
-      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "{HOME}/.claude/scripts/estate/launchd_receipt.py",
       "--label",
       "com.chidionyema.reflect",
       "--",
@@ -638,7 +638,7 @@
     },
     "ProgramArguments": [
       "{PYTHON3_USER}",
-      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "{HOME}/.claude/scripts/estate/launchd_receipt.py",
       "--label",
       "com.prospector-control.receipt-bridge",
       "--script",
@@ -668,7 +668,7 @@
     },
     "ProgramArguments": [
       "{HOME}/Documents/code/prospector-live/.venv/bin/python",
-      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "{HOME}/.claude/scripts/estate/launchd_receipt.py",
       "--label",
       "com.prospector.backup",
       "--",
@@ -699,7 +699,7 @@
     },
     "ProgramArguments": [
       "{HOME}/Documents/code/prospector-live/.venv/bin/python",
-      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "{HOME}/.claude/scripts/estate/launchd_receipt.py",
       "--label",
       "com.prospector.estate-inventory",
       "--",
@@ -730,7 +730,7 @@
     },
     "ProgramArguments": [
       "{HOME}/Documents/code/prospector/.venv/bin/python",
-      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "{HOME}/.claude/scripts/estate/launchd_receipt.py",
       "--label",
       "com.prospector.launchd-held",
       "--",
@@ -814,7 +814,7 @@
     },
     "ProgramArguments": [
       "{HOME}/Documents/code/prospector/.venv/bin/python",
-      "{HOME}/.hermes/scripts/launchd_receipt.py",
+      "{HOME}/.claude/scripts/estate/launchd_receipt.py",
       "--label",
       "com.prospector.process-audit",
       "--",
