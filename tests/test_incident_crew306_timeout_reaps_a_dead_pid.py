@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def test_incident_crew306_timeout_reaps_a_dead_pid():
     r = subprocess.run([sys.executable, os.path.join(HERE, "session-timeout.py"), "--selftest"],
-                       capture_output=True, text=True, timeout=120)
+                       capture_output=True, text=True, timeout=120, check=False)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "PASS a pid that vanished before the kill is ENDED" in r.stdout, r.stdout
     assert "PASS any other kill failure is refused and lands on the ledger" in r.stdout, r.stdout
