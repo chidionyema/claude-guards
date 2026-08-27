@@ -250,65 +250,6 @@
     "WorkingDirectory": "{HOME}/.claude/scripts",
     "label": "ai.estate.tracked-guard"
   },
-  "ai.hermes.gateway": {
-    "EnvironmentVariables": {
-      "HERMES_HOME": "{HOME}/dev/code/hermes-v2",
-      "PATH": [
-        "{HOME}/dev/code/hermes-v2/hermes-agent/venv/bin",
-        "/usr/local/bin",
-        "{HOME}/.kimi-code/bin",
-        "{HOME}/.local/bin",
-        "/usr/local/opt/node@20/bin",
-        "{HOME}/anaconda3/bin",
-        "{HOME}/anaconda3/condabin",
-        "/bin",
-        "/System/Cryptexes/App/usr/bin",
-        "/usr/bin",
-        "/usr/sbin",
-        "/sbin",
-        "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin",
-        "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin",
-        "/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin",
-        "/usr/local/share/dotnet",
-        "~/.dotnet/tools",
-        "/Library/Frameworks/Mono.framework/Versions/Current/Commands",
-        "{HOME}/.cargo/bin",
-        "{HOME}/.rvm/bin",
-        "{HOME}/.claude/plugins/cache/claude-plugins-official/mattpocock-skills/1.2.3/bin"
-      ],
-      "VIRTUAL_ENV": "{HOME}/dev/code/hermes-v2/.venv"
-    },
-    "ExitTimeOut": 25,
-    "KeepAlive": true,
-    "LimitLoadToSessionType": [
-      "Aqua",
-      "Background"
-    ],
-    "ProgramArguments": [
-      "{HOME}/dev/code/hermes-v2/.venv/bin/python",
-      "-m",
-      "hermes_cli.stderr_timestamp",
-      "--error-log",
-      "{HOME}/dev/code/hermes-v2/logs/gateway.error.log",
-      "--",
-      "{HOME}/dev/code/hermes-v2/.venv/bin/python",
-      "-m",
-      "hermes_cli.main",
-      "gateway",
-      "run",
-      "--replace",
-      "--external-supervisor"
-    ],
-    "RunAtLoad": true,
-    "SoftResourceLimits": {
-      "NumberOfFiles": 4096
-    },
-    "StandardErrorPath": "{HOME}/dev/code/hermes-v2/logs/gateway.error.log",
-    "StandardOutPath": "{HOME}/dev/code/hermes-v2/logs/gateway.log",
-    "ThrottleInterval": 30,
-    "WorkingDirectory": "{HOME}/dev/code/hermes-v2",
-    "label": "ai.hermes.gateway"
-  },
   "ai.hermes.runaway-reaper": {
     "EnvironmentVariables": {
       "ESTATE_HOME": "{HOME}/.estate",
