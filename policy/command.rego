@@ -436,6 +436,38 @@ deny contains msg if {
 }
 
 # ---------------------------------------------------------------------------
+# A `find` walk from the disk root or the home directory.
+#
+# crew#85, 2026-08-27 14:54Z: `find / -path '*@backstage/core-components*' -iname
+# 'Link.*'` from a session's shell ran 47 minutes at 51-75% CPU, with fseventsd
+# and XprotectService behind it, on a 12-core Mac already at load 120; the Dagster
+# load ceiling skipped the 12:37Z science tick under it. The founder's Mac is
+# 16 GB and shared by every session (memory: founder-mac-is-16gb-treat-as-sacred);
+# a whole-disk walk is the class that produced load 236 on 2026-08-25.
+#
+# The substitute is always cheaper: `mdfind -name Link` (Spotlight, indexed),
+# `rg -l --glob` inside the one repo, or the package's own path
+# (node_modules/@backstage/core-components). A bounded `-maxdepth N` is permitted.
+# ---------------------------------------------------------------------------
+
+whole_disk_find_re := `(?:^|[\s;&|(])find\s+(?:-[A-Z]\s+)*(?:/|/Users(?:/[\w.-]+)?/?|~/?|\$HOME/?|\$\{HOME\}/?)(?:\s|$)`
+
+deny contains msg if {
+	not contains(input.command, "whole-disk-find-intended")
+	not contains(input.command, "-maxdepth")
+	regex.match(whole_disk_find_re, input.command)
+	msg := concat("", [
+		"BLOCKED by rule-guard: `find` from / or the home directory with no -maxdepth (crew#85).\n",
+		"  why              2026-08-27: one such find ran 47 minutes at 75% CPU on the 16 GB Mac\n",
+		"                   every session shares, load 120, and the scheduler skipped its tick\n",
+		"  instead          mdfind -name <file>   (Spotlight, indexed, instant)\n",
+		"                   rg -l --glob '<pattern>' <one repo>\n",
+		"                   find <one repo> -maxdepth 4 ...   (a bounded walk is allowed)\n",
+		"  override         append  # whole-disk-find-intended  and say in your reply why.",
+	])
+}
+
+# ---------------------------------------------------------------------------
 # A git command inside a worktree directory whose .git link is gone.
 #
 # Session 4e5b5e8f, 2026-08-26: `git worktree remove .wt-bs-auth` timed out half

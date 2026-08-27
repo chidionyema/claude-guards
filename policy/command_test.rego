@@ -16,6 +16,10 @@ import rego.v1
 
 # Commands the estate has decided must be refused.
 refuse := [
+	"find / -path '*@backstage/core-components*' -iname 'Link.*'", # whole_disk_find (crew#85)
+	"cd /tmp && find ~ -name '*.plist' | head", # whole_disk_find (crew#85)
+	"find $HOME/ -type f -name settings.json", # whole_disk_find (crew#85)
+	"find /Users/someone -name x", # whole_disk_find (crew#85)
 	"OCI_CLI_PROFILE=otto oci session authenticate --no-browser", # rule_oci_session_authenticate (crew#345)
 	"oci session refresh --profile estate-bootstrap", # rule_oci_session_authenticate (crew#345)
 	# NOT a permit case any more, and the generator was reading a stale file.
@@ -102,6 +106,12 @@ refuse := [
 # Commands that must go through. A guard that refuses correct work is an
 # outage (LAW 38), and half of these exist because one did.
 permit := [
+	"find ~/dev/code/idp -name '*.yml' -path '*workflows*'", # one repo, crew#85
+	"find / -maxdepth 2 -name Applications", # bounded, crew#85
+	"mdfind -name Link.tsx", # the substitute, crew#85
+	"find . -name '*.py' | head", # cwd, crew#85
+	"find / -name x  # whole-disk-find-intended: rebuilding the Spotlight index", # marker, crew#85
+	"grep -rn findings science/", # not find, crew#85
 	"oci os object head --bucket-name estate-drill-receipts --name state/cluster", # crew#345 substitute
 	"oci session authenticate --no-browser  # oci-session-intended: bootstrap once, crew#345", # marker
 	"gh workflow enable 337731742  # autoscale-intended", # allowed
