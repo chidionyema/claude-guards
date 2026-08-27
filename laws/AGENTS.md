@@ -156,8 +156,10 @@ about to write a project's name in this file, it belongs in that project's file.
 
 ## Reply format
 
-- **Line 1 is `DONE:`, `INVENTORY:`, `BLOCKED:` or `WORKING:`** plus one plain sentence. A reply
-  that does not start with one of those four is malformed.
+- **Line 1 is `DONE:`, `INVENTORY:`, `BLOCKED:`, `WORKING:` or `WAITING:`** plus one plain sentence. A reply
+  that does not start with one of those five is malformed. `WAITING:` is for a background run still
+  in flight and names the run's task id; the harness re-invokes you when it reports, and idle-guard v2
+  does not prompt a board claim (crew#506 CP2, 2026-08-27). A `WAITING:` naming no live run is idle.
 - **`DONE:` means the founder used it and confirmed it.** Founder, 2026-08-25, Definition of Done
   v2.1: "Merged code, green CI, and passing tests are inventory. They are not progress." Built,
   merged and green is `INVENTORY:`. A `DONE:` reply carries a `Founder receipt:` line naming
