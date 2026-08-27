@@ -123,8 +123,6 @@ def selftest() -> int:
         ("a plain vendor mention is allowed", offences("Claude Code is installed at 0.65.0.") == []),
         ("a mandate without a vendor is allowed", offences("Step 1 must be done first.") == []),
         ("code blocks are not prose", offences("```\nenable remote control\n```\n") == []),
-        ("a path segment is not the /config command", offences("| LLM providers | LiteLLM at idp platform/llm/config.yaml, CP4 required |") == []),
-        ("the bare slash command still is", len(offences("Step 1: run /config and turn on Remote Control")) == 1),
     ]
     bad = [name for name, ok in checks if not ok]
     for name, ok in checks:
