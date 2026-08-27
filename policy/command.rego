@@ -719,11 +719,15 @@ value_dumps := [
 	},
 	{
 		"id": "env_all",
-		"re": `(?:^|[;&|]\s*)env\s*(?:$|\|)`,
+		# A bare `env` sits at command position: line start, after `;`/`&`, or after a pipe
+		# that has whitespace before it. `a|env|b` is a grep alternation, not a command:
+		# on 2026-08-27 this rule refused two read-only greps whose -E pattern carried `|env|`
+		# (session d5ae1960), so the pipe form needs the space a shell pipeline has.
+		"re": `(?:^|\s\|\s*|[;&]\s*)env\s*(?:$|[|;&])`,
 		"dumps": "env with no argument prints the whole environment",
 		"instead": "printenv NAME, or test the value without printing it",
 		"must_match": "env",
-		"must_not_match": "env PROSPECTOR_STORE_DIR=/data/store python3 run.py",
+		"must_not_match": "grep -nE 'image:|env|name:' gateway.yaml",
 	},
 ]
 
