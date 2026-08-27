@@ -4,7 +4,9 @@ The system moves them."
 
 One source of truth: open issues in the crew repo. An item is CLAIMED when its newest
 CLAIM/RELEASE comment is a CLAIM, or it has an assignee. Everything else is unclaimed and
-the oldest (lowest number) is next. Meta issues (the board itself, the broadcast board) are
+the highest-ranked is next: finish-first (crew#527 CP2, founder 2026-08-27 "we have many
+features half done"): fraction of checklist boxes ticked, then P0/P1, then founder-request,
+then age; an issue whose `Blocked-on: #N` names an open issue ranks below every unblocked one. Meta issues (the board itself, the broadcast board) are
 never work items.
 
 Every gh call fails open: a board that cannot be read returns None, never an empty list, so
@@ -17,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -79,8 +82,8 @@ def open_issues() -> list[dict] | None:
             return None
     try:
         out = subprocess.run(
-            [gh_bin(), "issue", "list", "-R", REPO, "--state", "open", "--limit", "200",
-             "--json", "number,title,labels,assignees,comments,createdAt"],
+            [gh_bin(), "issue", "list", "-R", REPO, "--state", "open", "--limit", "500",
+             "--json", "number,title,labels,assignees,comments,createdAt,body"],
             capture_output=True, text=True, timeout=40)
         if out.returncode != 0:
             return None
@@ -93,7 +96,7 @@ def open_issues() -> list[dict] | None:
             "number": r["number"], "title": r.get("title", ""),
             "labels": [l.get("name", "") for l in r.get("labels", [])],
             "assignees": [a.get("login", "") for a in r.get("assignees", [])],
-            "created_at": r.get("createdAt", ""),
+            "created_at": r.get("createdAt", ""), "body": r.get("body") or "",
             "comments": [{"body": c.get("body", ""), "created_at": c.get("createdAt", "")}
                          for c in r.get("comments", [])],
         })
@@ -119,17 +122,41 @@ def claimed(issue: dict) -> bool:
     return state
 
 
+def boxes(issue: dict) -> tuple[int, int]:
+    b = issue.get("body") or ""
+    return len(re.findall(r"- \[x\]", b, re.I)), len(re.findall(r"- \[ \]", b))
+
+
+def blocked_on(issue: dict) -> set[int]:
+    return {int(n) for n in re.findall(r"^Blocked-on:.*?#(\d+)", issue.get("body") or "", re.M | re.I)}
+
+
+def rank_key(issue: dict, open_numbers: set[int]) -> tuple:
+    """Finish-first. Lower sorts first: unblocked, most of its boxes ticked, P0 before P1,
+    founder-request, then oldest. An issue with no checklist ranks as 0 ticked."""
+    t, u = boxes(issue)
+    frac = t / (t + u) if t + u else 0.0
+    labels = {l.lower() for l in issue.get("labels", [])}
+    prio = 0 if "p0" in labels else 1 if "p1" in labels else 2
+    blocked = bool(blocked_on(issue) & open_numbers)
+    return (blocked, -frac, prio, "founder-request" not in labels, issue["number"])
+
+
 def unclaimed(issues: list[dict]) -> list[dict]:
-    return sorted((i for i in issues if is_work(i) and not claimed(i)), key=lambda i: i["number"])
+    open_numbers = {i["number"] for i in issues}
+    return sorted((i for i in issues if is_work(i) and not claimed(i)), key=lambda i: rank_key(i, open_numbers))
 
 
-def oldest_unclaimed() -> dict | None | str:
-    """A work item, None when the board is empty, or "BLIND" when it cannot be read."""
+def next_unclaimed() -> dict | None | str:
+    """The top-ranked work item, None when the board is empty, or "BLIND" when it cannot be read."""
     issues = open_issues()
     if issues is None:
         return "BLIND"
     items = unclaimed(issues)
     return items[0] if items else None
+
+
+oldest_unclaimed = next_unclaimed  # the name auto-objective.py imports; the rule is finish-first now
 
 
 def comment(number: int, body: str) -> bool:
@@ -235,18 +262,24 @@ if __name__ == "__main__":
             {"number": 20, "title": "assigned", "labels": [], "assignees": ["someone"], "comments": []},
             {"number": 40, "title": "epic", "labels": ["epic"], "assignees": [], "comments": []},
             {"number": 50, "title": "fresh", "labels": [], "assignees": [], "comments": []},
+            {"number": 60, "title": "half done", "labels": [], "assignees": [], "comments": [],
+             "body": "- [x] a\n- [x] b\n- [ ] c"},
+            {"number": 70, "title": "blocked", "labels": ["P0"], "assignees": [], "comments": [],
+             "body": "Blocked-on: #50\n- [x] a\n- [ ] b"},
+            {"number": 80, "title": "p1 untouched", "labels": ["P1"], "assignees": [], "comments": []},
         ]
         d = tempfile.mkdtemp()
         p = Path(d) / "fx.json"; p.write_text(json.dumps(fx))
         os.environ["ESTATE_BOARD_FIXTURE"] = str(p)
         items = [i["number"] for i in unclaimed(open_issues())]
-        ck("meta, claimed, assigned and epic are skipped; released and fresh remain, oldest first",
-           items == [30, 50])
-        ck("oldest unclaimed is #30", oldest_unclaimed()["number"] == 30)
+        ck("meta, claimed, assigned and epic are skipped; finish-first: half done, then P1, then oldest, blocked last",
+           items == [60, 80, 30, 50, 70])
+        ck("next unclaimed is the half-done #60", next_unclaimed()["number"] == 60)
+        ck("a P0 blocked on an open issue ranks last", items[-1] == 70)
         p.write_text("not json")
-        ck("an unreadable board is BLIND, never empty", oldest_unclaimed() == "BLIND")
+        ck("an unreadable board is BLIND, never empty", next_unclaimed() == "BLIND")
         p.write_text("[]")
-        ck("an empty board is None", oldest_unclaimed() is None)
+        ck("an empty board is None", next_unclaimed() is None)
         ck("claim posts to the fixture, not gh", claim(50, "sess1234abcd", "code", "why")
            and "CLAIM " in open(str(p) + ".posted.jsonl").read())
         ck("founder STOP is a word", founder_word("STOP") == "STOP")
@@ -269,6 +302,8 @@ if __name__ == "__main__":
     import argparse
     ap = argparse.ArgumentParser(prog="estate_board.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    rk = sub.add_parser("rank", help="the board in finish-first order, top N unclaimed items")
+    rk.add_argument("--top", type=int, default=20)
     for name in ("claim", "release"):
         sp = sub.add_parser(name)
         sp.add_argument("number", type=int)
@@ -277,6 +312,20 @@ if __name__ == "__main__":
         if name == "claim":
             sp.add_argument("--lane", default="code")
     a = ap.parse_args()
+    if a.cmd == "rank":
+        issues = open_issues()
+        if issues is None:
+            print("BLIND: the board cannot be read"); sys.exit(2)
+        open_numbers = {i["number"] for i in issues}
+        items = unclaimed(issues)
+        print(f"finish-first rank, {len(items)} unclaimed of {len(issues)} open ({utc()})")
+        for i in items[: a.top]:
+            t, u = boxes(i)
+            blk = blocked_on(i) & open_numbers
+            lane = next((l for l in i.get("labels", []) if l.startswith("lane:")), "lane:unsorted")
+            pr = next((l for l in i.get("labels", []) if l.upper() in ("P0", "P1")), "  ")
+            print(f"  #{i['number']:<4} {t}/{t + u:<3} {pr:<2} {lane:<19} {'BLOCKED-ON ' + ','.join('#%d' % n for n in sorted(blk)) if blk else ''} {i['title'][:60]}")
+        sys.exit(0)
     okp = (claim(a.number, a.session, a.lane, a.why) if a.cmd == "claim"
            else release(a.number, a.session, a.why))
     print(f"{'CLAIM' if a.cmd == 'claim' else 'RELEASE'} crew#{a.number} {'posted' if okp else 'FAILED'}")
