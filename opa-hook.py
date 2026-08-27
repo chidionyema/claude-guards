@@ -91,6 +91,18 @@ def last_reply_above_fold(transcript_path: str) -> str:
     return re.sub(r"```.*?```", "", "\n".join(kept), flags=re.S)
 
 
+def standing_focus() -> str:
+    """The founder's standing FOCUS: line (goal_focus.py writes it), or '' when none is set.
+    crew#395 / crew#398: policy/reply.rego holds a BLOCKED: reply to it; the file read is here
+    because the policy decides and this adapter only gathers."""
+    path = os.path.join(os.path.expanduser("~"), ".claude", "state", "goal", "FOCUS.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return str(json.load(fh).get("text") or "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
@@ -100,7 +112,7 @@ def main() -> int:
         if payload.get("stop_hook_active"):
             return 0
         reply = last_reply_above_fold(str(payload.get("transcript_path", "")))
-        msgs = denials({"event": "Stop", "reply": reply}, REPLY_QUERY)
+        msgs = denials({"event": "Stop", "reply": reply, "focus": standing_focus()}, REPLY_QUERY)
         if msgs:
             print(json.dumps({"decision": "block", "reason": "\n\n".join(sorted(msgs))}))
         return 0
