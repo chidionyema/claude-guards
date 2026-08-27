@@ -172,7 +172,9 @@ def decide(payload: dict, gg=None) -> dict | None:
                               "Error: Need: Who:. Founder word STOP is the only other exit."}
         return None
 
-    item = board.oldest_unclaimed()
+    # crew#527 CP3: the board assigns. An item this session already holds (the board's CLAIM, or
+    # its own) is its objective; only a session holding nothing takes the top of the rank.
+    item = board.assignment_for(session) or board.next_unclaimed()
     if item == "BLIND":
         board.ledger({"guard": "auto-objective", "event": "blind", "session": session[:8]})
         return None
@@ -183,7 +185,8 @@ def decide(payload: dict, gg=None) -> dict | None:
     goal = f"crew#{num}: {item['title']}"
     st["goal"] = goal; st["auto_claimed"] = num; st["auto_claimed_at"] = int(time.time())
     gg.write_state(session, st)
-    board.claim(num, session, lane, "auto-objective: session stopped with no ACTIVE goal")
+    if board.claimed_by(item) is None:
+        board.claim(num, session, lane, "auto-objective: session stopped with no ACTIVE goal")
     board.ledger({"guard": "auto-objective", "event": "assigned", "session": session[:8], "item": num})
     return {"decision": "block",
             "reason": f"[auto-objective] No ACTIVE goal, so one is assigned: {goal} "
