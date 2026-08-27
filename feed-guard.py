@@ -87,8 +87,39 @@ def collisions(feed: Path, at: dt.datetime | None = None) -> list[tuple[dt.datet
     return out
 
 
-def append(feed: Path, session: str, lane: str, body: str, at: dt.datetime | None = None) -> str | None:
+METER_MARK = "📍 METER:"
+
+
+def meter_line(timeout: float = 20.0) -> str:
+    """crew#26 CP-D: the token bill rides on every handoff, measured, never remembered.
+
+    Reads estate/estate_spend.py --json (the meter that reproduces ~/.claude.json costUSD to 7
+    figures). Founder, 2026-08-27: "so how do we solve this, super crucial." A number nobody sees
+    is not an instrument (LAW 28); a handoff that carries $/request makes the cut visible daily.
+    BLIND when the meter cannot run; never a guess."""
+    script = Path(__file__).resolve().parent / "estate" / "estate_spend.py"
+    try:
+        out = subprocess.run([sys.executable, str(script), "--json"], capture_output=True,
+                             text=True, timeout=timeout).stdout
+        d = json.loads(out)
+        total, reqs = float(d["total"]), int(d["requests"])
+        per = total / reqs if reqs else 0.0
+        drv = d.get("by_driver") or {}
+        transport = sum(float(drv.get(k, 0)) for k in ("cache_read", "cache_write", "raw_input"))
+        share = (transport / total * 100) if total else 0.0
+        models = ", ".join(f"{m} {v / total * 100:.0f}%" for m, v in
+                           sorted((d.get("by_model") or {}).items(), key=lambda kv: -kv[1])[:3])
+        return (f"{METER_MARK} {d['day']} ${total:,.2f} {reqs:,} req ${per:.3f}/req "
+                f"transport {share:.0f}% | {models} (crew#26)")
+    except Exception as exc:  # noqa: BLE001
+        return f"{METER_MARK} BLIND: estate_spend.py did not answer ({type(exc).__name__}) (crew#26)"
+
+
+def append(feed: Path, session: str, lane: str, body: str, at: dt.datetime | None = None,
+           meter: str | None = None) -> str | None:
     lines = [l.rstrip() for l in body.strip().splitlines() if l.strip()]
+    if not any(l.startswith(METER_MARK) for l in lines) and len(lines) < 8:
+        lines.append(meter if meter is not None else meter_line())
     denied = denials(lines, session, lane, holders(feed, session, lane, at))
     if denied:
         return "; ".join(denied)
