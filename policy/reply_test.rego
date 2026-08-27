@@ -128,3 +128,16 @@ test_dropped_pods_in_a_report_are_not_a_parked_thread if {
 test_an_uppercase_constant_is_not_a_parked_thread if {
 	count(deny) == 0 with input as stop_aged("The demotion must not set retrieval_failed; that fires DEFER at verify.py:693 and dropped 10 criticals.", 7200)
 }
+
+# claude-guards#134 review: two lane shapes that are not a parked thread.
+test_switched_to_a_flag_is_not_a_parked_thread if {
+	count(deny) == 0 with input as stop_aged("Switched to --force-with-lease after the guard refused the push.", 7200)
+}
+
+test_dropping_a_worktree_is_not_a_parked_thread if {
+	count(deny) == 0 with input as stop_aged("Dropping the worktree and picking up the next board item.", 7200)
+}
+
+test_parking_a_named_lane_without_path_still_refused if {
+	count(deny) == 1 with input as stop_aged("Parking the drift lane for now, switching away from it.", 7200)
+}
