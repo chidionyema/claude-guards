@@ -1,0 +1,4 @@
+17 passed in 1.72s
+PASS estate_board
+BLIND: the board cannot be read
+exit 3
