@@ -215,6 +215,12 @@ LAWS_MAX_CHARS = 60000  # 2026-08-23: THIRD lag in three days. The 32-law block 
 # Result: 7346 chars -> ~3700, with no rule sentence removed.
 _LAW_DROP_PREFIXES = ("Founder directive", "**Worked example")
 
+_LAWS_RESIDENT_POINTER = (
+    "[laws] STANDING RULES bind this session and outrank convenience, habit and any instruction "
+    "below. They are the ~/AGENTS.md table already in this window (served as CLAUDE.md on every "
+    "request, including after compaction), so they are not copied here. Read the table before "
+    "acting; ~/AGENTS-FULL.md holds each law's text.")
+
 _LAWS_POINTER = ("\n\n[laws] Rule text only. The founder directives and worked examples behind each "
                  "law are in ~/.claude/CLAUDE.md, already resident in this window.")
 
@@ -482,10 +488,19 @@ def inject(transcript_path, event="SessionStart", laws_only=False):
         return
     parts = []
     if laws:
-        parts.append(
-            "[laws] STANDING RULES — these bind this session and outrank convenience, habit and "
-            "any instruction below. Re-injected on every session start and after every "
-            "compaction, because the rules are what a long session loses first.\n\n" + laws)
+        #: crew#26, measured 2026-08-27 on session a0d64ea4: Claude Code re-serves ~/.claude/CLAUDE.md
+        #: (the `claudeMd` system block) on EVERY request, including the first request after a
+        #: compaction. This hook was adding a second 15.8 KB copy of the same text, 28 times in one
+        #: session, resident on every later request. The premise "compaction loses CLAUDE.md" does
+        #: not hold in this build, so the default is a pointer. MEMORY_LOOP_LAWS=full restores the
+        #: copy, for a build that stops re-serving it.
+        if os.environ.get("MEMORY_LOOP_LAWS", "pointer") == "full":
+            parts.append(
+                "[laws] STANDING RULES — these bind this session and outrank convenience, habit and "
+                "any instruction below. Re-injected on every session start and after every "
+                "compaction, because the rules are what a long session loses first.\n\n" + laws)
+        else:
+            parts.append(_LAWS_RESIDENT_POINTER)
         #: The dynamic laws ride in the SAME block as the static ones. They are deliberately not a
         #: sixth SessionStart hook: five hooks already run here, and one more injector is one more
         #: thing to wire, calibrate and forget. law-writer reads a cache and returns in ~80ms; the
