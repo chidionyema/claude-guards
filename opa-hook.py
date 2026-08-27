@@ -30,6 +30,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 POLICY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "policy")
 QUERY = "data.hooks.deny"
@@ -91,6 +92,19 @@ def last_reply_above_fold(transcript_path: str) -> str:
     return re.sub(r"```.*?```", "", "\n".join(kept), flags=re.S)
 
 
+def checkpoint_age_s(transcript_path: str):
+    """Seconds since the project's checkpoints/LATEST.md was written, a large number when the file
+    is missing, None when the transcript path gives no project directory (crew#423 row 16, LAW 16).
+    The policy decides; this adapter only measures."""
+    if not transcript_path:
+        return None
+    path = os.path.join(os.path.dirname(transcript_path), "checkpoints", "LATEST.md")
+    try:
+        return int(time.time() - os.stat(path).st_mtime)
+    except OSError:
+        return 10**9
+
+
 def standing_focus() -> str:
     """The founder's standing FOCUS: line (goal_focus.py writes it), or '' when none is set.
     crew#395 / crew#398: policy/reply.rego holds a BLOCKED: reply to it; the file read is here
@@ -112,7 +126,11 @@ def main() -> int:
         if payload.get("stop_hook_active"):
             return 0
         reply = last_reply_above_fold(str(payload.get("transcript_path", "")))
-        msgs = denials({"event": "Stop", "reply": reply, "focus": standing_focus()}, REPLY_QUERY)
+        payload_in = {"event": "Stop", "reply": reply, "focus": standing_focus()}
+        age = checkpoint_age_s(str(payload.get("transcript_path", "")))
+        if age is not None:
+            payload_in["checkpoint_age_s"] = age
+        msgs = denials(payload_in, REPLY_QUERY)
         if msgs:
             print(json.dumps({"decision": "block", "reason": "\n\n".join(sorted(msgs))}))
         return 0

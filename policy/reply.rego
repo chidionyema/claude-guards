@@ -158,3 +158,34 @@ deny contains msg if {
 		[count(options)],
 	)
 }
+
+# LAW 16 (leave a path back when you drop something), crew#423 map row 16 "leave-a-path-back-when":
+# the session dropped a thread and wrote no checkpoints/LATEST.md. THE CLASS: a Stop reply that says
+# it parks, drops, defers or switches away from an item, on a line that names no way back (a
+# checkpoint file, a ticket number, a branch or a "path back:"), while the session's
+# checkpoints/LATEST.md is older than 30 minutes or missing. opa-hook.py supplies
+# checkpoint_age_s from the file's mtime; with no value at all the rule stays silent (BLIND, LAW 45).
+park_re := `(?i)\b(?:park(?:ed|ing)?|dropp(?:ed|ing)|defer(?:red|ring)?|shelv(?:ed|ing)|switch(?:ed|ing)\s+(?:to|away)|leav(?:e|ing)\s+(?:it|this|that|[a-z#\d]+)\s+for\s+(?:later|now|another)|pick(?:ing)?\s+(?:it|this|that|[a-z#\d]+)\s+up\s+later|come\s+back\s+to\s+(?:it|this|that)\s+later)\b`
+
+path_back_re := `(?i)LATEST\.md|checkpoint|\bpath\s+back\b|#\d+|\b[a-z]+/[a-z0-9._/-]+\b`
+
+park_without_path(line) if {
+	regex.match(park_re, line)
+	not regex.match(path_back_re, line)
+}
+
+deny contains msg if {
+	input.event == "Stop"
+	input.checkpoint_age_s > 1800
+	some line in split(input.reply, "\n")
+	park_without_path(line)
+	msg := sprintf(
+		concat("", [
+			"LAW 16: leave a path back when you drop something. This reply parks a thread with no way back on the line:\n",
+			"  %s\n",
+			"and checkpoints/LATEST.md is %d s old. Name the ticket, branch or checkpoint on that line, ",
+			"or write the checkpoint first (map row 16, crew#423).",
+		]),
+		[trim_space(line), input.checkpoint_age_s],
+	)
+}

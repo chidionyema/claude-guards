@@ -101,3 +101,26 @@ test_founder_word_allowed if {
 test_option_lines_with_decision_allowed if {
 	count(deny) == 0 with input as stop("INVENTORY: two ways were on the table.\nOption A: launchd.\nOption B: a Dagster row.\nChosen: B, portable; risk: the row needs the daemon up.")
 }
+
+# crew#423 row 16: parked thread with no path back, both ways.
+stop_aged(text, age) := {"event": "Stop", "reply": text, "checkpoint_age_s": age}
+
+test_parked_thread_without_path_and_stale_checkpoint_refused if {
+	count(deny) == 1 with input as stop_aged("INVENTORY: idp row landed.\nParking the drift work for now and switching to the receipt.", 7200)
+}
+
+test_parked_thread_with_ticket_on_the_line_allowed if {
+	count(deny) == 0 with input as stop_aged("INVENTORY: idp row landed.\nParking the drift work on crew#401 for now, branch fix/crew401-drift.", 7200)
+}
+
+test_parked_thread_with_fresh_checkpoint_allowed if {
+	count(deny) == 0 with input as stop_aged("Parking the drift work for now and switching to the receipt.", 120)
+}
+
+test_no_checkpoint_age_supplied_is_blind_not_a_verdict if {
+	count(deny) == 0 with input as stop("Parking the drift work for now and switching to the receipt.")
+}
+
+test_dropped_pods_in_a_report_are_not_a_parked_thread if {
+	count(deny) == 0 with input as stop_aged("The receipt dropped the two pods that were Succeeded; see checkpoints/LATEST.md.", 7200)
+}
