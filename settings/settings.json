@@ -170,6 +170,11 @@
             "type": "command",
             "command": "python3 $HOME/.claude/scripts/idle-guard.py",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/credential-guard.py",
+            "timeout": 10
           }
         ]
       },
@@ -261,6 +266,11 @@
           {
             "type": "command",
             "command": "python3 $HOME/.claude/scripts/ticket-gate.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/credential-guard.py",
+            "timeout": 10
           }
         ]
       },
