@@ -68,3 +68,36 @@ test_report_lines_that_start_with_a_verb_allowed if {
 test_verb_plus_object_refused if {
 	count(deny) == 1 with input as stop("DONE: wired.\nOpen the console and approve it.")
 }
+
+# LAW 4 / headline rule 2: no menus.
+test_option_lines_refused if {
+	count(deny) == 1 with input as stop("INVENTORY: two ways to sync the checkout.\nOption A: a launchd job (cheap, Mac-bound).\nOption B: a Dagster row (portable).\nSay which and I start.")
+}
+
+test_options_header_refused if {
+	count(deny) >= 1 with input as stop("WORKING: the grader is written.\n**Options:**\n- keep the default list\n- read the catalogue")
+}
+
+test_say_go_refused if {
+	count(deny) >= 1 with input as stop("INVENTORY: the fix is staged on a branch. Say go and I will merge it.")
+}
+
+test_which_or_question_refused if {
+	count(deny) == 1 with input as stop("Which do you prefer, the Dagster row or the launchd plist?")
+}
+
+test_single_option_line_allowed if {
+	count(deny) == 0 with input as stop("DONE: took option 2 from the standards page; option A was a table row, not a menu.")
+}
+
+test_decision_with_risk_allowed if {
+	count(deny) == 0 with input as stop("INVENTORY: the grader reads ESTATE_CHECKOUTS.\nRisk: a checkout absent from the catalogue is not graded; the BLIND row names it.\nSTAGED: remove the launchd copy. Reply 'hold' to cancel. Auto-activating in 60 minutes.")
+}
+
+test_founder_word_allowed if {
+	count(deny) == 0 with input as stop("BLOCKED: idp#314 waits on the word.\nFOUNDER ACTION: reply APPROVE: healthchecks-row-crew177 or DENY: healthchecks-row-crew177 on https://github.com/chidionyema/idp/pull/314")
+}
+
+test_option_lines_with_decision_allowed if {
+	count(deny) == 0 with input as stop("INVENTORY: two ways were on the table.\nOption A: launchd.\nOption B: a Dagster row.\nChosen: B, portable; risk: the row needs the daemon up.")
+}

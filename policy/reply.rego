@@ -100,3 +100,61 @@ deny contains msg if {
 		[trim_space(line)],
 	)
 }
+
+# LAW 4 (think it through, take the smaller road) and hard rule 2 of the headline: "You may not
+# hand the founder a menu. Options, trade-off tables and 'say go and I will' are the half-stitched
+# habit in its report form. Name the one answer, state the risk in a sentence, and do it." crew#423
+# graded the rule take-the-smaller-road-when absent: no guard. THE CLASS: a reply above the fold
+# that ends in a choice for him instead of a decision. Four shapes, each one seen in a real reply:
+# two or more "Option A / Option B" lines; an "Options:" or "Trade-offs:" header; "say go and I
+# will" / "tell me which and I'll"; a "which ... or ... ?" question. What passes: a single real
+# question with no alternatives in it ("Which repo should the spec live in?"), STAGED:, and a
+# FOUNDER ACTION: naming one word (APPROVE:/DENY: is a decision he owns, not a menu).
+menu_option_re := `(?i)^\s*(?:[-*]\s*|\d+[.)]\s*)?(?:\*\*)?option\s+(?:[A-Z]|\d)\b`
+
+menu_header_re := `(?i)^\s*(?:#+\s*)?(?:\*\*)?(?:your\s+)?(?:options?|trade-?offs?|alternatives|choices)(?:\*\*)?\s*:?\s*(?:\*\*)?\s*$`
+
+menu_go_re := `(?i)\b(?:say|reply|tell\s+me|answer)\s+(?:['"\x60]?(?:go|yes|which|a|b|1|2)['"\x60]?)\b.{0,50}\bi(?:'ll|\s+will)\b`
+
+menu_question_re := `(?i)^\s*(?:[-*]\s*)?(?:which|do you (?:want|prefer)|would you (?:like|prefer|rather)|should (?:i|we))\b[^?]*\bor\b[^?]*\?`
+
+menu_line(line) if regex.match(menu_header_re, line)
+
+menu_line(line) if regex.match(menu_go_re, line)
+
+menu_line(line) if regex.match(menu_question_re, line)
+
+deny contains msg if {
+	input.event == "Stop"
+	some line in split(input.reply, "\n")
+	not regex.match(chore_prefix_re, line)
+	menu_line(line)
+	msg := sprintf(
+		concat("", [
+			"A MENU IS NOT A DELIVERABLE (LAW 4, headline rule 2). This reply hands the founder a choice:\n",
+			"  %s\n",
+			"Name the one answer, state the risk in a sentence, and do it. ",
+			"Reversible work is STAGED:; only an unsafe or irreversible step is a FOUNDER ACTION: with one word.",
+		]),
+		[trim_space(line)],
+	)
+}
+
+# Two Option lines followed by a decision line are a record of the choice, not a menu (code-2f, #132 review).
+decision_re := `(?i)^\s*(?:[-*]\s*)?(?:\*\*)?(?:chosen|decision|picked|taking|going with|doing)(?:\*\*)?\s*:`
+
+has_decision if {
+	some line in split(input.reply, "\n")
+	regex.match(decision_re, line)
+}
+
+deny contains msg if {
+	input.event == "Stop"
+	not has_decision
+	options := [line | some line in split(input.reply, "\n"); regex.match(menu_option_re, line)]
+	count(options) >= 2
+	msg := sprintf(
+		"A MENU IS NOT A DELIVERABLE (LAW 4, headline rule 2). %d Option lines above the fold; pick one, state the risk, do it.",
+		[count(options)],
+	)
+}
