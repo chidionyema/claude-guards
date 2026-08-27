@@ -741,10 +741,14 @@ def main() -> int:
     shown = rows if args.all else [r for r in rows if r["class"] != "OK"]
 
     if args.json:
+        # crew#73: the log holds two shapes, the tick header (`ts`, `rc`, `findings`, kind=tick)
+        # and these session rows; every row stamps its time and says which shape it is.
+        at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         for r in shown:
-            print(json.dumps({k: r[k] for k in
-                              ("session", "slug", "class", "idle_s", "evidence",
-                               "would_page", "streak", "cwd")}))
+            print(json.dumps({"at": at, "kind": "session",
+                              **{k: r[k] for k in
+                                 ("session", "slug", "class", "idle_s", "evidence",
+                                  "would_page", "streak", "cwd")}}))
         return 0
 
     live = len(rows)
