@@ -43,3 +43,20 @@ test_blocked_on_a_direction_allowed_without_a_focus if {
 test_blocked_on_a_physical_hand_allowed_under_a_focus if {
 	count(deny) == 0 with input as {"event": "Stop", "reply": hand, "focus": "crew#284: finish KINI"}
 }
+
+# crew#431: LAW 31, the founder does not run scripts.
+test_chore_line_refused if {
+	count(deny) == 1 with input as stop("INVENTORY: the deploy is staged.\nRun `make deploy` and paste the output here.")
+}
+
+test_numbered_click_refused if {
+	count(deny) == 1 with input as stop("DONE: wired.\n1. Open the console and click Approve.")
+}
+
+test_you_need_to_run_refused if {
+	count(deny) == 1 with input as stop("INVENTORY: built.\nYou'll need to run `terraform apply` once.")
+}
+
+test_format_lines_allowed if {
+	count(deny) == 0 with input as stop("INVENTORY: the deploy runs on a schedule now.\nBuilt: a workflow_dispatch deploy.\nUse: `gh workflow run deploy.yml`\nExpect: the run is green in 4 minutes.\nSTAGED: rotating the key. Reply 'hold' to cancel. Auto-activating in 60 minutes.\nFOUNDER ACTION: tap the YubiKey when the phone buzzes.\nThe job runs itself; nothing to run by hand.")
+}
