@@ -254,6 +254,10 @@
     "TELEGRAM_TOKEN": {
       "is": "the only channel that reaches the founder",
       "covered_by": "telegram-delivery"
+    },
+    "CONSOLE_PASSWORD": {
+      "is": "a fixture string in tests/test_incident_crew407_*: the shape the Telegram guard must refuse",
+      "dismissed": "not a credential the estate holds; it exists only so the guard is proved to refuse it"
     }
   }
 }
