@@ -4,7 +4,7 @@ What you see when a session tries to open a PR against a repo that already has m
 
 ```
 $ gh pr create -R chidionyema/idp --title "feat: x" --body-file /abs/body.md
-BLOCKED by pr-cap-guard: chidionyema/idp has 14 open PRs, cap is 10 (crew#504). Oldest: #353 (2026-08-25), #358 (2026-08-25), #379 (2026-08-26). Merge or close before opening another; merging, closing and reviewing stay allowed.
+BLOCKED by pr-cap-guard: chidionyema/idp has 14 open PRs, cap is 10 (crew#504). Oldest: #11 (2026-08-24), #27 (2026-08-24), #29 (2026-08-24). Merge or close before opening another; merging, closing and reviewing stay allowed.
 ```
 
 What it just did: asked GitHub for the open PRs of the target repo (the `-R` flag, else the checkout's `origin`), counted them, and refused the one command that grows the queue. Nothing was created. `gh pr merge`, `gh pr close`, `gh pr review` and every other command pass untouched, so the queue can only fall until the guard lets creation through again.
