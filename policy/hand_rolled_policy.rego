@@ -114,7 +114,12 @@ legacy := {
 	# itself: holders() walks feed.md for the sessions inside the 2h hold and hands them in as
 	# input.holders; sweep counts the last 24h a lane-hold rule would have refused (LAW 45
 	# step 4, printed 145 on the live feed); two selftest cases prove the guard both ways.
-	"feed-guard.py": 212,
+	# 212 -> 240 on 2026-08-27 (crew#403 CP6, claude-guards#152). next_answer() injects the bar
+	# and red rows of idp docs/NEXT.md with its URL when the founder asks about status,
+	# capabilities, progress or when. It is content, not a decision: OPA cannot read the page
+	# or print it into the prompt. The prompt match (STATUS_RE) is the only rule, and it has
+	# no refusal to migrate; three incident tests prove it both ways.
+	"feed-guard.py": 240,
 }
 
 # How many command refusals each guard still implements in Python. Same direction
