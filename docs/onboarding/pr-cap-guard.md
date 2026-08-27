@@ -13,3 +13,11 @@
 **How to turn it off.** Remove the `pr-cap-guard.py` entry from the `PreToolUse` hooks in `~/.claude/settings.json` (it sits directly after `dupe-work-fence.py`). `settings/settings.json` in this repo is the tracked copy the install step lays down.
 
 **How to know it is working.** `python3 ~/.claude/scripts/pr-cap-guard.py --selftest` prints six PASS lines; `tests/test_incident_crew504_pr_cap_refuses_gh_pr_create.py` drives the script through a fake `gh` at 11 and 10 open.
+
+## Stacked PRs
+
+`gh pr merge N --delete-branch` (or `-d`) is refused while another open PR in the repo has N's head branch as its base. Drop `--delete-branch`, merge, `gh pr edit <stacked> --base main`, and delete the branch once the top of the stack has landed. No gh, or an unknown repo: allow (fail open, like the cap).
+
+## Held PRs
+
+A PR carrying the `hold` label (`PR_CAP_HOLD_LABEL` to rename) is parked, not queued: it pushes nothing and runs nothing, so it does not count toward the cap. The refusal line says so (`label `hold` not counted`).
