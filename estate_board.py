@@ -133,7 +133,8 @@ def blocked_on(issue: dict) -> set[int]:
 
 def rank_key(issue: dict, open_numbers: set[int]) -> tuple:
     """Finish-first. Lower sorts first: unblocked, most of its boxes ticked, P0 before P1,
-    founder-request, then oldest. An issue with no checklist ranks as 0 ticked."""
+    founder-request, then oldest. An issue with no checklist ranks as 0 ticked. An all-ticked
+    issue is not work at all (see is_work): it is a close-chore for the nightly closer (crew#526)."""
     t, u = boxes(issue)
     frac = t / (t + u) if t + u else 0.0
     labels = {l.lower() for l in issue.get("labels", [])}
@@ -142,9 +143,15 @@ def rank_key(issue: dict, open_numbers: set[int]) -> tuple:
     return (blocked, -frac, prio, "founder-request" not in labels, issue["number"])
 
 
+def all_ticked(issue: dict) -> bool:
+    t, u = boxes(issue)
+    return t > 0 and u == 0
+
+
 def unclaimed(issues: list[dict]) -> list[dict]:
     open_numbers = {i["number"] for i in issues}
-    return sorted((i for i in issues if is_work(i) and not claimed(i)), key=lambda i: rank_key(i, open_numbers))
+    return sorted((i for i in issues if is_work(i) and not claimed(i) and not all_ticked(i)),
+                  key=lambda i: rank_key(i, open_numbers))
 
 
 def next_unclaimed() -> dict | None | str:

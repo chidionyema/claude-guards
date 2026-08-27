@@ -33,3 +33,15 @@ def test_blocked_on_an_open_issue_ranks_last_and_a_closed_blocker_does_not_block
               _i(23, "Blocked-on: #999 (closed)\n- [x] a\n- [ ] b")]
     assert [i["number"] for i in eb.unclaimed(issues)] == [20, 23, 21, 22]
     assert eb.blocked_on(issues[2]) == {21} and eb.boxes(issues[0]) == (2, 1)
+
+
+def test_all_ticked_is_a_close_chore_not_next_work() -> None:
+    """code-2f REWORK on cg#164: frac 1.0 put a finished issue above every half-done one."""
+    issues = [
+        _i(5, "- [x] a\n- [x] b"),
+        _i(6, "- [x] a\n- [ ] b"),
+        _i(7, ""),
+    ]
+    assert [i["number"] for i in eb.unclaimed(issues)] == [6, 7]
+    assert eb.all_ticked(issues[0]) and not eb.all_ticked(issues[1])
+    assert not eb.all_ticked(issues[2])
