@@ -54,14 +54,46 @@ legacy := {
 	# could not be run. rules_count is unchanged: `grep -c '^def rule_'` is the same before
 	# and after, because no rule was added. Six of the six lines are the flag pattern, its
 	# two-line comment, and passing the name through to gh.
-	"rule-guard.py": 1120,
-	"ticket-gate.py": 1098,
+	# 1120 -> 1174 on 2026-08-26 (session 4e5b5e8f). No refusal was added: rules_count is
+	# still 6 and the refusal is command.rego's orphaned_worktree rule. The lines are the
+	# state Rego cannot gather -- orphan_state() stats the targeted `.wt-*` dir and names
+	# the checkout git would act on -- plus its both-ways selftest. This is the shape the
+	# header prescribes for a live question: adapter gathers, Rego decides.
+	# 1174 -> 1198 on 2026-08-26 (session 78caaa17, crew#51). No refusal was added: rules_count
+	# is still 6. strip_echo_payloads drops what echo/printf prints before the command reaches
+	# Rego, next to heredoc bodies and -m messages; Rego judges the command it is handed, so
+	# the stripping is the adapter's job. Both-ways cases are in the selftest.
+	# 1282 -> 1310 on 2026-08-27 (session 78caaa17, crew#423 row 25, claude-guards#137). No refusal
+	# was added: rules_count is still 6 and the refusal is command.rego's LAW 25 rule (a switch
+	# command while checkpoints/LATEST.md is more than 30 min old). The lines are the state Rego
+	# cannot gather: checkpoint_age_s() stats LATEST.md next to the transcript, walks up from a
+	# subagents/ transcript, and hands None (BLIND) when there is no file. Adapter gathers, Rego decides.
+	"rule-guard.py": 1310,
+	# crew#407 (claude-guards#118): the credential shapes use lookarounds ((?!...), (?<!...)) that
+	# RE2, and so OPA, cannot run, and the one definition is estate_alert.credential_shape, shared
+	# with the Telegram senders (#113). The hook is the adapter for two events (Stop reply text,
+	# PreToolUse gh writes); the decision is one function call. Ceiling only ever falls.
+	"credential-guard.py": 118, # crew#332: foreign_changes() asks git status and stats files; the refusal is Rego
+	# 1098 -> 1107 on 2026-08-26 (crew#323, claude-guards#92). No refusal was added: the gate
+	# graded a compaction summary ("This session is being continued from a previous
+	# conversation", "Caveat:", "Stop hook") as founder words and demanded a ticket for it.
+	# The nine lines are the NOT_FOUNDER_WORDS prefix list and the startswith() that reads it.
+	# It is a transcript-shape rule, and no runner feeds transcripts to OPA yet; same follow-up
+	# and same exit as dod-guard below.
+	# 1107 -> 1109 on 2026-08-27 (claude-guards#127). No refusal was added: one more entry in the
+	# same NOT_FOUNDER_WORDS list (a monitor's liveness probe, "Answer with one word and nothing
+	# else", filed four times as crew#334-#337). Same transcript-shape rule, same missing runner,
+	# same exit: the list moves to Rego with the Stop/transcript runner named on crew#281.
+	"ticket-gate.py": 1109,
 	"goal-guard.py": 960,
 	"tool-drip-guard.py": 641,
 	"close-guard.py": 536,
 	"context-guard-hook.py": 499,
 	"idle-guard.py": 336,
 	"dupe-work-fence.py": 289,
+	# crew#504: the decision is an authenticated GitHub call (open PR count) per
+	# invocation; Rego would need the gh token in the hook input to http.send it.
+	"pr-cap-guard.py": 143,
 	"peer-loop-fence.py": 285,
 	"repeat-guard.py": 283,
 	"jargon-guard.py": 269,
@@ -69,8 +101,28 @@ legacy := {
 	"scope-guard.py": 146,
 	"laws-link-guard.py": 145,
 	"canonical-root-guard.py": 133,
-	"dod-guard.py": 192,
-	"feed-guard.py": 176,
+	# 192 -> 202 on 2026-08-26 (crew#281 CP2, claude-guards#65): STAGED: is a fifth reply word and
+	# must carry the founder's go/hold sentence and a minute count. It is a Stop-hook rule over
+	# the reply text; opa-hook.py runs only on PreToolUse (Artifact) and no Stop runner feeds a
+	# transcript to OPA yet, so the rule cannot be Rego today. Follow-up on crew#281: a Stop
+	# runner, then dod-guard and blocker-guard move to policy/reply.rego and leave this list.
+	"dod-guard.py": 202,
+	# Added 2026-08-26 at 94 lines, the first time it is committed: settings.json has run it
+	# untracked since 2026-08-25 (LAW 24). Same reason as dod-guard: a Stop rule over the reply
+	# and the Telegram ledger, no OPA Stop runner exists. Same follow-up, same exit.
+	"blocker-guard.py": 94,
+	# 176 -> 212 on 2026-08-26 (crew#331, #99). The rule itself (a handoff on a lane another
+	# live session holds is refused unless the holder is named on the OVERLAP line) went into
+	# policy/feed.rego with three tests. The 36 Python lines are the data OPA cannot read for
+	# itself: holders() walks feed.md for the sessions inside the 2h hold and hands them in as
+	# input.holders; sweep counts the last 24h a lane-hold rule would have refused (LAW 45
+	# step 4, printed 145 on the live feed); two selftest cases prove the guard both ways.
+	# 212 -> 240 on 2026-08-27 (crew#403 CP6, claude-guards#152). next_answer() injects the bar
+	# and red rows of idp docs/NEXT.md with its URL when the founder asks about status,
+	# capabilities, progress or when. It is content, not a decision: OPA cannot read the page
+	# or print it into the prompt. The prompt match (STATUS_RE) is the only rule, and it has
+	# no refusal to migrate; three incident tests prove it both ways.
+	"feed-guard.py": 270,
 }
 
 # How many command refusals each guard still implements in Python. Same direction

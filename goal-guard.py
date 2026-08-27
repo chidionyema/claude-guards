@@ -869,9 +869,9 @@ def selftest() -> int:
        "ACTIVE GOAL: merge crew#132" in turn("g4"))
     ck("no goal, ungated lane: silent", turn("g5") == "")
     LANES_FILE.write_text(json.dumps({"lanes": {"default": {"gate": "deny"}}}))
-    ck("no goal, gated lane: the prompt says writes will be DENIED",
-       "DENIED" in turn("g5"))
+    ck("no goal, gated lane: the prompt says writes will be DENIED", "DENIED" in turn("g5"))
 
+    __import__("goal_focus").selftest(sys.modules[__name__], ck)
     print("\n  %d/%d checks passed" % (total[0] - bad[0], total[0]))
     return 1 if bad[0] else 0
 
@@ -916,10 +916,10 @@ def main() -> int:
         st = read_state(sess)
         st["goal"] = goal
         write_state(sess, st)
-        ledger({"t": int(time.time()), "kind": "goal_set",
-                "session": sess[:12], "goal": goal[:200]})
+        ledger({"t": int(time.time()), "kind": "goal_set", "session": sess[:12], "goal": goal[:200]})
         print(f"goal set for session {sess}: {goal}")
         return 0
+    if "--focus" in sys.argv: return __import__("goal_focus").cli(sys.modules[__name__], sys.argv)  # crew#398
     if "--status" in sys.argv:
         sess = cli_session() or "nosession"
         name, lane = load_lane()
@@ -947,7 +947,7 @@ if __name__ == "__main__":
     # fields). This covers the ones I did not design -- a disk-full write, a bug of mine,
     # an import failure. A governance hook that refuses work because IT broke is worse
     # than no hook. --selftest is exempt: a test that cannot fail grades nothing.
-    if any(f in sys.argv for f in ("--selftest", "--set-goal", "--status")):
+    if any(f in sys.argv for f in ("--selftest", "--set-goal", "--status", "--focus")):
         # CLI use, not a hook: a real exit code is the point. --set-goal with no session
         # id must FAIL loudly, not be laundered to 0 by the hook wrapper below.
         raise SystemExit(main())

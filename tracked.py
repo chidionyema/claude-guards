@@ -23,7 +23,15 @@ refused, named, and left out. Directories that exist only to hold keys are not
 listed at all -- they are in rebuild/PREREQUISITES.md, which records that they
 must exist and what for, and never what is in them.
 """
-import argparse, filecmp, fnmatch, json, os, re, shutil, sys
+import argparse
+import filecmp
+import fnmatch
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MANIFEST = os.path.join(HERE, "tracked.json")
@@ -192,9 +200,58 @@ def _copy(src, dst):
     return True
 
 
+#: Generated entries whose live copy drifted from the committed one. The repo is the
+#: source for these, so the drift is reported, never mirrored (incident crew#13).
+STALE_GENERATED = []
+
+
+#: Entries whose live copy is byte-identical to a version already committed BEFORE HEAD.
+#: Incident 2026-08-27 (crew#13, claude-guards aae334c): ~/.claude/settings.json and
+#: ~/AGENTS-FULL.md had never been reinstalled after #118, #122 and the LAW 50 merge, so
+#: this job read the stale live copies as "changed outside git" and pushed them over
+#: main: LAW 50 deleted from the law text, every hook unwired from hook-run.py, main red.
+#: A live copy that equals an old commit is behind git, not ahead of it; the repo is the
+#: source and the copy runs the other way.
+STALE_BEHIND = []
+
+
+def behind_git(live_path, repo_rel):
+    """True when live_path matches a blob of repo_rel committed before HEAD's version."""
+    try:
+        def run(*a):
+            return subprocess.run(["git", "-C", REPO_ROOT, *a], capture_output=True,
+                                  text=True, timeout=60, check=True).stdout.strip()
+        blob = run("hash-object", live_path)
+        shas = run("log", "--format=%H", "-n", "200", "HEAD", "--", repo_rel).split()
+        for sha in shas[1:]:
+            if run("rev-parse", "--verify", "-q", "%s:%s" % (sha, repo_rel)) == blob:
+                return True
+    except Exception:
+        return False
+    return False
+
+
+def _restore_behind(e, live_path, repo_abs, repo_rel):
+    STALE_BEHIND.append((repo_rel, live_path))
+    shutil.copy2(repo_abs, live_path)
+    return True
+
+
 def pull_one(e):
     a, b, c = diff_one(e)
+    if e.get("generated"):
+        # Incident 2026-08-26 (crew#13, claude-guards#80 -> 442675d): a PR moved eight
+        # committed plists off ~/.hermes; nobody re-rendered the live directory; this
+        # job then copied the stale live plists back over the merged fix and pushed
+        # straight to main. For an entry the repo generates, the committed copy is
+        # the source and the live one is the derivative, so the copy only ever runs
+        # the other way. Record the drift and touch nothing.
+        if a or b or c:
+            STALE_GENERATED.append((e["repo"], e["generated"], a + b + c))
+        return 0, 0, 0
     if e.get("tree"):
+        c = [f for f in c if not (behind_git(os.path.join(e["live"], f), e["repo"] + "/" + f)
+             and _restore_behind(e, os.path.join(e["live"], f), os.path.join(e["repo_abs"], f), e["repo"] + "/" + f))]
         for f in a + c:
             _copy(os.path.join(e["live"], f), os.path.join(e["repo_abs"], f))
         for f in b:
@@ -202,11 +259,16 @@ def pull_one(e):
         return len(a), len(b), len(c)
     if "glob" in e:
         os.makedirs(e["repo_abs"], exist_ok=True)
+        c = [f for f in c if not (behind_git(os.path.join(e["live"], f), e["repo"] + "/" + f)
+             and _restore_behind(e, os.path.join(e["live"], f), os.path.join(e["repo_abs"], f), e["repo"] + "/" + f))]
         for f in a + c:
             _copy(os.path.join(e["live"], f), os.path.join(e["repo_abs"], f))
         for f in b:
             os.remove(os.path.join(e["repo_abs"], f))
     else:
+        if c and behind_git(e["live"], e["repo"]):
+            _restore_behind(e, e["live"], e["repo_abs"], e["repo"])
+            return 0, 0, 0
         if a or c:
             _copy(e["live"], e["repo_abs"])
         elif b:
@@ -270,6 +332,20 @@ def board(kind, text, source="tracked.py"):
         except Exception: pass
 
 
+
+#: The issue this guard's commits belong to. The commit-msg hook `ticket-default`
+#: (crew#53) refuses any commit whose subject names no issue, whichever tool wrote
+#: it, and on 2026-08-27T02:11Z it refused this guard's own commit: LAW 24 drift sat
+#: uncommitted and the board said "could not commit". A guard that commits must
+#: name its ticket like anyone else.
+TICKET = "crew#13"
+
+
+def commit_message(changed: list[str]) -> str:
+    return ("LAW 24: %d load-bearing file(s) changed outside git (%s)\n\n%s\n\n"
+            "Committed by the scheduled guard, not by a person.\n"
+            % (len(changed), TICKET, "\n".join("  " + c for c in changed)))
+
 def sync():
     """Pull the drift, commit it, push it. Report only what a person would act on."""
     import subprocess
@@ -287,6 +363,22 @@ def sync():
     moved = 0
     for e in entries():
         moved += sum(pull_one(e))
+
+    if STALE_GENERATED:
+        board("stale-generated",
+              "tracked.py left %d generated entr%s alone because the live copy has "
+              "drifted from the committed source: %s. The fix runs the generator, "
+              "never a mirror back into git."
+              % (len(STALE_GENERATED), "y" if len(STALE_GENERATED) == 1 else "ies",
+                 "; ".join("%s (%d file(s), regenerate with `%s`)" % (r, len(f), g)
+                           for r, g, f in STALE_GENERATED)))
+
+    if STALE_BEHIND:
+        board("stale-behind",
+              "tracked.py reinstalled %d live file(s) that matched a version already committed "
+              "before HEAD, instead of pushing the old copy over main: %s. The repo was ahead; "
+              "the machine had not been re-rendered (crew#13, aae334c)."
+              % (len(STALE_BEHIND), "; ".join("%s -> %s" % (r, lv) for r, lv in STALE_BEHIND)))
 
     if REFUSED:
         board("secret-refused",
@@ -315,10 +407,7 @@ def sync():
     # with no reason. Nothing was actually broken; check before alerting.
     if git("diff", "--cached", "--quiet").returncode == 0:
         return 0  # nothing actually staged: the drift self-resolved
-    msg = ("LAW 24: %d load-bearing file(s) changed outside git\n\n%s\n\n"
-           "Committed by the scheduled guard, not by a person.\n"
-           % (len(changed), "\n".join("  " + c for c in changed)))
-    c = git("commit", "-m", msg)
+    c = git("commit", "-m", commit_message(changed))
     if c.returncode:
         reason = (c.stderr.strip() or c.stdout.strip())[:300]
         board("guard-broken", "tracked.py could not commit: " + reason)
@@ -467,7 +556,7 @@ def main():
     if drift:
         print(f"\n{drift} difference(s). LAW 24: run `tracked.py --pull`, then commit.")
         return 1 if a.check else 0
-    print(f"in step: every tracked path matches its committed copy")
+    print("in step: every tracked path matches its committed copy")
     return 0
 
 

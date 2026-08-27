@@ -18,7 +18,7 @@
 	<key>ProgramArguments</key>
 	<array>
 		<string>/Users/chidionyema/Documents/code/prospector/.venv/bin/python</string>
-		<string>/Users/chidionyema/.hermes/scripts/launchd_receipt.py</string>
+		<string>/Users/chidionyema/.claude/scripts/estate/launchd_receipt.py</string>
 		<string>--label</string>
 		<string>com.prospector.launchd-held</string>
 		<string>--</string>

@@ -41,11 +41,13 @@ backlog, not the pattern.
 from __future__ import annotations
 
 import json
-import os, platform
+import os
+import platform
 import re
 import shutil
 import subprocess
 import sys
+import time
 
 #: One Mac's absolute path. Off that Mac the directory is simply not there, `_git`
 #: answers "cannot tell" to every question, and every rule that asks git something
@@ -372,8 +374,7 @@ def _merge_refusal(pr: str, states: list[tuple[str, str]] | None) -> str | None:
                 "  why              main ran commit 5b8d010 in production on 2026-08-17 with\n"
                 "                   zero finished runs; 'no checks' looked identical to green\n"
                 "  instead          push a commit that triggers CI, or wait for the run to\n"
-                "                   register, then re-read: gh pr checks " + pr
-                + _escape("merge-red-intended"))
+                "                   register, then re-read: gh pr checks " + pr + "\n  first check      GitHub creates no pull_request run for a PR that conflicts with its base (crew#490, 2026-08-27:\n                   0 checks for 40 min; close/reopen and an empty commit changed nothing; merging main in produced 6).\n                   Read it before waiting: gh pr view " + pr + " --json mergeable --jq .mergeable ; CONFLICTING means merge the base in and push." + _escape("merge-red-intended"))
 
     waiting = [n for n, s in states if s.upper() in _PENDING_STATES]
     red = [f"{n}={s.lower()}" for n, s in states
@@ -494,7 +495,7 @@ def _merge_verdict(pr: str, states: list[tuple[str, str]] | None,
 
 def _pr_check_states(pr: str, cmd: str = "") -> list[tuple[str, str]] | None:
     """(name, state) for every check on `pr`, or None if the query itself failed."""
-    named = _GH_REPO_FLAG.search(cmd)
+    named = next((_GH_REPO_FLAG.search(s) for s in re.split(r"\|\||&&|[;|\n]", cmd) if _GH_MERGE.search(s)), None)  # the merge's own segment only
     try:
         p = subprocess.run(
             [_real_tool("gh"), "pr", "checks", pr, "--json", "name,state",
@@ -643,6 +644,122 @@ def rule_restart_kills_a_live_build(cmd: str) -> str | None:
             + _escape("runner-busy-intended"))
 
 
+# ---------------------------------------------------- a worktree path with no .git
+
+#: Session 4e5b5e8f, 2026-08-26: `git worktree remove .wt-bs-auth` timed out half way (node_modules)
+#: and had already deleted the worktree's `.git` link. The next `cd .wt-bs-auth && git checkout -B
+#: … && git reset --hard origin/main` walked up to the MAIN checkout ~/dev/code/idp and discarded
+#: its uncommitted tracked changes. The class: a git command aimed at a directory that is no
+#: longer a worktree root silently acts on whichever repository contains it.
+_SESSION_CWD: str | None = None
+
+
+def _orphaned_dir(path: str) -> str | None:
+    """`path` when it exists, has no .git entry, and git resolves it to a DIFFERENT toplevel."""
+    if not path or not os.path.isdir(path):
+        return None
+    if os.path.lexists(os.path.join(path, ".git")):
+        return None
+    root = _worktree_root(path)
+    if root and os.path.realpath(root) != os.path.realpath(path):
+        return root
+    return None
+
+
+def orphan_state(cmd: str) -> dict | None:
+    """Input for command.rego's orphaned_worktree rule: the `.wt-*`/worktrees dir this command
+    targets (cd, -C or the session cwd) when it has no .git entry, and the checkout git would
+    silently act on instead. Rego cannot stat, so the adapter answers that one question."""
+    targets = [_expand(m.group("path").strip("'\""), cmd)
+               for pat in (_LEADING_CD, _GIT_DASH_C) for m in pat.finditer(cmd)]
+    for t in targets or ([_SESSION_CWD] if _SESSION_CWD else []):
+        if not (os.path.basename(os.path.normpath(t)).startswith(".wt-") or "/worktrees/" in t):
+            continue
+        parent = _orphaned_dir(t)
+        if parent:
+            return {"dir": t, "parent": parent}
+    return None
+
+
+# ------------------------------------- discarding edits an earlier session made
+
+#: Session 78caaa17, 2026-08-26 (crew#332): `git reset --hard` in ~/.estate discarded another
+#: session's uncommitted REQUIREMENTS.jsonl edit. Nobody had run `git status` first, and the
+#: file was older than the session that wiped it. The class: a command that throws away tracked
+#: edits in a checkout where some of those edits predate this session, so they cannot be this
+#: session's own and nobody has asked whose they are. The adapter answers the one question Rego
+#: cannot -- "which modified tracked files here are older than this session" -- and Rego refuses.
+_SESSION_STARTED: float | None = None
+
+#: Seconds since this project's checkpoints/LATEST.md was written; None when there is nothing to
+#: measure. Measured here, judged in policy/command.rego (crew#423 row 25, LAW 25).
+_CHECKPOINT_AGE_S: int | None = None
+
+
+def checkpoint_age_s(transcript_path: str | None) -> int | None:
+    """Seconds since the project's checkpoints/LATEST.md was written; None when there is nothing to
+    measure (crew#423 rows 16 and 25). None is BLIND, and the policy makes no verdict on it:
+    - no transcript path: no project directory to look in;
+    - no LATEST.md in the project: 3 of 8 active project dirs have never written one (#137 review),
+      and a session that never wrote a checkpoint has not dropped a thread; a large number here was
+      a refusal forever.
+    A subagent's transcript sits at <project>/<session>/subagents/agent-*.jsonl, so the project
+    directory is two levels up from there, not the subagents directory (#137 review: every subagent
+    `git worktree add` was refused). The policy decides; this adapter only measures."""
+    if not transcript_path:
+        return None
+    project = os.path.dirname(transcript_path)
+    if os.path.basename(project) == "subagents":
+        project = os.path.dirname(os.path.dirname(project))
+    try:
+        return int(time.time() - os.stat(os.path.join(project, "checkpoints", "LATEST.md")).st_mtime)
+    except OSError:
+        return None
+
+_DISCARDS = re.compile(
+    r"\bgit\s+(?:-C\s+\S+\s+)?(?:reset\s+(?:-\S+\s+)*--hard\b|checkout\s+(?:--\s|\.(?:\s|$)|-\s*-\s)"
+    r"|restore\s(?!.*--staged)|clean\s+(?:-\S*f|--force))")
+
+
+def _session_started(transcript_path: str | None) -> float | None:
+    """When this session began: the transcript file's birth time (macOS), else its ctime."""
+    if not transcript_path or not os.path.exists(transcript_path):
+        return None
+    st = os.stat(transcript_path)
+    return float(getattr(st, "st_birthtime", st.st_ctime))
+
+
+def foreign_changes(cmd: str) -> dict | None:
+    """Input for command.rego's foreign_changes rule: the modified tracked files in the checkout
+    this command targets whose last write is OLDER than this session, when the command discards
+    tracked edits and does not stash them first. Returns {"repo", "files"} or None."""
+    if _SESSION_STARTED is None or not _DISCARDS.search(cmd) or re.search(r"\bgit\s+stash\b", cmd):
+        return None
+    targets = [_expand(m.group("path").strip("'\""), cmd)
+               for pat in (_LEADING_CD, _GIT_DASH_C) for m in pat.finditer(cmd)]
+    target = (targets or [_SESSION_CWD or ""])[-1]
+    if not target or not os.path.isdir(target):
+        return None
+    try:
+        out = subprocess.run([_real_tool("git"), "-C", target, "status", "--porcelain",
+                              "--untracked-files=no"], capture_output=True, text=True, timeout=5)
+        top = subprocess.run([_real_tool("git"), "-C", target, "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if out.returncode != 0 or not top:
+        return None
+    old = []
+    for line in out.stdout.splitlines():
+        if len(line) < 4 or line[1] not in "MD" and line[0] not in "MD":
+            continue
+        rel = line[3:].split(" -> ")[-1].strip('"')
+        full = os.path.join(top, rel)
+        if os.path.exists(full) and os.stat(full).st_mtime < _SESSION_STARTED:
+            old.append(rel)
+    return {"repo": top, "files": sorted(old)} if old else None
+
+
 RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
          rule_commit_in_shared_checkout, rule_merge_red_pr,
          rule_restart_kills_a_live_build)
@@ -674,7 +791,7 @@ def normalise(cmd: str) -> str:
     asserted to pass by a green selftest and refused in production. A test that grades a
     different code path than the hook is not a test of the hook.
     """
-    return strip_commit_messages(strip_heredocs(cmd))
+    return strip_echo_payloads(strip_commit_messages(strip_heredocs(cmd)))
 
 
 def opa_ask(cmd: str) -> tuple[list[str], list[str], str | None]:
@@ -687,7 +804,10 @@ def opa_ask(cmd: str) -> tuple[list[str], list[str], str | None]:
     for pat in _OPA_IGNORE:
         argv[3:3] = ["--ignore", pat]
     try:
-        out = subprocess.run(argv, input=json.dumps({"command": cmd, "arch": platform.machine()}),
+        out = subprocess.run(argv, input=json.dumps({"command": cmd, "arch": platform.machine(),
+                                               "orphaned_worktree": orphan_state(cmd),
+                                               "foreign_changes": foreign_changes(cmd),
+                                               "checkpoint_age_s": _CHECKPOINT_AGE_S}),
                              capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError) as exc:
         return [], [], f"opa eval did not run: {exc}"
@@ -749,6 +869,49 @@ def decide(cmd: str, skip: tuple[str, ...] = ()) -> tuple[str, str] | None:
 # ---------------------------------------------------------------- selftest
 
 def selftest() -> int:
+    # orphan_state both ways: a `.wt-*` dir with no .git inside a repo names its parent; a live
+    # worktree (has .git) and the repo root give None. The refusal itself is Rego (opa test).
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = os.path.join(tmp, "repo"); dead = os.path.join(repo, ".wt-dead"); live = os.path.join(repo, ".wt-live")
+        os.makedirs(dead); os.makedirs(live)
+        subprocess.run([_real_tool("git"), "init", "-q", repo], check=True, capture_output=True)
+        open(os.path.join(live, ".git"), "w").write("gitdir: nowhere\n")
+        for cmd, want in [(f"cd {dead} && git reset --hard origin/main", True),
+                          (f"git -C {dead} checkout -B x origin/main", True),
+                          (f"cd {live} && git status", False), (f"cd {repo} && git status", False)]:
+            got = orphan_state(cmd) is not None
+            print(f"  {'ok  ' if got == want else 'FAIL'}  orphan_state {'set' if want else 'unset'}: {cmd.replace(tmp, '<tmp>')}")
+            if got != want:
+                return 1
+    # foreign_changes both ways: a tracked edit older than the session is named; the same edit
+    # made after the session started, a stash in the same command, and a read-only command are
+    # all None. The refusal itself is Rego (opa test).
+    global _SESSION_STARTED
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = os.path.join(tmp, "repo"); os.makedirs(repo)
+        git = _real_tool("git")
+        subprocess.run([git, "init", "-q", repo], check=True, capture_output=True)
+        f = os.path.join(repo, "REQ.jsonl"); open(f, "w").write("a\n")
+        subprocess.run([git, "-C", repo, "add", "REQ.jsonl"], check=True, capture_output=True)
+        subprocess.run([git, "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x"],
+                       check=True, capture_output=True)
+        open(f, "w").write("b\n"); os.utime(f, (1_000_000, 1_000_000))
+        _SESSION_STARTED = 2_000_000.0
+        for cmd, want in [(f"cd {repo} && git reset --hard origin/main", True),
+                          (f"git -C {repo} checkout -- REQ.jsonl", True),
+                          (f"cd {repo} && git stash && git reset --hard origin/main", False),
+                          (f"cd {repo} && git status", False)]:
+            got = foreign_changes(cmd) is not None
+            print(f"  {'ok  ' if got == want else 'FAIL'}  foreign_changes {'set' if want else 'unset'}: {cmd.replace(tmp, '<tmp>')}")
+            if got != want:
+                return 1
+        os.utime(f, (3_000_000, 3_000_000))
+        got = foreign_changes(f"cd {repo} && git reset --hard") is not None
+        print(f"  {'ok  ' if not got else 'FAIL'}  foreign_changes unset: edit newer than the session")
+        if got:
+            return 1
+        _SESSION_STARTED = None
     cases = [
         ("gh workflow enable 337731742  # autoscale-intended", None),
         ("gh workflow disable 337731742", None),
@@ -807,6 +970,11 @@ def selftest() -> int:
         ("git commit -m 'the rule is: git add -A is banned'", None),
         ('git commit --message="never git add -A"', None),
         ("python3 - <<'PY'\nprint('the git add -A rule')\nPY\n", None),
+        # crew#51: what echo or printf prints is text, not a command. The sentence that
+        # explains a rule must not trip it; the command chained after it still must.
+        ('echo "do not git add store/x.json" >> notes.md', None),
+        ("printf 'git add -A is banned\\n' > a.txt", None),
+        ('echo "prose" && git add store/x.json', "rule_runtime_state"),
         ("flyctl apps list", None),
         ("flyctl status -a prospector-store-web", None),
         ("flyctl logs -a prospector-engine", None),
@@ -1058,8 +1226,27 @@ def strip_heredocs(cmd: str) -> str:
     return "".join(out)
 
 
-_COMMIT_MSG = re.compile(r"""(-m|--message)(=|\s+)(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
+_COMMIT_MSG = re.compile(r"""(-m|--message|--body|--title|--caption)(=|\s+)(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
                          re.DOTALL)
+
+
+_ECHO_PAYLOAD = re.compile(r"""\b(echo|printf)(\s+-[a-zA-Z]+)*\s+(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
+                           re.DOTALL)
+
+
+def strip_echo_payloads(cmd: str) -> str:
+    """Drop the quoted argument of `echo` and `printf` before the rules judge a command.
+
+    crew#51, found 2026-08-23 while wiring ticket-gate.py: `echo "do not run git push"` was
+    read as a push and refused. What echo prints is text the shell never executes, exactly
+    like a heredoc body or a commit message, and a guard that refuses the sentence that
+    explains it is a guard people learn to bypass.
+
+    Only the quoted argument goes; the echo itself, any redirect after it, and anything
+    chained with && or ; are still judged. An unquoted payload is left alone: it is one
+    shell word per token and a guarded verb in it is as likely a mistake as prose.
+    """
+    return _ECHO_PAYLOAD.sub(lambda m: f"{m.group(1)}{m.group(2) or ''} {m.group('q')}{m.group('q')}", cmd)
 
 
 def strip_commit_messages(cmd: str) -> str:
@@ -1091,7 +1278,10 @@ def main() -> int:
     cmd = str(payload.get("tool_input", {}).get("command", ""))
     if not cmd:
         return 0
-    global _ACTIVE_REPO
+    global _ACTIVE_REPO, _SESSION_CWD, _SESSION_STARTED, _CHECKPOINT_AGE_S
+    _SESSION_CWD = payload.get("cwd")
+    _SESSION_STARTED = _session_started(payload.get("transcript_path"))
+    _CHECKPOINT_AGE_S = checkpoint_age_s(payload.get("transcript_path"))
     _ACTIVE_REPO = _repo_for(cmd, payload.get("cwd"))
     verdict = decide(cmd)
     if verdict:

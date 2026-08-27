@@ -309,6 +309,23 @@ while read -r d; do
   seen_common="$seen_common|$common|"
 
   remote=$(gplan "$d" remote | head -1)
+  #: A shallow clone (git clone --depth N) bundles into a file that `git bundle verify`
+  #: calls a complete history and `git clone` refuses: "remote did not send all necessary
+  #: objects". Measured 2026-08-27 by the recovery drill (idp run 33100565959, crew#300):
+  #: Documents/code/hermes-v2.ARCHIVED.20260822/hermes-agent-self-evolution, depth 1 of
+  #: NousResearch's repo, was the one broken bundle of 47. Its history lives on its remote;
+  #: what this disk holds cannot be restored from, so it is not escrowed, and a latest.bundle
+  #: it left in R2 is removed (the dated copies under bundles/<repo>/<day>/ stay).
+  if [ "$(gplan "$d" rev-parse --is-shallow-repository 2>/dev/null)" = true ]; then
+    sslug=$(printf %s "${d#$HOME/}" | tr '/' '-' | tr -cd 'A-Za-z0-9._-')
+    log "shallow: $(basename "$d") is a depth-limited clone of ${remote:-no remote}; a bundle of it cannot be cloned back, so it is not escrowed"
+    if [ "${DRY:-0}" != 1 ] && rclone lsf ":s3:$R2_BUCKET/bundles/$sslug/latest.bundle" 2>/dev/null | grep -q .; then
+      rclone deletefile ":s3:$R2_BUCKET/bundles/$sslug/latest.bundle" 2>/dev/null \
+        && log "removed bundles/$sslug/latest.bundle: an unrestorable bundle is not a backup" \
+        || log "could not remove bundles/$sslug/latest.bundle"
+    fi
+    SHALLOW_N=$((${SHALLOW_N:-0}+1)); continue
+  fi
   if [ -n "$remote" ]; then
     n=$(gplan "$d" rev-list --count --all --not --remotes 2>/dev/null || echo 0)
     mode=incremental
@@ -497,6 +514,6 @@ if [ -n "$DENIED_ROOTS" ]; then
   alert "estate_bundle_push: covered $OK repo(s), but$DENIED_ROOTS is not readable by this job, so nothing under it is backed up. macOS TCC hides it from a bootstrapped LaunchAgent. One fix, once: grant Full Disk Access to /bin/bash in System Settings."
   exit 1
 fi
-log "BUNDLE PUSH GREEN  bucket=$R2_BUCKET  repos=$OK  skipped=$SKIPPED  uncovered_icloud=${UNCOVERED_N:-0}  key=bundles/<repo>/latest.bundle  restore=git clone <bundle>"
+log "BUNDLE PUSH GREEN  bucket=$R2_BUCKET  repos=$OK  skipped=$SKIPPED  shallow=${SHALLOW_N:-0}  uncovered_icloud=${UNCOVERED_N:-0}  key=bundles/<repo>/latest.bundle  restore=git clone <bundle>"
 [ "$SKIPPED" -gt 0 ] && exit 2
 exit 0

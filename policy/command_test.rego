@@ -16,6 +16,14 @@ import rego.v1
 
 # Commands the estate has decided must be refused.
 refuse := [
+	"find \"$HOME\" -name settings.json", # whole_disk_find, quoted root (crew#85)
+	"find '/' -type f -name x", # whole_disk_find, quoted root (crew#85)
+	"find / -path '*@backstage/core-components*' -iname 'Link.*'", # whole_disk_find (crew#85)
+	"cd /tmp && find ~ -name '*.plist' | head", # whole_disk_find (crew#85)
+	"find $HOME/ -type f -name settings.json", # whole_disk_find (crew#85)
+	"find /Users/someone -name x", # whole_disk_find (crew#85)
+	"OCI_CLI_PROFILE=otto oci session authenticate --no-browser", # rule_oci_session_authenticate (crew#345)
+	"oci session refresh --profile estate-bootstrap", # rule_oci_session_authenticate (crew#345)
 	# NOT a permit case any more, and the generator was reading a stale file.
 	# origin/main's selftest still expects this to pass, because on origin/main
 	# nothing refuses a direct push to main. A peer session added
@@ -96,9 +104,19 @@ refuse := [
 	"env", # value dump
 	"env | sort", # value dump
 ]
+
 # Commands that must go through. A guard that refuses correct work is an
 # outage (LAW 38), and half of these exist because one did.
 permit := [
+	"find \"$HOME/dev/code/idp\" -name '*.yml'", # quoted one-repo root, crew#85
+	"find ~/dev/code/idp -name '*.yml' -path '*workflows*'", # one repo, crew#85
+	"find / -maxdepth 2 -name Applications", # bounded, crew#85
+	"mdfind -name Link.tsx", # the substitute, crew#85
+	"find . -name '*.py' | head", # cwd, crew#85
+	"find / -name x  # whole-disk-find-intended: rebuilding the Spotlight index", # marker, crew#85
+	"grep -rn findings science/", # not find, crew#85
+	"oci os object head --bucket-name estate-drill-receipts --name state/cluster", # crew#345 substitute
+	"oci session authenticate --no-browser  # oci-session-intended: bootstrap once, crew#345", # marker
 	"gh workflow enable 337731742  # autoscale-intended", # allowed
 	"gh workflow disable 337731742", # allowed
 	"bash deploy/runners.sh scale 12", # allowed
@@ -188,6 +206,7 @@ permit := [
 	"env PROSPECTOR_STORE_DIR=/data/store python3 run.py", # allowed: sets, does not print
 	"git diff --stat  # nothing to do with env", # allowed
 ]
+
 test_every_refused_command_is_refused if {
 	every cmd in refuse {
 		count(deny) > 0 with input as {"command": cmd}
@@ -220,4 +239,54 @@ test_native_platform_build_is_permitted if {
 	count(deny) == 0 with input as {"command": "docker run --platform linux/arm64 alpine uname -m", "arch": "x86_64"}
 	count(broken) == 0 with input as {"command": "ls", "arch": "x86_64"}
 	count(broken) == 0 with input as {"command": "ls", "arch": "arm64"}
+}
+
+# Session 4e5b5e8f, 2026-08-26: git in a worktree whose .git link is gone acts on the
+# parent checkout. The adapter passes the state; the refusal is here, both ways.
+orphan := {"dir": "/x/idp/.wt-dead", "parent": "/x/idp"}
+
+test_git_in_orphaned_worktree_is_refused if {
+	count(deny) > 0 with input as {"command": "cd /x/idp/.wt-dead && git reset --hard origin/main", "orphaned_worktree": orphan}
+	count(deny) > 0 with input as {"command": "git -C /x/idp/.wt-dead checkout -B x origin/main", "orphaned_worktree": orphan}
+	some m in deny with input as {"command": "git status", "orphaned_worktree": orphan}
+	contains(m, "acts on `/x/idp`")
+}
+
+test_git_in_live_worktree_is_permitted if {
+	count(deny) == 0 with input as {"command": "cd /x/idp/.wt-live && git status", "orphaned_worktree": null}
+	count(deny) == 0 with input as {"command": "cd /x/idp/.wt-dead && ls", "orphaned_worktree": orphan}
+	count(deny) == 0 with input as {"command": "git status"}
+}
+
+foreign := {"repo": "/x/.estate", "files": ["REQUIREMENTS.jsonl"]}
+
+test_discarding_a_peer_sessions_edit_is_refused if {
+	count(deny) > 0 with input as {"command": "cd /x/.estate && git reset --hard origin/main", "foreign_changes": foreign}
+	some m in deny with input as {"command": "git -C /x/.estate checkout -- REQUIREMENTS.jsonl", "foreign_changes": foreign}
+	contains(m, "REQUIREMENTS.jsonl")
+}
+
+test_discarding_your_own_edits_or_with_the_marker_is_allowed if {
+	count(deny) == 0 with input as {"command": "cd /x/.estate && git reset --hard origin/main", "foreign_changes": null}
+	count(deny) == 0 with input as {"command": "cd /x/.estate && git reset --hard origin/main  # discard-foreign-intended", "foreign_changes": foreign}
+}
+
+# crew#423 row 25: opening a new thread with a stale checkpoint is refused; a fresh checkpoint, no
+# age, a non-switch command, or the checkpoint write itself is allowed.
+test_new_worktree_with_a_stale_checkpoint_is_refused if {
+	count(deny) == 1 with input as {"command": "cd ~/dev/code/crew && git worktree add --detach ../.wt-x origin/main", "checkpoint_age_s": 7200}
+	count(deny) == 1 with input as {"command": "git checkout -q -b feat/next origin/main", "checkpoint_age_s": 1801}
+	count(deny) == 1 with input as {"command": "gh issue edit 42 -R o/r --add-assignee @me", "checkpoint_age_s": 7200}
+}
+
+test_new_worktree_with_a_fresh_checkpoint_or_no_age_is_allowed if {
+	count(deny) == 0 with input as {"command": "git worktree add --detach ../.wt-x origin/main", "checkpoint_age_s": 120}
+	count(deny) == 0 with input as {"command": "git worktree add --detach ../.wt-x origin/main"}
+	count(deny) == 0 with input as {"command": "git worktree add --detach ../.wt-x origin/main", "checkpoint_age_s": null}
+}
+
+test_non_switch_commands_and_the_checkpoint_write_are_allowed if {
+	count(deny) == 0 with input as {"command": "git worktree remove ../.wt-x && git checkout -q main", "checkpoint_age_s": 7200}
+	count(deny) == 0 with input as {"command": "git worktree list", "checkpoint_age_s": 7200}
+	count(deny) == 0 with input as {"command": "python3 - <<'E'\nwrite checkpoints/LATEST.md\nE\ngit worktree add --detach ../.wt-x origin/main", "checkpoint_age_s": 7200}
 }

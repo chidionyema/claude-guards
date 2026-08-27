@@ -77,6 +77,26 @@ def failing_jobs(repo: str, pr: int) -> list[tuple[str, str]]:
     return out
 
 
+def annotation(repo: str, job_id: str) -> str:
+    """The first check-run annotation message for this job, or "" if there is none.
+
+    A job that never ran its first step (e.g. a billing-refused run on a private repo) leaves no
+    log but may carry a check-run annotation saying why. Without this, `why()` could only print
+    "(no log: ...)" and three sessions graded the billing refusal as a PR fault for ~3h on
+    2026-08-27 (crew#535).
+    """
+    raw = gh(["api", f"repos/{repo}/check-runs/{job_id}/annotations"])
+    if not raw:
+        return ""
+    try:
+        items = json.loads(raw)
+    except json.JSONDecodeError:
+        return ""
+    if not items:
+        return ""
+    return (items[0].get("message") or "").strip()
+
+
 def why(repo: str, job_id: str, keep: int) -> tuple[list[str], list[str]]:
     """The signal lines from a job log, and every named cause in it.
 
@@ -87,7 +107,14 @@ def why(repo: str, job_id: str, keep: int) -> tuple[list[str], list[str]]:
     """
     log = gh(["api", f"repos/{repo}/actions/jobs/{job_id}/logs"])
     if not log:
-        return ["(no log: the run was cancelled, or the log has expired)"], []
+        # crew#535 (2026-08-27): a refused run leaves no log; check-run annotations may name it.
+        msg = annotation(repo, job_id)
+        if msg:
+            shown = [f"(refused before the first step: {msg})"]
+            if "payments have failed" in msg or "spending limit" in msg:
+                shown.append("FOUNDER ACTION: fix the GitHub payment method or raise the spending limit — https://github.com/settings/billing")
+            return shown, ["refused: " + msg[:90]]
+        return ["(no log: the run was cancelled, refused before its first step, or the log has expired)"], []
     lines = [TIMESTAMP.sub("", ln).rstrip() for ln in log.splitlines()]
     hits = [ln for ln in lines if ln.strip() and SIGNAL.search(ln)]
     # Deduplicate while preserving order; a parallel suite repeats the same line many times.

@@ -148,6 +148,25 @@
     "--check"
    ],
    "max_age_days": 1
+  },
+  {
+   "id": "static-secret-gate",
+   "what_breaks": "A long-lived credential (OCI API pem, gh oauth token, plaintext .env) sits on this Mac or in the estate tree; one stolen laptop or one leaked file is every account at once.",
+   "why": "crew#227 CP7 identity: every static credential is replaced by a short-lived, identity-bound one (OIDC -> UPST, ESO from OCI Vault, Keychain). idp#102 shipped bin/static-secret-gate and idp-ci proves it both ways on fixtures, but a fixture proof never says how many real credentials remain. This drill runs the gate live; it is red until the count is 0 and that red row is the honest state of CP7 (LAW 28).",
+   "cmd": [
+    "{IDP}/bin/static-secret-gate"
+   ],
+   "max_age_days": 1
+  },
+  {
+   "id": "export-database",
+   "what_breaks": "The science warehouse (crew science/warehouse.db, one SQLite file) is the only copy of every telemetry row the estate has collected, and nothing has ever proved it can leave that file.",
+   "why": "crew#74 row 1, LAW 19: an exit never taken is a hope. DuckDB attaches the SQLite warehouse, EXPORT DATABASE writes every table as plain Parquet with the schema.sql/load.sql pair, a fresh DuckDB runs IMPORT DATABASE and every table's row count must equal the source's. Live on 2026-08-27: facts 49265, ingest_log 1427, 2.1s. A count mismatch or an import that refuses is a FAIL, and --check goes red on FAIL or on a last green older than the bar.",
+   "cmd": [
+    "{CREW}/.venv/bin/python",
+    "{CREW}/science/export_drill.py"
+   ],
+   "max_age_days": 2
   }
  ],
  "retired": [

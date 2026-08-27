@@ -103,6 +103,17 @@ case("refuses a kind it has never been taught about", 1,
      "never been taught about",
      {"at": stamp(1), "rows": [{"id": "a-thing", "kind": "kubernetes_cluster"}]})
 
+# The pair for the case above, and the row that broke the live report on
+# 2026-08-26: the inventory grew listener and container kinds and the answer
+# key had never heard of them, so 85 real holes were reported next to 29 rows
+# that were only untaught. A port and a container are graded through the job
+# that opens them, so they have no slots and must not be counted.
+case("allows listener and container rows as not-an-asset-to-drill", 0,
+     "not an asset to drill",
+     {"at": stamp(1), "rows": [
+         {"id": "port-7233", "kind": "listener", "owner": "temporal"},
+         {"id": "estate-postgres", "kind": "container"}]})
+
 # The bug exactly as it happened: the only rule deciding repo/replace is keyed
 # on a prefix no remote actually starts with, so 20 repositories fall through.
 # Four repositories rather than one, because below MIN_POPULATION the check

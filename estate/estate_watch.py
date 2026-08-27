@@ -43,7 +43,10 @@ import time
 HOME = pathlib.Path.home()
 AUDIT = HOME / ".claude/state/estate-audit.json"
 SEEN = HOME / ".claude/state/estate-watch-seen.json"
-STALE_H = float(os.environ.get("ESTATE_WATCH_STALE_H", "3"))
+# The audit runs every 6 hours (launchagents/com.founder.estateaudit.plist, staggered in #44 for
+# load on the 16 GB Mac). 3 h here called the snapshot STALE for half of every day (crew#25,
+# 2026-08-26: "scanned 191m ago STALE" while the audit was on schedule). One period plus an hour.
+STALE_H = float(os.environ.get("ESTATE_WATCH_STALE_H", "7"))
 ESCALATE_AFTER_H = float(os.environ.get("ESTATE_WATCH_ESCALATE_H", "24"))
 
 # estate_alert.py now lives beside this file. ~/.hermes is the discontinued
@@ -194,6 +197,9 @@ def selftest() -> int:
     check("a stale audit is marked in the summary",
           "STALE" in summary_line(payload, STALE_H * 3600 + 1), True)
     check("a fresh audit is not marked stale", "STALE" in summary_line(payload, 60), False)
+    check("crew#25 incident: 191 min on a 6 h audit schedule is not stale",
+          "STALE" in summary_line(payload, 191 * 60), False)
+    check("one missed 6 h audit slot is stale", "STALE" in summary_line(payload, 7 * 3600 + 1), True)
     check("no audit on disk is a sentence, not a crash",
           summary_line(None, None).startswith("ESTATE: no audit"), True)
 

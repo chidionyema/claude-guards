@@ -62,6 +62,10 @@ def state_of(r):
         return "BLOCKED"
     if r["idle"] < 120:
         return "RUNNING"
+    if not r["text"].strip():
+        # crew#52: a session that has never said anything is not a stalled agent, it is an
+        # empty slot. 7 of 9 alerts on 2026-08-23 were WAITING lines from one such session.
+        return "IDLE"
     if first.startswith("DONE"):
         return "DONE"
     if r["idle"] / 60 > WAITING_MINUTES:

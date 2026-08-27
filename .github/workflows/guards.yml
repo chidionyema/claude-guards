@@ -35,6 +35,47 @@ jobs:
       - name: every guard compiles
         run: python -m compileall -q . -x '(\.git|__pycache__|\.bak)'
 
+      # LAW 45 step 5: an incident test that no workflow runs is a memory, not a guard. Measured
+      # 2026-08-26 (crew#69): 37 test_*.py files on main and no job invoked pytest, so
+      # test_incident_crew69_every_script_is_wired.py could only fail on a developer's Mac.
+      # rule-guard answers nine refusals from policy/command.rego through `opa eval`; with no
+      # opa on PATH the selftest's 'git push ... origin main' case reports BLIND and fails
+      # (run 33021928667, 97/98). The runner carries no opa, so it is installed here.
+      - uses: open-policy-agent/setup-opa@v2
+        with:
+          version: latest
+      - name: every incident test runs
+        # Three files named test_*.py are standalone runners that call sys.exit at import
+        # (test_bridge_edges.py, test_bridge_live.py, test_kimi_bridge_reap.py); pytest cannot
+        # collect them, so they are named here rather than renamed.
+        # Five read this Mac and nothing else (~/AGENTS.md, ~/.claude/settings.json, ~/.local/bin,
+        # the live register, launchd PATH, the opa binary): 9 failed on the runner 2026-08-26
+        # (run 33017540558), every one a FileNotFoundError or a tool the runner does not carry.
+        # They are production oracles for the Mac, not repository tests, and no scheduled job on
+        # the Mac runs them either -- that is crew#69's open residual, not this workflow's.
+        # The order coupling seen on #103 (3 failed, 3 errors together, each passing alone) was
+        # one test restoring the global subprocess.run by re-reading the name it had just
+        # faked; fixed in #105, and the suite runs in one invocation again (71 passed locally).
+        # The tests locate the guards through $HOME/.claude/scripts, which is where this repo is
+        # checked out on every machine that runs it (tracked.json: live checkout). The runner has
+        # no such path, so the workspace is linked there; measured 2026-08-26 on #103: 8 of 36
+        # test files resolve a guard or fixture through it.
+        run: |
+          mkdir -p "$HOME/.claude" && ln -sfn "$GITHUB_WORKSPACE" "$HOME/.claude/scripts"
+          # rule-guard's selftest grades `git diff origin/main HEAD` against a real repo, and
+          # with no prospector checkout that repo is this one. actions/checkout leaves a
+          # depth-1 PR ref with no origin/main, so three two-ref cases found one ref and
+          # failed (run 33021781271, 95/98). Give it the ref it grades against.
+          git fetch -q --no-tags --depth=1 origin main:refs/remotes/origin/main || true
+          python -m pip -q install pytest pytest-bdd  # pytest-bdd binds features/*.feature (crew#26, spec-gate)
+          python -m pytest -q -p no:cacheprovider \
+            --ignore=test_bridge_edges.py --ignore=test_bridge_live.py --ignore=test_kimi_bridge_reap.py \
+            --ignore=test_incident_rule_guard_quiet_push.py \
+            --ignore=test_incident_founder_blocker_claimed_a_self_serve_credential.py \
+            --ignore=test_incident_crew69_every_script_is_wired.py \
+            --ignore=test_incident_crew306_launchd_gh_path.py \
+            --ignore=test_incident_crew280_pause_guard.py
+
       - name: the estate selftest
         run: python estate-selftest.py || echo "estate-selftest.py reported a problem"
 

@@ -68,6 +68,26 @@ import rego.v1
 # instead -- and rewording them while moving them would lose the receipts.
 rules := [
 	{
+		# crew#345 (founder, 2026-08-26): "zero-touch OCI auth, no local oci session authenticate".
+		# Every session that wanted the cluster state minted a laptop token, and the token expired
+		# while the estate ran (crew#325: cluster access lost mid-incident). The substitute is the
+		# cluster's own state receipt, idp#267: platform/state writes it, bin/idp-cluster-state
+		# grades it, and the cluster-state job in oke-check.yml runs that on the runner's OIDC.
+		"id": "oci_session_authenticate",
+		"re": `\boci\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*session\s+(?:authenticate|refresh)\b`,
+		"marker": "oci-session-intended",
+		"must_match": "OCI_CLI_PROFILE=otto oci session authenticate --no-browser",
+		"must_not_match": "oci os object head --bucket-name estate-drill-receipts --name state/cluster",
+		"msg": concat("", [
+			"BLOCKED by rule-guard: `oci session authenticate` in a session (crew#345).\n",
+			"A laptop session token is the thing the founder retired: it expires mid-incident ",
+			"(crew#325) and only the Mac's IP reaches the control plane.\n",
+			"Read the cluster's own receipt instead:  gh workflow run oke-check.yml -f mode=check ",
+			"then read the cluster-state job log, or bin/idp-cluster-state --json on any OCI auth.\n",
+			"A one-off that genuinely needs a laptop token appends  # oci-session-intended  and says why.",
+		]),
+	},
+	{
 		"id": "add_all",
 		"re": `\bgit\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*add\s+(?:-A\b|--all\b|\.(?:\s|$))`,
 		"marker": "add-all-intended",
@@ -78,6 +98,41 @@ rules := [
 			"store/ and storage/ are tracked runtime state that pytest writes to, so this ",
 			"stages another process's test output.\n",
 			"Stage explicit paths instead:  git add -- path/one path/two",
+		]),
+	},
+	{
+		"id": "local_vm_start",
+		# 2026-08-24 02:23 BST (crew#85): a colima restart brought every container back at once
+		# and 1-min load hit 255 on 12 cores. R26 (2026-08-25): no session starts colima, lima,
+		# k3d, k3s or Docker Desktop on the founder's Mac; containers and k8s run on the OKE row.
+		# no-local-vm-guard.sh finds a running VM after the fact; this refuses the command first.
+		# k3d/k3s are not listed: `k3d cluster create prospector-rehearsal` is on permitted_commands
+		# (the rehearsal runs where docker runs), and k3d cannot start a VM by itself.
+		"re": `(?:\bcolima\s+(?:start|restart)\b|\blimactl\s+(?:start|create)\b|\bopen\s+(?:-a\s+)?["']?Docker(?:\s|["']|$)|\blaunchctl\s+(?:bootstrap|kickstart|load|enable)\b[^|;&\n\r]*(?:colima|lima|docker))`,
+		"marker": "local-vm-intended",
+		"must_match": "colima start --cpu 2 --memory 5",
+		"must_not_match": "colima stop && colima ssh -- docker ps",
+		"msg": concat("", [
+			"BLOCKED by rule-guard: starting a VM on the founder's Mac (R26, crew#85).\n",
+			"On 2026-08-24 a colima restart brought every container back at once and load hit 255 ",
+			"on 12 cores. Containers and k8s run on the OKE row (idp clusters/*); a local VM is ",
+			"never started by a session. Read state instead:  colima status; colima ssh -- docker ps",
+		]),
+	},
+	{
+		"id": "quiet_push",
+		# 2026-08-26, session 78caaa17: `git push -q ... 2>&1 | tail -1` printed nothing when
+		# the pre-push hook refused, and the reply said "pushed". The reviewer found the
+		# commit absent from the remote. A push whose refusal is invisible is not a push.
+		"re": `\bgit\s+push\b[^|;&\n\r]*(?:\s-q\b|\s--quiet\b)`,
+		"marker": "quiet-push-intended",
+		"must_match": "git push -q origin main",
+		"must_not_match": "git push origin main 2>&1 | tail -3",
+		"msg": concat("", [
+			"BLOCKED by rule-guard: `git push -q` hides a refused push.\n",
+			"On 2026-08-26 a pre-push hook refused and the reply reported the commit as pushed. ",
+			"Drop -q and keep the last lines, then confirm the sha on the remote:  ",
+			"git push origin HEAD 2>&1 | tail -3 && gh api repos/OWNER/REPO/commits/SHA --jq .sha",
 		]),
 	},
 	{
@@ -377,6 +432,101 @@ deny contains msg if {
 	msg := sprintf(
 		"%s\n\nIf you mean it, append  # %s  to the command and say in your reply why this case is different.",
 		[r.msg, r.marker],
+	)
+}
+
+# ---------------------------------------------------------------------------
+# A `find` walk from the disk root or the home directory.
+#
+# crew#85, 2026-08-27 14:54Z: `find / -path '*@backstage/core-components*' -iname
+# 'Link.*'` from a session's shell ran 47 minutes at 51-75% CPU, with fseventsd
+# and XprotectService behind it, on a 12-core Mac already at load 120; the Dagster
+# load ceiling skipped the 12:37Z science tick under it. The founder's Mac is
+# 16 GB and shared by every session (memory: founder-mac-is-16gb-treat-as-sacred);
+# a whole-disk walk is the class that produced load 236 on 2026-08-25.
+#
+# The substitute is always cheaper: `mdfind -name Link` (Spotlight, indexed),
+# `rg -l --glob` inside the one repo, or the package's own path
+# (node_modules/@backstage/core-components). A bounded `-maxdepth N` is permitted.
+# ---------------------------------------------------------------------------
+
+# The root may be quoted: find "$HOME" -name x and find '/' -type f walk the same disk
+# (code-2d, reviewing claude-guards#157).
+whole_disk_find_re := `(?:^|[\s;&|(])find\s+(?:-[A-Z]\s+)*["']?(?:/|/Users(?:/[\w.-]+)?/?|~/?|\$HOME/?|\$\{HOME\}/?)["']?(?:\s|$)`
+
+deny contains msg if {
+	not contains(input.command, "whole-disk-find-intended")
+	not contains(input.command, "-maxdepth")
+	regex.match(whole_disk_find_re, input.command)
+	msg := concat("", [
+		"BLOCKED by rule-guard: `find` from / or the home directory with no -maxdepth (crew#85).\n",
+		"  why              2026-08-27: one such find ran 47 minutes at 75% CPU on the 16 GB Mac\n",
+		"                   every session shares, load 120, and the scheduler skipped its tick\n",
+		"  instead          mdfind -name <file>   (Spotlight, indexed, instant)\n",
+		"                   rg -l --glob '<pattern>' <one repo>\n",
+		"                   find <one repo> -maxdepth 4 ...   (a bounded walk is allowed)\n",
+		"  override         append  # whole-disk-find-intended  and say in your reply why.",
+	])
+}
+
+# ---------------------------------------------------------------------------
+# A git command inside a worktree directory whose .git link is gone.
+#
+# Session 4e5b5e8f, 2026-08-26: `git worktree remove .wt-bs-auth` timed out half
+# way (node_modules) having already deleted the worktree's `.git` link. The next
+# `cd .wt-bs-auth && git checkout -B ... && git reset --hard origin/main` walked
+# up to the MAIN checkout ~/dev/code/idp and discarded its uncommitted tracked
+# changes. Rego cannot stat, so rule-guard.py's orphan_state() answers the one
+# question -- "is the targeted `.wt-*`/worktrees dir missing its .git entry, and
+# which checkout would git act on instead" -- and passes it as
+# input.orphaned_worktree = {"dir", "parent"}, or null. The refusal lives here.
+# ---------------------------------------------------------------------------
+
+deny contains msg if {
+	input.orphaned_worktree
+	regex.match(`(?:^|[\s;&|(])git\s`, input.command)
+	msg := sprintf(
+		concat("", [
+			"BLOCKED by rule-guard: `%s` has no .git entry, so git there acts on `%s` ",
+			"(the checkout that CONTAINS it), not on the worktree you meant.\n",
+			"  why              2026-08-26: an interrupted `git worktree remove` had deleted the\n",
+			"                   .git link; the next `git reset --hard` there wiped the main checkout\n",
+			"  instead          `git -C %s worktree prune`, `rm -rf %s`, then\n",
+			"                   `git worktree add` a fresh one; never run git inside a dead worktree\n",
+			"  no override      there is no correct git command to run in a directory that is\n",
+			"                   not the repository you think it is.",
+		]),
+		[input.orphaned_worktree.dir, input.orphaned_worktree.parent, input.orphaned_worktree.parent, input.orphaned_worktree.dir],
+	)
+}
+
+# ---------------------------------------------------------------------------
+# Discarding tracked edits that an earlier session made.
+#
+# Session 78caaa17, 2026-08-26 (crew#332): `git reset --hard` in ~/.estate
+# discarded another session's uncommitted REQUIREMENTS.jsonl edit. Rego cannot
+# stat, so rule-guard.py's foreign_changes() answers the one question -- "which
+# modified tracked files in the targeted checkout were last written BEFORE this
+# session began" -- and passes input.foreign_changes = {"repo", "files"}, or
+# null when the command does not discard, stashes first, or every edit is this
+# session's own. The refusal lives here.
+# ---------------------------------------------------------------------------
+
+deny contains msg if {
+	input.foreign_changes
+	not contains(input.command, "# discard-foreign-intended")
+	msg := sprintf(
+		concat("", [
+			"BLOCKED by rule-guard: this discards tracked edits in `%s` that are OLDER than this ",
+			"session, so they are another session's work: %s\n",
+			"  why              2026-08-26: `git reset --hard` in ~/.estate wiped a peer session's\n",
+			"                   uncommitted REQUIREMENTS.jsonl edit (crew#332)\n",
+			"  instead          `git -C %s stash push -m 'from <session>'` in the SAME command, then\n",
+			"                   discard; or ask the owner (ListAgents, SendMessage) before you do\n",
+			"  override         append `# discard-foreign-intended` when you have confirmed with the\n",
+			"                   owner that the edit is abandoned.",
+		]),
+		[input.foreign_changes.repo, concat(", ", input.foreign_changes.files), input.foreign_changes.repo],
 	)
 }
 
@@ -686,4 +836,31 @@ broken contains msg if {
 	native := native_platform
 	count(deny) > 0 with input as {"command": sprintf("docker buildx build --platform linux/%s -t x .", [native]), "arch": input.arch}
 	msg := "rule foreign_platform refuses a native build, which is an outage (LAW 38)."
+}
+
+# LAW 25, checkpoint before you switch (crew#423 row 25). A command that opens a new thread of work
+# (a new worktree, a new branch, claiming an issue) while checkpoints/LATEST.md is more than 30 min
+# old leaves the current thread silently. The path back is the checkpoint: write LATEST.md (or the
+# CHECKPOINT comment on the issue) first, and the same command is allowed. rule-guard.py measures
+# the age; no age supplied (no transcript path) means no verdict.
+switch_re := `(?:^|[\s;&|(])(?:git\s+(?:-C\s+\S+\s+)*(?:worktree\s+add|checkout\s+(?:-q\s+)?-b|switch\s+(?:-q\s+)?-c)\b|gh\s+issue\s+edit\s+\S+.*--add-assignee\b)`
+
+checkpoint_re := `(?i)LATEST\.md|CHECKPOINT`
+
+deny contains msg if {
+	input.checkpoint_age_s > 1800
+	regex.match(switch_re, input.command)
+	not regex.match(checkpoint_re, input.command)
+	msg := sprintf(
+		concat("", [
+			"BLOCKED by rule-guard: this command opens a new thread of work and checkpoints/LATEST.md ",
+			"is %d s old (LAW 25: checkpoint before you switch).\n",
+			"  why              leaving an issue is legal; leaving it silently is not. The next session\n",
+			"                   finds a worktree and no note of what it was for\n",
+			"  instead          write `## RESUME HERE` in checkpoints/LATEST.md (and a CHECKPOINT comment\n",
+			"                   on the issue you are leaving), then run this command again\n",
+			"  (map row 25, crew#423)",
+		]),
+		[input.checkpoint_age_s],
+	)
 }

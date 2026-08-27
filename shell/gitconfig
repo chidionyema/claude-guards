@@ -7,8 +7,6 @@
 	lowSpeedLimit = 0
 	lowSpeedTime = 999999
 	maxRequestBuffer = 100M
-[credential]
-	helper = !gh auth git-credential
 [pull]
 	rebase = false
 [filter "lfs"]
@@ -24,3 +22,9 @@
 	gpgsign = true
 [core]
 	hooksPath = /Users/chidionyema/.estate/guards/hooks
+[credential "https://github.com"]
+	helper = 
+	helper = !/usr/local/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/usr/local/bin/gh auth git-credential

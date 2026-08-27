@@ -44,7 +44,7 @@ def test_a_merge_naming_its_number_still_takes_the_graded_path(monkeypatch):
         return None
 
     monkeypatch.setattr(mod, "_merge_verdict", fake_verdict)
-    monkeypatch.setattr(mod, "_pr_check_states", lambda pr: [("qa", "SUCCESS")])
+    monkeypatch.setattr(mod, "_pr_check_states", lambda pr, cmd=None: [("qa", "SUCCESS")])
     monkeypatch.setattr(mod, "_main_red_refusal", lambda: None)
     assert mod.rule_merge_red_pr("gh pr merge 100 --squash") is None
     assert seen["pr"] == "100"

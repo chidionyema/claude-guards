@@ -168,7 +168,7 @@
       "date": "2026-08-25",
       "verbatim": "the last session there was a virtual machine running that took the laptop down, this is unacceptable, we are now on oracle and no reason for that to happen, ensure the virtual machine is not launched",
       "meaning": "No session starts colima, lima, k3d, k3s, docker desktop or any VM on the founder's Mac. Compute for containers and k8s is the Oracle host. The homebrew.mxcl.colima LaunchAgent was booting the VM at every login (load 222 within 15 min of boot on 2026-08-25); it was unloaded and its plist moved to ~/.claude/state/disabled-launchagents/. Never re-create it, never run `brew services start colima`, never run `colima start`. Read-only `colima status` / `docker ps` are fine and should fail.",
-      "enforced_by": "~/.claude/scripts/no-local-vm-guard.sh (fails when a colima/limactl/qemu/vfkit process exists or a colima/lima plist is in ~/Library/LaunchAgents); run by drills and on SessionStart."
+      "enforced_by": "~/.claude/scripts/policy/command.rego entry local_vm_start refuses colima start|restart, limactl start|create, open -a Docker and launchctl bootstrap|kickstart|load|enable of a colima/lima/docker agent before the command runs (PreToolUse rule-guard); ~/.claude/scripts/no-local-vm-guard.sh (fails when a colima/limactl/qemu/vfkit process exists or a colima/lima plist is in ~/Library/LaunchAgents); run by drills and on SessionStart."
     },
     {
       "id": "R27-definition-of-done-v2-1",
@@ -238,6 +238,30 @@
       "date": "2026-08-25",
       "verbatim": "Research is a crew. Science/ML is a layer. ... Research discovers what to build. Science predicts when it will be ready, if it will break, and whether the founder can be interrupted. Both are mandatory. Neither can wait. ... a Python 'tapeworm' script writing to a local SQLite database on your Mac is completely incompatible with the elite, cloud-agnostic standard we just established. ... it must be impossible for any potential data point to be missed.",
       "meaning": "Research looks outward (markets, competitors, capabilities) and is a crew whose adoption decisions end with the founder's last call. Science/ML looks inward (sessions, CI, guards, budget, founder response) and is an embedded layer, always on, no opt-out: OTel Collector on the cluster, ClickHouse, MLflow + Langfuse, Brier-graded predictions, founder as calibration authority. Every emitter is registered and an unregistered writer cannot land. Full text: crew docs/rulings/R37-research-is-a-crew-science-is-an-embedded-layer.md."
+    },
+    {
+      "id": "R38-founder-dashboard-is-backstage-gods-view",
+      "date": "2026-08-27",
+      "verbatim": "why cant we have founders dashboard in backstage rather than nother ui ... gids view renenber and nevr niss a beat ... across all",
+      "meaning": "The founder's dashboard is the Backstage portal in idp, never a second UI. God's view: every repo, service, cluster, board and science page is reachable from the founder entities in the catalog (TechDocs for pages, the Kubernetes plugin for the cluster, GitHub issues on the entity for the board). Remember: it is durable and generated from what runs, nothing hand-drawn. Never miss a beat: an estate surface not in the catalog is a defect (crew#401 gate). A proposal that adds a K8s Dashboard, a GitHub Project or a glue script beside Backstage is the stitched version and is refused. Tracked item: crew#412. Full text: crew docs/rulings/R38-founder-dashboard-is-backstage-gods-view.md."
+    },
+    {
+      "id": "R39-science-charter-expose-before-the-market",
+      "date": "2026-08-27",
+      "verbatim": "elite and super impressive, if any part of estate does not meet elite grade status shout out loud, we need to expose ourselves before the market exposes us and correct it ... this is your charter as science dept ... you keep us way ahead in the future ... we are always future leaning ... dont let this info drop into the void ... you are the living dna of this company and estate, you hold all data points and metrics. big responsibility ... elite and also future proof given we are future leaning ... we are scientists also ... we track everything, we are zealots ... scientific zealots ... also everything you produce needs rigorous docs",
+      "meaning": "The science role's charter (crew/roles/science.md, crew#475): every part of the estate carries a grade against the buyer's-engineer bar computed from what runs; anything below the bar is shouted first on the estate showcase (idp/docs/SHOWCASE.md, crew#474) with the command that fixes it and an elite-gap issue; the count is on the page and in STATE.md and goes to zero. Science also keeps the estate ahead: foresight (predict before it happens) and a horizon row per standards row. Science holds every data point and metric of the estate (LAW 50); a source it cannot read is BLIND, never green. Applies to every session grading, reviewing or showcasing any part of the estate. The bar has two halves: elite today (the grade) and future-proof (the horizon row: what the mature platform under each standards row ships next and which of our rows it makes obsolete). Every session is a scientist: everything is tracked (a data point with no ledger row does not exist), every claim carries its command, and the standard is zealous: no exception for a small thing. Everything produced ships with rigorous docs: onboarding doc, demo doc, docstrings; the docs-standard gate refuses the PR otherwise (crew#88)."
+    },
+    {
+      "id": "R40-just-go",
+      "date": "2026-08-27",
+      "verbatim": "60 mins is too long ... we need to move radically fast ... no just go",
+      "meaning": "A STAGED timer is not a wait. Reversible work is done in the same turn and announced as done; the STAGED line records what was done and how to undo it, never a countdown. FOUNDER ACTION stays only for physical steps (LAW 49). idp#356 removed the approval-word gate, so a green PR with a peer KEEP merges at once."
+    },
+    {
+      "id": "R41-assurance-ahead-of-time",
+      "date": "2026-08-27",
+      "verbatim": "we cant afford to play around with our infra ... we need bleeding edge assurance, in every way possible, we cant afford to fail, or go down, or firefight, we need to be ahead of time ... we have everything we need ... the best and grounded and genius engineers with access to the best ideas, consultants, open source tooling, nothing should stop us ... we cant shirk from our responsibilities, founder and investors must have complete confidence and trust, we need to remember this always ... i need proof this is being taken seriously ... this is a risk for founder if not taken uber seriously",
+      "meaning": "Said during crew#483: two PRs (idp#309, idp#310) merged green and took the cluster's identity, healthchecks and node-agent layers down because CI rendered a different object than the controllers apply. Binding: (1) a pre-merge gate renders exactly what Flux and helm-controller will apply (flux envsubst --strict with the real substituteFrom keys; helm release named as helm-controller names it; Kyverno judged against that render). (2) Every red row in Telegram or oke-check is an incident closed with the LAW 45 five steps and a printed sweep count, never a note. (3) 'Do we have X' is answered by running the check that would show X failing, graded honestly per capability, never from inventory. (4) Firefighting is a failure of a gate; the fix is the gate. First proof: idp#367."
     }
   ],
   "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R38 (R34-R37 landed 2026-08-25 via claude-guards#60); grep the estate for the id before you add one."

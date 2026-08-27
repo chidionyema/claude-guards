@@ -102,6 +102,17 @@ def _needs_ticket(tool: str, tool_input: dict) -> bool:
     return False
 
 
+# Text the harness puts in a user row that the founder never typed. The compaction summary
+# opened crew#323 as a ticket titled "This session is being continued..." (2026-08-26).
+NOT_FOUNDER_WORDS = (
+    "Caveat:",
+    #: liveness probes sent to a session by a monitor; crew#334-#337 were four issues titled with one
+    "Answer with one word and nothing else",
+    "Stop hook",
+    "This session is being continued from a previous conversation",
+)
+
+
 def founder_words(transcript: str) -> str:
     """The first thing the founder actually typed in this session. Hook text arrives with
     role=user too, so it is excluded by shape, not by trusting the role field."""
@@ -124,7 +135,7 @@ def founder_words(transcript: str) -> str:
                     b.get("text", "") for b in content or []
                     if isinstance(b, dict) and b.get("type") == "text")
                 text = (text or "").strip()
-                if not text or text[0] in "<[" or text.startswith(("Caveat:", "Stop hook")):
+                if not text or text[0] in "<[" or text.startswith(NOT_FOUNDER_WORDS):
                     continue
                 return " ".join(text.split())[:180]
     except OSError:
@@ -152,28 +163,19 @@ def write_bind(sid: str, data: dict) -> None:
     os.replace(tmp, bind_path(sid))
 
 
+
+from issue_dod import issue_body, lane_for  # noqa: E402  crew#527 CP4
+
+
 def open_issue(sid: str, words: str, cwd: str) -> int:
     """Runs in the detached child. Never in the hook path."""
     title = words or "Untitled session in %s" % os.path.basename(cwd)
     if len(title) > 90:
         title = title[:87] + "..."
-    body = (
-        "Opened automatically when a session started changing files without a ticket.\n\n"
-        "**The founder's own words, first thing he typed in this session:**\n\n> %s\n\n"
-        "- working directory: `%s`\n- session: `%s`\n\n"
-        "This issue exists so the work is followed up rather than lost between tabs. "
-        "Close it when a command proves the outcome, not when an agent says so.\n\n"
-        "## Budget\n"
-        "- cost: $%s\n"
-        "- time: %sm\n\n"
-        "A default, not an estimate. Revise it now if this job is bigger or smaller, because the "
-        "comparison printed when this issue closes is only worth reading if the number was set "
-        "before the work rather than after it.\n" % (
-            words or "(nothing captured)", cwd, sid, DEFAULT_BUDGET_USD, DEFAULT_BUDGET_MIN)
-    )
+    body = issue_body(words, cwd, sid, DEFAULT_BUDGET_USD, DEFAULT_BUDGET_MIN)
     res = subprocess.run(
         [GH, "issue", "create", "--repo", REPO, "--title", title,
-         "--body", body, "--label", "triage"],
+         "--body", body, "--label", "triage", "--label", lane_for(cwd)],
         capture_output=True, text=True, timeout=60)
     if res.returncode != 0:
         write_bind(sid, {"issue": 0, "error": (res.stderr or "")[-300:], "at": time.time(),

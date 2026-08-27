@@ -293,8 +293,22 @@ def render_rulings() -> str:
         lines.append('  %s (%s): "%s"' % (r.get("id", "?"), r.get("date", "?"),
                                           r.get("verbatim", "")))
         if r.get("meaning"):
-            lines.append("      => %s" % r["meaning"])
+            lines.append("      => %s" % _first_sentence(r["meaning"]))
     return "\n".join(lines)
+
+
+#: crew#26, measured 2026-08-27: 39 rulings rendered 28.6 KB, re-injected on every session
+#: start and every compaction (28 times in one session) and resident on every request after.
+#: The verbatim quote is the ruling and is kept whole; the meaning is cut to its first sentence,
+#: and rulings.json beside this script holds the rest.
+MEANING_CAP = 160
+
+
+def _first_sentence(text: str) -> str:
+    text = " ".join(str(text).split())
+    m = re.match(r"(.+?[.!?])(\s|$)", text)
+    out = m.group(1) if m else text
+    return out if len(out) <= MEANING_CAP else out[:MEANING_CAP - 1].rstrip() + "…"
 
 
 def _kick_refresh() -> None:
@@ -380,6 +394,10 @@ def selftest() -> int:
     ru = render_rulings()
     ck("standing rulings are injected", "STANDING FOUNDER RULINGS" in ru)
     ck("the fly ruling is carried verbatim", "not going back to fly" in ru)
+    ck("the rulings block stays under 16 KB (crew#26: it was 28.6 KB)", len(ru) < 16000)
+    ck("a meaning is cut to its first sentence",
+       _first_sentence("Never do X. Also never do Y.") == "Never do X.")
+    ck("a long first sentence is capped", len(_first_sentence("a " * 400)) <= MEANING_CAP)
     with open(RULINGS, encoding="utf-8") as fh:
         shipped = json.load(fh).get("rulings") or []
     ck("the shipped rulings file is sound", ruling_problems(shipped) == [])

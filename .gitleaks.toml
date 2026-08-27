@@ -8,4 +8,9 @@ useDefault = true
 title = "claude-guards"
 [allowlist]
 description = "history only: the local k3d client key (server 127.0.0.1:6445), untracked and git-ignored since this file was added; k3d regenerates it"
-paths = [ '''config/k3d/.*''' ]
+paths = [
+  '''config/k3d/.*''',
+  # crew#407: test fixtures that are deliberately credential-shaped so the guard under test
+  # refuses them (MUST_REFUSE in the incident test). Random strings, never issued anywhere.
+  '''tests/test_incident_crew407_no_credential_over_telegram\.py''',
+]

@@ -129,6 +129,11 @@ def _send_real(text: str, delivery_id: str) -> bool:
     except Exception:  # noqa: BLE001
         print("[founder-deliver] BLIND: estate_alert unavailable, nothing sent", file=sys.stderr)
         return False
+    hit = estate_alert.credential_shape(text)
+    if hit:
+        print(f"REFUSED: credential shape ({hit}) in the receipt; never sent (crew#407)", file=sys.stderr)
+        telegram_ledger.record("founder-deliver", "refused-credential", "[redacted]", key=delivery_id)
+        return False
     token = estate_alert._env("TELEGRAM_BOT_TOKEN")
     chat = estate_alert._env("TELEGRAM_HOME_CHANNEL")
     if not token or not chat:

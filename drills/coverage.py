@@ -112,6 +112,12 @@ SLOTS = {
     "ledger":        ("rebuild",),
     "data":          ("rebuild",),
     "drill":         (),
+    # A listener is a port some job or process holds open, and a container is a
+    # process compose starts. Neither is the thing that has to come back: the
+    # scheduled_job that opens the port or runs compose answers all three
+    # questions for it, so grading them here would grade the same asset twice.
+    "listener":      (),
+    "container":     (),
 }
 
 
