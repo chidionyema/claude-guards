@@ -15,7 +15,7 @@ Usage: founder-blocker.py "<action, one sentence>" [<url or word>] [--session ID
   default            STAGED with the estate timeout (estate-defaults.yaml handoff_protocol.timeout_minutes, else 60)
   --staged N         STAGED with N minutes
   --physical         FOUNDER ACTION: permitted only when the text names the physical thing
-  --register ROW     with --physical: the Capabilities register row (~/AGENTS.md) you checked, or `none`.
+  --register ROW     with --physical: the Capabilities register row (~/AGENTS-FULL.md) you checked, or `none`.
                      A row that exists is a self-serve path and the send is refused (crew#325: four
                      sessions sent "create the GitHub App" for a deploy key any session can mint).
 Exit 0 with a message_id on screen, or 1 BLIND/REFUSED with the reason. Never raises.
@@ -37,7 +37,7 @@ from estate import estate_alert as ea
 from estate import telegram_ledger
 
 SOURCE = "founder-blocker"
-REGISTER = os.path.expanduser("~/AGENTS.md")
+REGISTER = os.path.expanduser("~/AGENTS-FULL.md")  # the register moved there 2026-08-27 (crew#26 CP-B)
 REGISTER_HEAD = "# Capabilities register"
 
 
