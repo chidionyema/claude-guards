@@ -6,10 +6,10 @@ easily." A dead session has left its last state in the feed; "Status" is answere
 
 Hooks: Stop blocks the turn once when this session's entry is older than 30 minutes or absent;
 SessionStart injects the last entries; UserPromptSubmit reminds when overdue.
-Commands: append --session ID --lane NAME (shape is policy/feed.rego: 8 lines max, 🔴 🟡 🟢 ⚪
-🔧 🔀 📍 marks, TOUCHES and OVERLAP required); status [--n 5]; selftest (both ways, temp feed).
-Residual: Stop fires only at turn end, so a 90-minute turn appends late; a session that never
-stops is reached by no hook. Without opa the shape check is BLIND, never a verdict.
+Commands: append --session ID --lane NAME (shape is policy/feed.rego: 8 lines max, 🔴 🟡 🟢 ⚪ 🔧 🔀 📍
+marks, TOUCHES and OVERLAP required; a measured 📍 METER line is added, crew#26); status [--n 5];
+selftest (both ways, temp feed). Residual: Stop fires only at turn end, so a 90-minute turn appends
+late; a session that never stops is reached by no hook. Without opa the shape check is BLIND.
 """
 from __future__ import annotations
 
@@ -23,12 +23,12 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from feed_meter import METER_MARK, meter_line  # crew#26 CP-D: a library, not a guard
 
 FEED = Path(os.environ.get("ESTATE_FEED") or os.path.expanduser("~/.estate/feed.md"))
 INTERVAL_S = 30 * 60
 HOLD_S = 2 * 60 * 60  # crew#331: a lane is held by whoever wrote on it inside this window
-# The handoff shape is policy/feed.rego (crew#259); this file only asks OPA about it.
-POLICY = Path(__file__).resolve().parent / "policy"
+POLICY = Path(__file__).resolve().parent / "policy"  # the shape is policy/feed.rego (crew#259); this file only asks OPA
 HEAD = re.compile(r"^## (\S+) · session (\S+) · lane (.*)$")
 
 
@@ -87,8 +87,9 @@ def collisions(feed: Path, at: dt.datetime | None = None) -> list[tuple[dt.datet
     return out
 
 
-def append(feed: Path, session: str, lane: str, body: str, at: dt.datetime | None = None) -> str | None:
+def append(feed: Path, session: str, lane: str, body: str, at: dt.datetime | None = None, meter: str | None = None) -> str | None:
     lines = [l.rstrip() for l in body.strip().splitlines() if l.strip()]
+    if not any(l.startswith(METER_MARK) for l in lines) and len(lines) < 8: lines.append(meter if meter is not None else meter_line())
     denied = denials(lines, session, lane, holders(feed, session, lane, at))
     if denied:
         return "; ".join(denied)
@@ -150,7 +151,7 @@ def hook(kind: str) -> int:
 
 
 def selftest() -> int:
-    ok = True
+    ok = True; globals()["meter_line"] = lambda: f"{METER_MARK} selftest"  # the real meter takes ~26 s
     with tempfile.TemporaryDirectory() as td:
         f = Path(td) / "feed.md"
         t0 = now()
@@ -164,7 +165,7 @@ def selftest() -> int:
         ok &= overdue(f, "aaaa", t0 + dt.timedelta(minutes=31)) == 31 * 60
         # another session is judged on its own entries
         ok &= overdue(f, "bbbb", t0) == -1
-        ok &= len(entries(f)) == 1 and entries(f)[0][3] == good.split("\n")
+        ok &= len(entries(f)) == 1 and entries(f)[0][3] == good.split("\n") + [f"{METER_MARK} selftest"]
         # crew#331: bbbb may not take lane idp while aaaa holds it, unless OVERLAP names aaaa; after 2h it is free
         t1 = t0 + dt.timedelta(minutes=10)
         ok &= holders(f, "bbbb", "idp", t1) == ["aaaa"]
@@ -175,8 +176,7 @@ def selftest() -> int:
         ok &= holders(f, "dddd", "idp", t0 + dt.timedelta(hours=3)) == []
         ok &= append(f, "dddd", "idp", good, t0 + dt.timedelta(hours=3)) is None
         ok &= len(collisions(f, t0 + dt.timedelta(hours=3))) == 0
-    print(f"{'ok  ' if ok else 'FAIL'}  feed-guard selftest: refuses no-entry and the old form (shape: policy/feed.rego), permits the new form, "
-          f"overdue at 31 min and not at 29, per session; refuses a held lane unless OVERLAP names the holder (crew#331)")
+    print(f"{'ok  ' if ok else 'FAIL'}  feed-guard selftest: refuses no-entry and the old form (shape: policy/feed.rego), permits the new form, overdue at 31 min and not at 29, per session; refuses a held lane unless OVERLAP names the holder (crew#331)")
     return 0 if ok else 1
 
 
