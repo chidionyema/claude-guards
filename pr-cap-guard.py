@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """PreToolUse adapter for policy/pr_cap.rego (crew#504 CP5, crew#66): `gh pr create` is refused
-while the target repo has more than PR_CAP live open PRs (label `hold` not counted, crew#538), and
+while the target repo has more than PR_CAP (20) live open PRs (label `hold` not counted, crew#538), and
 `gh pr merge N --delete-branch` while another open PR is based on N's head (idp#458 was closed by
 the merge of idp#454, 2026-08-27; merge bottom-up, delete at the top).
 
@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import sys
 
-PR_CAP = int(os.environ.get("PR_CAP", "10"))  # crew#504: "if open PRs exceed 10 for a repo"
+PR_CAP = int(os.environ.get("PR_CAP", "20"))  # crew#504 set 10; founder 2026-08-27 20:4xZ: "increse the slot to 20"
 HOLD_LABEL = os.environ.get("PR_CAP_HOLD_LABEL", "hold")
 GH_TIMEOUT = 20
 POLICY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "policy", "pr_cap.rego")
@@ -119,12 +119,12 @@ def _stack(repo):
 def selftest() -> int:
     m = "merge"  # spelled apart so the estate's own fences do not read this file as a command
     cases = [
-        ("11 open refuses", "gh pr create -R o/r --title t --body b", _fake(11), 2),
-        ("10 open allows", "gh pr create -R o/r --title t --body b", _fake(10), 0),
-        ("11 open of which 2 held allows", "gh pr create -R o/r --title t", _fake(11, held=2), 0),
+        ("21 open refuses", "gh pr create -R o/r --title t --body b", _fake(21), 2),
+        ("20 open allows", "gh pr create -R o/r --title t --body b", _fake(20), 0),
+        ("21 open of which 2 held allows", "gh pr create -R o/r --title t", _fake(21, held=2), 0),
         ("gh unavailable fails open", "gh pr create -R o/r --title t", lambda repo: None, 0),
         ("unknown repo fails open", "gh pr create --title t", _fake(11), 0),
-        (f"{m} stays allowed at 11", f"gh pr {m} 5 -R o/r --squash", _fake(11), 0),
+        (f"{m} stays allowed at 21", f"gh pr {m} 5 -R o/r --squash", _fake(21), 0),
         ("stack: delete-branch under an open stacked PR refuses", f"gh pr {m} 454 -R o/r --squash --delete-branch", _stack, 2),
         ("stack: same without delete-branch allows", f"gh pr {m} 454 -R o/r --squash", _stack, 0),
         ("stack: top of the stack may delete", f"gh pr {m} 458 -R o/r -d", _stack, 0),

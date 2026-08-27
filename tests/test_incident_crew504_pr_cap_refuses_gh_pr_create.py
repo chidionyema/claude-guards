@@ -1,6 +1,7 @@
 """Incident test, crew#504 CP5: 113 open PRs across seven repos on 2026-08-27.
 
-`gh pr create` is refused against a repo with more than 10 open PRs; 10 is allowed;
+`gh pr create` is refused against a repo with more than the cap of open PRs (10 when the incident was
+written, 20 by founder word on 2026-08-27; these cases pin PR_CAP=10); the cap itself is allowed;
 the queue-shrinking subcommands stay allowed at any count; no gh means allow (fail open).
 """
 import json
@@ -19,17 +20,32 @@ def _run(cmd: str, env: dict) -> subprocess.CompletedProcess:
                           timeout=60, env=env, check=False)
 
 
-def _env_with_fake_gh(tmp_path, n_open: int) -> dict:
-    """A `gh` on PATH that answers the pulls query with n_open rows."""
+def _env_with_fake_gh(tmp_path, n_open: int, cap: int | None = 10) -> dict:
+    """A `gh` on PATH that answers the pulls query with n_open rows. `cap` pins PR_CAP for the
+    crew#504 cases (written at 10); None leaves the guard's default, 20 since the founder's
+    2026-08-27 word "increse the slot to 20"."""
     bindir = tmp_path / "bin"
-    bindir.mkdir()
+    bindir.mkdir(parents=True)
     rows = [{"number": i, "created_at": f"2026-08-{i:02d}T00:00:00Z"} for i in range(1, n_open + 1)]
     gh = bindir / "gh"
     gh.write_text("#!/bin/sh\ncat <<'J'\n" + json.dumps(rows) + "\nJ\n")
     gh.chmod(0o755)
     env = dict(os.environ)
     env["PATH"] = f"{bindir}:{env['PATH']}"
+    if cap is None:
+        env.pop("PR_CAP", None)
+    else:
+        env["PR_CAP"] = str(cap)
     return env
+
+
+def test_default_cap_is_twenty_founder_2026_08_27(tmp_path):
+    """Founder, 2026-08-27: "increse the slot to 20". 20 open allows, 21 refuses, with no PR_CAP set."""
+    r = _run("gh pr create -R chidionyema/crew --title t --body b", _env_with_fake_gh(tmp_path / "a", 20, cap=None))
+    assert r.returncode == 0, r.stderr
+    r = _run("gh pr create -R chidionyema/crew --title t --body b", _env_with_fake_gh(tmp_path / "b", 21, cap=None))
+    assert r.returncode == 2, r.stderr
+    assert "chidionyema/crew has 21 open PRs" in r.stderr
 
 
 def test_eleven_open_refuses_and_names_the_oldest(tmp_path):
