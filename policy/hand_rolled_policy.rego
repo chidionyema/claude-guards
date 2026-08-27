@@ -75,7 +75,11 @@ legacy := {
 	# The nine lines are the NOT_FOUNDER_WORDS prefix list and the startswith() that reads it.
 	# It is a transcript-shape rule, and no runner feeds transcripts to OPA yet; same follow-up
 	# and same exit as dod-guard below.
-	"ticket-gate.py": 1107,
+	# 1107 -> 1109 on 2026-08-27 (claude-guards#127). No refusal was added: one more entry in the
+	# same NOT_FOUNDER_WORDS list (a monitor's liveness probe, "Answer with one word and nothing
+	# else", filed four times as crew#334-#337). Same transcript-shape rule, same missing runner,
+	# same exit: the list moves to Rego with the Stop/transcript runner named on crew#281.
+	"ticket-gate.py": 1109,
 	"goal-guard.py": 960,
 	"tool-drip-guard.py": 641,
 	"close-guard.py": 536,

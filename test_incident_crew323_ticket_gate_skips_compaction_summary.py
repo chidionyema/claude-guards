@@ -47,6 +47,15 @@ class TicketGateSkipsCompactionSummary(unittest.TestCase):
         )
         self.assertEqual(tg.founder_words(path), "")
 
+    def test_liveness_probe_is_not_founder_words(self) -> None:
+        """crew#334-#337: a monitor's probe ("Reply with the single word ALIVE") was filed four times
+        as the founder's request. Same rule as the summary: harness text is skipped, his line after
+        it is returned."""
+        tg = _load()
+        probe = "Answer with one word and nothing else. Reply with the single word ALIVE."
+        self.assertEqual(tg.founder_words(_transcript(probe)), "")
+        self.assertEqual(tg.founder_words(_transcript(probe, "what are you doing")), "what are you doing")
+
     def test_genuine_first_line_still_returned(self) -> None:
         tg = _load()
         self.assertEqual(tg.founder_words(_transcript("i need an architectual review")), "i need an architectual review")
