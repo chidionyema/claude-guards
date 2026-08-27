@@ -10,7 +10,7 @@ then age; an issue whose `Blocked-on: #N` names an open issue ranks below every 
 never work items.
 
 Every gh call fails open: a board that cannot be read returns None, never an empty list, so
-a caller can tell BLIND from "nothing left" (memory: an-audit-that-crashes-reports-nothing).
+a caller can tell BLIND (exit 3, never argparse's 2) from "nothing left" (memory: an-audit-that-crashes-reports-nothing).
 
 A selftest can point ESTATE_BOARD_FIXTURE at a JSON file of issues; then nothing shells out
 and nothing is posted -- comments land in <fixture>.posted.jsonl instead.
@@ -25,7 +25,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-
 
 # launchd jobs start with PATH=/usr/bin:/bin, where gh is not. Standard install
 # dirs, not machine names (LAW 46). Incident: crew#306 --scan printed BLIND every 5 min.
@@ -124,11 +123,11 @@ def claimed(issue: dict) -> bool:
 
 def boxes(issue: dict) -> tuple[int, int]:
     b = issue.get("body") or ""
-    return len(re.findall(r"- \[x\]", b, re.I)), len(re.findall(r"- \[ \]", b))
+    return len(re.findall(r"- \[x\]", b, re.IGNORECASE)), len(re.findall(r"- \[ \]", b))
 
 
 def blocked_on(issue: dict) -> set[int]:
-    return {int(n) for n in re.findall(r"^Blocked-on:.*?#(\d+)", issue.get("body") or "", re.M | re.I)}
+    return {int(n) for n in re.findall(r"^Blocked-on:.*?#(\d+)", issue.get("body") or "", re.MULTILINE | re.IGNORECASE)}
 
 
 def rank_key(issue: dict, open_numbers: set[int]) -> tuple:
@@ -170,7 +169,7 @@ FEED = Path(os.environ.get("ESTATE_FEED") or os.path.expanduser("~/.estate/feed.
 ALIVE_HOURS = float(os.environ.get("ESTATE_BOARD_ALIVE_HOURS", "2"))
 STALE_HOURS = float(os.environ.get("ESTATE_BOARD_STALE_HOURS", "24"))
 _CLAIM_RE = re.compile(r"^CLAIM (\S+) session (\w{1,8})")
-_FEED_RE = re.compile(r"^## (\S+) · session (\w{1,8}) · lane (\S+)", re.M)
+_FEED_RE = re.compile(r"^## (\S+) · session (\w{1,8}) · lane (\S+)", re.MULTILINE)
 
 
 def _ts(s: str) -> float:
@@ -435,7 +434,7 @@ if __name__ == "__main__":
     if a.cmd == "rank":
         issues = open_issues()
         if issues is None:
-            print("BLIND: the board cannot be read"); sys.exit(2)
+            print("BLIND: the board cannot be read"); sys.exit(3)
         open_numbers = {i["number"] for i in issues}
         items = unclaimed(issues)
         print(f"finish-first rank, {len(items)} unclaimed of {len(issues)} open ({utc()})")
@@ -449,7 +448,7 @@ if __name__ == "__main__":
     if a.cmd == "assign":
         issues = open_issues()
         if issues is None:
-            print("BLIND: the board cannot be read"); sys.exit(2)
+            print("BLIND: the board cannot be read"); sys.exit(3)
         feed = FEED.read_text() if FEED.is_file() else ""
         now = time.time()
         alive = alive_sessions(feed, now)
@@ -459,7 +458,7 @@ if __name__ == "__main__":
               f"assigned {', '.join(f'{s}->#{n}' for s, n in r['assigned']) or '-'}; "
               f"holding {', '.join(f'{s}:{v}' for s, v in sorted(r['held'].items())) or '-'}")
         if not feed:
-            print(f"BLIND: no feed at {FEED}; nobody is alive to the board"); sys.exit(2)
+            print(f"BLIND: no feed at {FEED}; nobody is alive to the board"); sys.exit(3)
         sys.exit(0)
     okp = (claim(a.number, a.session, a.lane, a.why) if a.cmd == "claim"
            else release(a.number, a.session, a.why))

@@ -4,11 +4,12 @@ new; a claim 24h old with no box ticked since the board last saw it is released 
 auto-objective hands a session its own assignment before the rank."""
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import estate_board as eb  # noqa: E402
+import estate_board as eb
 
 NOW = eb._ts("2026-08-27T18:00Z")
 H = 3600
@@ -82,3 +83,16 @@ def test_the_baseline_is_the_oldest_seen_row_with_the_current_count(tmp_path):
     moved = _i(6, "- [x] a\n- [ ] b", claim=("eeeeeeee", "2026-08-25T17:00:00Z"))
     r = eb.assign([stuck, moved], {}, NOW, seen, post=False)
     assert r["released"] == [5] and r["held"] == {"eeeeeeee": [6]}
+
+
+def test_blind_exits_3_so_a_missing_verb_is_never_a_healthy_finding(tmp_path):
+    # code-2f on idp#450: argparse exits 2 on an unknown verb; a scheduler row that
+    # treats 2 as BLIND would log a picker without `assign` as healthy.
+    import subprocess
+    script = str(Path(eb.__file__))
+    env = {**os.environ, "ESTATE_FEED": str(tmp_path / "no-feed.md"), "ESTATE_BOARD_FIXTURE": str(tmp_path / "board.json")}
+    (tmp_path / "board.json").write_text("[]")
+    blind = subprocess.run([sys.executable, script, "assign", "--dry-run"], env=env, capture_output=True, text=True, check=False)
+    assert blind.returncode == 3, blind.stdout + blind.stderr
+    bad = subprocess.run([sys.executable, script, "no-such-verb"], env=env, capture_output=True, text=True, check=False)
+    assert bad.returncode == 2
