@@ -77,7 +77,7 @@ def opa_deny(inp: dict) -> list[str]:
 
 
 def check(argv: list[str], cwd: str, prs_fn=open_prs) -> int:
-    if argv[:2] != ["gh", "pr"] or argv[2:3] not in (["create"], ["merge"]):
+    if argv[:2] != ["gh", "pr"] or argv[2:3] not in (["create"], ["reopen"], ["merge"]):
         return 0
     repo = target_repo(argv, cwd)
     prs = prs_fn(repo) if repo else None
@@ -121,6 +121,8 @@ def selftest() -> int:
     cases = [
         ("21 open refuses", "gh pr create -R o/r --title t --body b", _fake(21), 2),
         ("20 open allows", "gh pr create -R o/r --title t --body b", _fake(20), 0),
+        ("reopen at 21 refuses (crew#538)", "gh pr reopen 7 -R o/r", _fake(21), 2),
+        ("reopen at 20 allows", "gh pr reopen 7 -R o/r", _fake(20), 0),
         ("21 open of which 2 held allows", "gh pr create -R o/r --title t", _fake(21, held=2), 0),
         ("gh unavailable fails open", "gh pr create -R o/r --title t", lambda repo: None, 0),
         ("unknown repo fails open", "gh pr create --title t", _fake(11), 0),

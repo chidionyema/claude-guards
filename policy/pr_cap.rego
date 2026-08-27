@@ -45,8 +45,14 @@ oldest := concat(", ", [sprintf("#%v (%s)", [pr.number, substring(pr.created_at,
 #    2026-08-27: 113 open PRs across seven repos; "we have 24 pull requests open
 #    this is crazy". Creating is the only verb that grows the queue; merge, close
 #    and review shrink it and stay allowed, so the cap clears itself.
+opens_a_slot if is_gh_pr("create")
+
+# crew#538, 2026-08-27: 25 closed PRs were reopened for rescue in one sweep and the queue sat
+# at 20/10 for hours; a reopen takes a slot exactly as a create does.
+opens_a_slot if is_gh_pr("reopen")
+
 deny contains msg if {
-	is_gh_pr("create")
+	opens_a_slot
 	count(live) > input.cap
 	msg := sprintf(
 		"%s has %d open PRs (label `%s` not counted), cap is %d (crew#504). Oldest: %s. Merge or close before opening another; merging, closing and reviewing stay allowed.",
