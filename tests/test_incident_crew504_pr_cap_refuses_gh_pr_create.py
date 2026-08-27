@@ -102,6 +102,6 @@ def test_held_prs_do_not_count_toward_the_cap(tmp_path):
     rows[3]["labels"] = []
     gh.write_text("#!/bin/sh\ncat <<'J'\n" + json.dumps(rows[:2] + rows[3:]) + "\nJ\n")  # 10 unheld
     assert _run("gh pr create -R chidionyema/idp --title t --body b", env).returncode == 0
-    gh.write_text("#!/bin/sh\ncat <<'J'\n" + json.dumps(rows[2:] + [{"number": 13, "created_at": "2026-08-13T00:00:00Z"}]) + "\nJ\n")  # 11 unheld
+    gh.write_text("#!/bin/sh\ncat <<'J'\n" + json.dumps(rows[3:] + [{"number": n, "created_at": f"2026-08-{n}T00:00:00Z"} for n in (13, 14)]) + "\nJ\n")  # 11 unheld
     r = _run("gh pr create -R chidionyema/idp --title t --body b", env)
     assert r.returncode == 2 and "label `hold` not counted" in r.stderr, r.stderr
