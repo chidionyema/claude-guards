@@ -691,20 +691,30 @@ def orphan_state(cmd: str) -> dict | None:
 #: cannot -- "which modified tracked files here are older than this session" -- and Rego refuses.
 _SESSION_STARTED: float | None = None
 
-#: Seconds since this project's checkpoints/LATEST.md was written; None when the payload gives no
-#: transcript path. Measured here, judged in policy/command.rego (crew#423 row 25, LAW 25).
+#: Seconds since this project's checkpoints/LATEST.md was written; None when there is nothing to
+#: measure. Measured here, judged in policy/command.rego (crew#423 row 25, LAW 25).
 _CHECKPOINT_AGE_S: int | None = None
 
 
 def checkpoint_age_s(transcript_path: str | None) -> int | None:
-    """Same measurement as opa-hook.checkpoint_age_s: a large number when the file is missing."""
+    """Seconds since the project's checkpoints/LATEST.md was written; None when there is nothing to
+    measure (crew#423 rows 16 and 25). None is BLIND, and the policy makes no verdict on it:
+    - no transcript path: no project directory to look in;
+    - no LATEST.md in the project: 3 of 8 active project dirs have never written one (#137 review),
+      and a session that never wrote a checkpoint has not dropped a thread; a large number here was
+      a refusal forever.
+    A subagent's transcript sits at <project>/<session>/subagents/agent-*.jsonl, so the project
+    directory is two levels up from there, not the subagents directory (#137 review: every subagent
+    `git worktree add` was refused). The policy decides; this adapter only measures."""
     if not transcript_path:
         return None
-    path = os.path.join(os.path.dirname(transcript_path), "checkpoints", "LATEST.md")
+    project = os.path.dirname(transcript_path)
+    if os.path.basename(project) == "subagents":
+        project = os.path.dirname(os.path.dirname(project))
     try:
-        return int(time.time() - os.stat(path).st_mtime)
+        return int(time.time() - os.stat(os.path.join(project, "checkpoints", "LATEST.md")).st_mtime)
     except OSError:
-        return 10**9
+        return None
 
 _DISCARDS = re.compile(
     r"\bgit\s+(?:-C\s+\S+\s+)?(?:reset\s+(?:-\S+\s+)*--hard\b|checkout\s+(?:--\s|\.(?:\s|$)|-\s*-\s)"

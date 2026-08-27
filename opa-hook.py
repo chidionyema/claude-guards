@@ -92,17 +92,25 @@ def last_reply_above_fold(transcript_path: str) -> str:
     return re.sub(r"```.*?```", "", "\n".join(kept), flags=re.S)
 
 
-def checkpoint_age_s(transcript_path: str):
-    """Seconds since the project's checkpoints/LATEST.md was written, a large number when the file
-    is missing, None when the transcript path gives no project directory (crew#423 row 16, LAW 16).
-    The policy decides; this adapter only measures."""
+def checkpoint_age_s(transcript_path):
+    """Seconds since the project's checkpoints/LATEST.md was written; None when there is nothing to
+    measure (crew#423 rows 16 and 25). None is BLIND, and the policy makes no verdict on it:
+    - no transcript path: no project directory to look in;
+    - no LATEST.md in the project: 3 of 8 active project dirs have never written one (#137 review),
+      and a session that never wrote a checkpoint has not dropped a thread; a large number here was
+      a refusal forever.
+    A subagent's transcript sits at <project>/<session>/subagents/agent-*.jsonl, so the project
+    directory is two levels up from there, not the subagents directory (#137 review: every subagent
+    `git worktree add` was refused). The policy decides; this adapter only measures."""
     if not transcript_path:
         return None
-    path = os.path.join(os.path.dirname(transcript_path), "checkpoints", "LATEST.md")
+    project = os.path.dirname(transcript_path)
+    if os.path.basename(project) == "subagents":
+        project = os.path.dirname(os.path.dirname(project))
     try:
-        return int(time.time() - os.stat(path).st_mtime)
+        return int(time.time() - os.stat(os.path.join(project, "checkpoints", "LATEST.md")).st_mtime)
     except OSError:
-        return 10**9
+        return None
 
 
 def standing_focus() -> str:
