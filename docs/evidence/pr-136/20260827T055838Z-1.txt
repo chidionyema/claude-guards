@@ -1,0 +1,6 @@
+== pytest
+1 passed in 1.29s
+== dry-run on the live Mac
+runaway-reaper: matched=0 dry_run=1 load=6.49
+== the incident, before the kill (05:57Z)
+2071 ppid=1 etime=20692-05:46:00 %cpu=71.1 claude -p Use web search to find evidence about: startup sanity check ...
