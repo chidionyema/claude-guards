@@ -1855,6 +1855,40 @@ def collect_deliveries() -> list[Row]:
     return out
 
 
+def collect_science_showcase() -> list[Row]:
+    """The science lane's capabilities and progress, from the page the lane generates (crew#403).
+
+    Founder, 2026-08-27: "we need more transparency the capabilities and progress from the
+    science / research data and machine learning lane, we need a proper showcase." The page is
+    docs/science/SHOWCASE.md in crew, written by science/showcase.py from the lane's own stores
+    and regenerated four times a day by scripts/science-collect. This section shows its scalars
+    and the link to open the page; it never re-measures what the page already measured.
+    """
+    page = os.path.join(CREW, "docs", "science", "SHOWCASE.md")
+    state = os.path.join(CREW, "science", "showcase-state.json")
+    gen = f"cd {CREW} && python3 science/showcase.py"
+    if not os.path.exists(page):
+        return [_unknown("Science showcase", "page not generated yet on this machine", gen)]
+    age_h = (time.time() - os.path.getmtime(page)) / 3600
+    out = [Row(GOOD if age_h < 8 else WARN, "Science showcase page",
+               f"generated {age_h:.1f}h ago", f"file://{page}", f"open {page}")]
+    try:
+        numbers = json.load(open(state, encoding="utf-8")).get("numbers") or {}
+    except FileNotFoundError:
+        return out + [_unknown("Showcase numbers", "showcase-state.json absent", gen)]
+    except Exception as exc:  # noqa: BLE001
+        return out + [_unknown("Showcase numbers", f"{state} unreadable: {exc}", gen)]
+    if not numbers:
+        return out + [_unknown("Showcase numbers", "state holds no numbers", gen)]
+    shown = ("warehouse rows", "warehouse sources", "stale sources", "contract violations",
+             "research entries", "commits, 7d", "USD per commit", "capabilities scheduled", "capabilities")
+    for key in shown:
+        if key in numbers:
+            bad = key in ("stale sources", "contract violations") and numbers[key] > 0
+            out.append(Row(WARN if bad else GOOD, key, str(numbers[key]), "", gen))
+    return out
+
+
 def collect_research_and_docs() -> list[Row]:
     """Every research pass, and whether the asset it promised is somewhere he can open it.
 
@@ -1983,6 +2017,7 @@ COLLECTORS = [
     ("Your requests, closed with proof", collect_founder_requests),
     ("Delivered to you \u2014 open it here", collect_deliveries),
     ("Research and documents \u2014 did the asset land?", collect_research_and_docs),
+    ("Science lane \u2014 capabilities and progress", collect_science_showcase),
     ("What you said, and whether it landed", collect_founder_friction),
     ("Work in flight", collect_prs),
     ("What is broken", collect_estate_audit),
