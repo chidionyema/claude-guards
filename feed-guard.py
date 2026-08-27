@@ -23,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
 from feed_meter import METER_MARK, meter_line  # crew#26 CP-D: a library, not a guard
 
 FEED = Path(os.environ.get("ESTATE_FEED") or os.path.expanduser("~/.estate/feed.md"))
@@ -131,7 +132,8 @@ def block_text(session: str, lane: str, age: int) -> str:
 # docs/NEXT.md (idp bin/estate-next); NEXT_URL is where it is published.
 NEXT_PAGE = Path(os.environ.get("ESTATE_NEXT_PAGE") or Path.home() / "dev" / "code" / ".idp-state" / "docs" / "NEXT.md")
 NEXT_URL = os.environ.get("ESTATE_NEXT_URL") or "https://github.com/chidionyema/idp/blob/state/live-diagram/docs/NEXT.md"
-STATUS_RE = re.compile(r"\b(status|capabilit\w*|progress|what (is|are) (planned|outstanding|blocking)|when (to|can i|do you) expect|eta)\b", re.I)
+STATUS_RE = re.compile(  # tolerant stems: the founder typed "capablities", "capalilities", "nd when to epect"
+    r"\b(status|capa\w*|progress|what (is|are) (planned|outstanding|blocking)|when (to|can i|do you) \w*pect|eta)\b", re.I)
 
 
 def next_answer(prompt: str, page: Path = NEXT_PAGE, url: str = NEXT_URL) -> str | None:
