@@ -25,6 +25,9 @@
 #   no checks at all           that is unproven, not green
 #   any completed check that is not SUCCESS / SKIPPED / NEUTRAL
 #   any check still running
+#   no KEEP at the head sha     cg#169 landed an RCE 76s before its REWORK arrived (crew#526);
+#                              a comment `REVIEW: KEEP at <head7>` is the review, and it must
+#                              name the commit that is merging, not an earlier one
 name: Merge when green
 
 on:
@@ -61,11 +64,33 @@ jobs:
         run: |
           set -euo pipefail
           gh pr list --state open --limit 50 \
-            --json number,isDraft,mergeStateStatus,labels,statusCheckRollup,title \
+            --json number,isDraft,mergeStateStatus,labels,statusCheckRollup,title,headRefOid \
             > prs.json
           python3 - <<'PY' > todo.txt
-          import json
+          import json, os, re, subprocess
+          REPO = os.environ["GH_REPO"]
           HOLD = {"hold", "do-not-merge", "wip"}
+          def keep_at_head(pr):
+              # The review names a sha. It counts for this head when it is the head, or when every
+              # commit after it only added under docs/evidence/ (pr-evidence.py attach commits there
+              # after the KEEP, by design). Anything else after the KEEP is unreviewed code.
+              head, n = pr["headRefOid"], str(pr["number"])
+              out = subprocess.run(["gh", "pr", "view", n, "--json", "comments",
+                                    "--jq", "[.comments[].body] | join(\"\\n\")"],
+                                   capture_output=True, text=True, check=False).stdout
+              for keep in re.findall(r"^REVIEW: KEEP at ([0-9a-f]{7,40})\b", out, re.M):
+                  if head.startswith(keep):
+                      return True
+                  cmp = subprocess.run(["gh", "api", "repos/" + REPO + "/compare/" + keep + "..." + head,
+                                        "--jq", "[.status] + [.files[].filename]"],
+                                       capture_output=True, text=True, check=False).stdout
+                  try:
+                      status, *files = json.loads(cmp)
+                  except ValueError:
+                      continue
+                  if status == "ahead" and files and all(f.startswith("docs/evidence/") for f in files):
+                      return True
+              return False
           for pr in json.load(open("prs.json")):
               why, verdict = None, "MERGE"
               labels = {l["name"].lower() for l in pr.get("labels") or []}
@@ -92,6 +117,8 @@ jobs:
                   why = str(len(checks) - len(done)) + " check(s) still running"
               elif bad:
                   why = "failing: " + ",".join(c.get("name", "?") for c in bad[:3])
+              if why is None and verdict == "MERGE" and not keep_at_head(pr):
+                  why = "no `REVIEW: KEEP at " + pr["headRefOid"][:7] + "` comment; a review of an older sha is not a review of this one"
               if why is not None and verdict == "MERGE":
                   verdict = "SKIP."
               # Every pull request is printed, merged or not. A queue that silently drops one is
