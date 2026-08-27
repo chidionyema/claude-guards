@@ -97,3 +97,7 @@ test_decision_with_risk_allowed if {
 test_founder_word_allowed if {
 	count(deny) == 0 with input as stop("BLOCKED: idp#314 waits on the word.\nFOUNDER ACTION: reply APPROVE: healthchecks-row-crew177 or DENY: healthchecks-row-crew177 on https://github.com/chidionyema/idp/pull/314")
 }
+
+test_option_lines_with_decision_allowed if {
+	count(deny) == 0 with input as stop("INVENTORY: two ways were on the table.\nOption A: launchd.\nOption B: a Dagster row.\nChosen: B, portable; risk: the row needs the daemon up.")
+}

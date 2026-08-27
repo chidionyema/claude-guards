@@ -140,8 +140,17 @@ deny contains msg if {
 	)
 }
 
+# Two Option lines followed by a decision line are a record of the choice, not a menu (code-2f, #132 review).
+decision_re := `(?i)^\s*(?:[-*]\s*)?(?:\*\*)?(?:chosen|decision|picked|taking|going with|doing)(?:\*\*)?\s*:`
+
+has_decision if {
+	some line in split(input.reply, "\n")
+	regex.match(decision_re, line)
+}
+
 deny contains msg if {
 	input.event == "Stop"
+	not has_decision
 	options := [line | some line in split(input.reply, "\n"); regex.match(menu_option_re, line)]
 	count(options) >= 2
 	msg := sprintf(
