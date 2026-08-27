@@ -285,6 +285,20 @@ def board(kind, text, source="tracked.py"):
         except Exception: pass
 
 
+
+#: The issue this guard's commits belong to. The commit-msg hook `ticket-default`
+#: (crew#53) refuses any commit whose subject names no issue, whichever tool wrote
+#: it, and on 2026-08-27T02:11Z it refused this guard's own commit: LAW 24 drift sat
+#: uncommitted and the board said "could not commit". A guard that commits must
+#: name its ticket like anyone else.
+TICKET = "crew#13"
+
+
+def commit_message(changed: list[str]) -> str:
+    return ("LAW 24: %d load-bearing file(s) changed outside git (%s)\n\n%s\n\n"
+            "Committed by the scheduled guard, not by a person.\n"
+            % (len(changed), TICKET, "\n".join("  " + c for c in changed)))
+
 def sync():
     """Pull the drift, commit it, push it. Report only what a person would act on."""
     import subprocess
@@ -339,10 +353,7 @@ def sync():
     # with no reason. Nothing was actually broken; check before alerting.
     if git("diff", "--cached", "--quiet").returncode == 0:
         return 0  # nothing actually staged: the drift self-resolved
-    msg = ("LAW 24: %d load-bearing file(s) changed outside git\n\n%s\n\n"
-           "Committed by the scheduled guard, not by a person.\n"
-           % (len(changed), "\n".join("  " + c for c in changed)))
-    c = git("commit", "-m", msg)
+    c = git("commit", "-m", commit_message(changed))
     if c.returncode:
         reason = (c.stderr.strip() or c.stdout.strip())[:300]
         board("guard-broken", "tracked.py could not commit: " + reason)
