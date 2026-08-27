@@ -168,7 +168,7 @@
    "date": "2026-08-25",
    "verbatim": "the last session there was a virtual machine running that took the laptop down, this is unacceptable, we are now on oracle and no reason for that to happen, ensure the virtual machine is not launched",
    "meaning": "No session starts colima, lima, k3d, k3s, docker desktop or any VM on the founder's Mac. Compute for containers and k8s is the Oracle host. The homebrew.mxcl.colima LaunchAgent was booting the VM at every login (load 222 within 15 min of boot on 2026-08-25); it was unloaded and its plist moved to ~/.claude/state/disabled-launchagents/. Never re-create it, never run `brew services start colima`, never run `colima start`. Read-only `colima status` / `docker ps` are fine and should fail.",
-   "enforced_by": "~/.claude/scripts/no-local-vm-guard.sh (fails when a colima/limactl/qemu/vfkit process exists or a colima/lima plist is in ~/Library/LaunchAgents); run by drills and on SessionStart."
+   "enforced_by": "~/.claude/scripts/policy/command.rego entry local_vm_start refuses colima start|restart, limactl start|create, open -a Docker and launchctl bootstrap|kickstart|load|enable of a colima/lima/docker agent before the command runs (PreToolUse rule-guard); ~/.claude/scripts/no-local-vm-guard.sh (fails when a colima/limactl/qemu/vfkit process exists or a colima/lima plist is in ~/Library/LaunchAgents); run by drills and on SessionStart."
   },
   {
    "id": "R27-definition-of-done-v2-1",
