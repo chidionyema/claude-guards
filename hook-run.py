@@ -11,6 +11,10 @@ stdout, stderr and exit code untouched, and appends one line per run to the ledg
     {"at": ISO-8601 UTC, "event": hook_event_name, "hook": basename, "session": session_id,
      "exit": int, "ms": int, "refused": bool}
 
+`waived` (crew#370) is the override marker the command carried when the hook passed it
+(`# raw-diff-intended`, `# main-is-red`, `# in-flight`, ...). A refusal followed by a waived pass of
+the same hook in the same session is a refusal the agent overturned; crew's hooks_row counts those
+as false_refusals, the half of LAW 38 that had no writer.
 `refused` is exit code 2 (Claude Code's block code) or a stdout JSON carrying
 decision=block, continue=false or permissionDecision=deny. The ledger can never fail the
 hook: every ledger error is swallowed, because a measurement that breaks the thing it
@@ -22,9 +26,12 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import re
 import subprocess
 import sys
 import time
+
+MARKER = re.compile(r"#\s*([a-z][a-z0-9-]*-intended|main-is-red|in-flight)\b")
 
 LEDGER = os.environ.get("HOOK_OUTCOMES") or os.path.expanduser("~/.claude/state/hook-outcomes.jsonl")
 
@@ -41,6 +48,13 @@ def refused(exit_code: int, stdout: bytes) -> bool:
     hso = out.get("hookSpecificOutput") if isinstance(out.get("hookSpecificOutput"), dict) else {}
     return (out.get("decision") == "block" or out.get("continue") is False
             or hso.get("permissionDecision") == "deny")
+
+
+def waived(payload: dict) -> str | None:
+    ti = payload.get("tool_input")
+    cmd = ti.get("command") if isinstance(ti, dict) else None
+    m = MARKER.search(cmd) if isinstance(cmd, str) else None
+    return m.group(1) if m else None
 
 
 def record(row: dict) -> None:
@@ -70,7 +84,7 @@ def main(argv: list[str]) -> int:
     sys.stderr.buffer.write(proc.stderr)
     sys.stdout.flush()
     sys.stderr.flush()
-    record({
+    row = {
         "at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "event": payload.get("hook_event_name") or "unknown",
         "hook": os.path.basename(argv[0]),
@@ -78,7 +92,11 @@ def main(argv: list[str]) -> int:
         "exit": proc.returncode,
         "ms": ms,
         "refused": refused(proc.returncode, proc.stdout),
-    })
+    }
+    marker = waived(payload)
+    if marker and not row["refused"]:
+        row["waived"] = marker
+    record(row)
     return proc.returncode
 
 
