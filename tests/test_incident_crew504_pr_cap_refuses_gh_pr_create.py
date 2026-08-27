@@ -87,3 +87,21 @@ def test_delete_branch_under_a_stacked_pr_is_refused(tmp_path):
     assert "chidionyema/idp#454 is the base of open PR(s) #458" in r.stderr
     assert _run(f"gh pr {SHRINK[0]} 454 -R chidionyema/idp --squash", env).returncode == 0
     assert _run(f"gh pr {SHRINK[0]} 458 -R chidionyema/idp --squash --delete-branch", env).returncode == 0
+
+
+def test_held_prs_do_not_count_toward_the_cap(tmp_path):
+    """crew#538: 7 idp PRs reopened under `hold` on 2026-08-27 push nothing; the cap protects the CI queue."""
+    env = _env_with_fake_gh(tmp_path, 12)
+    gh = tmp_path / "bin" / "gh"
+    rows = [{"number": i, "created_at": f"2026-08-{i:02d}T00:00:00Z"} for i in range(1, 13)]
+    for p in rows[:3]:
+        p["labels"] = [{"name": "hold"}]
+    gh.write_text("#!/bin/sh\ncat <<'J'\n" + json.dumps(rows) + "\nJ\n")
+    r = _run("gh pr create -R chidionyema/idp --title t --body b", env)
+    assert r.returncode == 0, r.stderr
+    rows[3]["labels"] = []
+    gh.write_text("#!/bin/sh\ncat <<'J'\n" + json.dumps(rows[:2] + rows[3:]) + "\nJ\n")  # 10 unheld
+    assert _run("gh pr create -R chidionyema/idp --title t --body b", env).returncode == 0
+    gh.write_text("#!/bin/sh\ncat <<'J'\n" + json.dumps(rows[2:] + [{"number": 13, "created_at": "2026-08-13T00:00:00Z"}]) + "\nJ\n")  # 11 unheld
+    r = _run("gh pr create -R chidionyema/idp --title t --body b", env)
+    assert r.returncode == 2 and "label `hold` not counted" in r.stderr, r.stderr

@@ -25,6 +25,7 @@ import subprocess
 import sys
 
 PR_CAP = int(os.environ.get("PR_CAP", "10"))  # crew#504: "if open PRs exceed 10 for a repo"
+HOLD_LABEL = os.environ.get("PR_CAP_HOLD_LABEL", "hold")
 GH_TIMEOUT = 20
 REMOTE_RE = re.compile(r"github\.com[:/]([\w.-]+)/([\w.-]+?)(?:\.git)?$")
 
@@ -81,6 +82,12 @@ def open_prs(repo: str) -> list[dict] | None:
         return None
 
 
+def _held(pr: dict) -> bool:
+    """A PR parked under the `hold` label (crew#538: founder-kept branches reopened 2026-08-27) pushes
+    nothing and runs nothing; the cap protects the CI queue, so it does not count one."""
+    return any(str(lab.get("name") or "") == HOLD_LABEL for lab in (pr.get("labels") or []))
+
+
 def _refuse(message: str) -> int:
     print(f"BLOCKED by pr-cap-guard: {message}", file=sys.stderr)
     return 2
@@ -121,11 +128,14 @@ def check(argv: list[str], cwd: str, prs_fn=open_prs) -> int:
     if not repo:
         return 0
     prs = prs_fn(repo)
-    if prs is None or len(prs) <= PR_CAP:
+    if prs is None:
+        return 0
+    prs = [p for p in prs if not _held(p)]
+    if len(prs) <= PR_CAP:
         return 0
     oldest = ", ".join(f"#{p.get('number')} ({str(p.get('created_at', ''))[:10]})" for p in prs[:3])
     return _refuse(
-        f"{repo} has {len(prs)} open PRs, cap is {PR_CAP} (crew#504). Oldest: {oldest}. "
+        f"{repo} has {len(prs)} open PRs (label `{HOLD_LABEL}` not counted), cap is {PR_CAP} (crew#504). Oldest: {oldest}. "
         "Merge or close before opening another; merging, closing and reviewing stay allowed.")
 
 
@@ -151,6 +161,13 @@ def _fake(n: int):
     return lambda repo: [{"number": i, "created_at": f"2026-08-{i:02d}T00:00:00Z"} for i in range(1, n + 1)]
 
 
+def _held_fake(repo):
+    rows = _fake(11)(repo)
+    for p in rows[:2]:
+        p["labels"] = [{"name": "hold"}]
+    return rows
+
+
 def _stack(repo):
     return [
         {"number": 454, "created_at": "2026-08-27T00:00:00Z", "head": {"ref": "cp1"}, "base": {"ref": "main"}},
@@ -172,6 +189,7 @@ def selftest() -> int:
         ("stack: same without delete-branch allows", f"gh pr {shrink[0]} 454 -R o/r --squash", _stack, 0),
         ("stack: top of the stack may delete", f"gh pr {shrink[0]} 458 -R o/r --squash --delete-branch", _stack, 0),
         ("stack: gh unavailable fails open", f"gh pr {shrink[0]} 454 -R o/r -d", lambda repo: None, 0),
+        ("11 open of which 2 held allows", "gh pr create -R o/r --title t", _held_fake, 0),
     ]
     failed = 0
     for name, cmd, fn, want in cases:
