@@ -152,15 +152,40 @@ def next_answer(prompt: str, page: Path = NEXT_PAGE, url: str = NEXT_URL) -> str
             + "\n".join(bar + red))
 
 
+# crew#508 CP5, founder 2026-08-27: "when I say science I need to see progress across all lanes
+# simultaneously". A science/research/data/ML prompt answers from the science page's Lanes table
+# and the research grade's Outward/Inward rows, never from memory. Both are regenerated hourly.
+SCIENCE_DIR = Path(os.environ.get("ESTATE_SCIENCE_DIR") or Path.home() / "dev" / "code" / "crew" / "docs" / "science")
+SCIENCE_URL = os.environ.get("ESTATE_SCIENCE_URL") or "https://github.com/chidionyema/crew/blob/main/docs/science"
+SCIENCE_RE = re.compile(r"\b(scien\w*|rese\w*ch\w*|data (science|lane)|machine learning|ml lane|lanes?|foresight|inward|outward)\b", re.I)
+
+
+def science_answer(prompt: str, folder: Path = SCIENCE_DIR, url: str = SCIENCE_URL) -> str | None:
+    """The Lanes table and the Outward/Inward grades when the founder asks about science; None otherwise."""
+    if not SCIENCE_RE.search(prompt or ""):
+        return None
+    head = f"[science] The founder is asking about science/research/lanes (crew#508 CP5). Answer from the generated pages, never from memory: {url}/SHOWCASE.md and {url}/RESEARCH-GRADE.md."
+    out = [head]
+    for name, keep in (("SHOWCASE.md", lambda ln: ln.startswith("| ") and ("BLIND" in ln or "GAP" in ln or "ELITE" in ln)),
+                       ("RESEARCH-GRADE.md", lambda ln: ln.startswith("| Outward") or ln.startswith("| Inward") or ln.startswith("| RED"))):
+        page = folder / name
+        if not page.is_file():
+            out.append(f"BLIND: no local copy of {name} at {page}; quote the URL and say the page is the answer.")
+            continue
+        rows = [ln for ln in page.read_text(encoding="utf-8", errors="ignore").splitlines() if keep(ln)]
+        out.append(f"{name}:\n" + "\n".join(rows[:14]))
+    return "\n".join(out)
+
+
 def hook(kind: str) -> int:
     try: payload = json.load(sys.stdin)
     except Exception: payload = {}
     session = (payload.get("session_id") or "unknown")[:8]
     lane = Path(payload.get("cwd") or os.getcwd()).name
     if kind == "UserPromptSubmit":
-        ans = next_answer(payload.get("prompt") or "")
-        if ans:
-            print(ans)
+        for ans in (next_answer(payload.get("prompt") or ""), science_answer(payload.get("prompt") or "")):
+            if ans:
+                print(ans)
     if kind == "SessionStart":
         tail = entries(FEED)[-6:]
         if tail:
