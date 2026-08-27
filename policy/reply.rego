@@ -62,16 +62,34 @@ deny contains msg if {
 # fold that opens with an order aimed at him: run, type, paste, open, click, install. What
 # passes: the INVENTORY `Use:` line (one command he may choose to use), `FOUNDER ACTION:`
 # (blocker-guard already limits it to physical and billing steps), `STAGED:` (its only ask is
-# the word hold), `Expect:` and `Evidence:`, and everything below the fold.
-chore_prefix_re := `(?i)^\s*(?:[-*]\s*)?(?:\*\*)?(?:use|founder action|staged|expect|evidence):`
+# the word hold), `Expect:`, `Evidence:`, `Open items:`, and everything below the fold. crew#432
+# review: "Run 33039029852 filed 0 tickets" and "Copy of the live warehouse" are reports, not
+# orders, so the verb alone is not enough: the line must also carry a command (backtick or URL)
+# or an object he would act on (the, a, this, your, it).
+chore_prefix_re := `(?i)^\s*(?:[-*]\s*)?(?:\*\*)?(?:use|founder action|staged|expect|evidence|open items?):`
 
 chore_re := `(?i)^\s*(?:[-*]\s*|\d+[.)]\s*)?(?:\*\*)?(?:(?:please|then|now|just)\s+)?(?:you(?:'ll| will)? need to\s+|you (?:have|need) to\s+)?(?:run|type|execute|paste|open|click|go to|navigate to|install|copy|tap|ssh into|log in to|login to)\b`
+
+# The verb alone is a report as often as an order. An order also names a command or an object.
+chore_object_re := `(?i)\b(?:run|type|execute|paste|open|click|go to|navigate to|install|copy|tap|ssh into|log in to|login to)\s+(?:the|a|an|this|your|it|that|on|into)\b`
+
+chore_command_re := "`|https?://"
+
+is_chore(line) if {
+	regex.match(chore_re, line)
+	regex.match(chore_object_re, line)
+}
+
+is_chore(line) if {
+	regex.match(chore_re, line)
+	regex.match(chore_command_re, line)
+}
 
 deny contains msg if {
 	input.event == "Stop"
 	some line in split(input.reply, "\n")
 	not regex.match(chore_prefix_re, line)
-	regex.match(chore_re, line)
+	is_chore(line)
 	msg := sprintf(
 		concat("", [
 			"THE FOUNDER DOES NOT RUN SCRIPTS (LAW 31). This reply hands him a chore:\n",
