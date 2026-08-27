@@ -11,7 +11,7 @@
 #   "repo":       "owner/name",
 #   "prs":        [{number, created_at, head: {ref}, base: {ref}, labels: [{name}]}, ...]
 #                 open PRs oldest first, as the REST /pulls endpoint returns them
-#   "cap":        10,
+#   "cap":        20,
 #   "hold_label": "hold",
 # }
 #
