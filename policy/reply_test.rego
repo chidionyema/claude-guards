@@ -60,3 +60,11 @@ test_you_need_to_run_refused if {
 test_format_lines_allowed if {
 	count(deny) == 0 with input as stop("INVENTORY: the deploy runs on a schedule now.\nBuilt: a workflow_dispatch deploy.\nUse: `gh workflow run deploy.yml`\nExpect: the run is green in 4 minutes.\nSTAGED: rotating the key. Reply 'hold' to cancel. Auto-activating in 60 minutes.\nFOUNDER ACTION: tap the YubiKey when the phone buzzes.\nThe job runs itself; nothing to run by hand.")
 }
+
+test_report_lines_that_start_with_a_verb_allowed if {
+	count(deny) == 0 with input as stop("INVENTORY: filed.\nOpen items: crew#12 merge, idp#3 review.\nRun 33039029852 filed 0 tickets.\nCopy of the live warehouse used for the dry run.\nOpen question: which repo.")
+}
+
+test_verb_plus_object_refused if {
+	count(deny) == 1 with input as stop("DONE: wired.\nOpen the console and approve it.")
+}
