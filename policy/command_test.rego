@@ -16,6 +16,8 @@ import rego.v1
 
 # Commands the estate has decided must be refused.
 refuse := [
+	"find \"$HOME\" -name settings.json", # whole_disk_find, quoted root (crew#85)
+	"find '/' -type f -name x", # whole_disk_find, quoted root (crew#85)
 	"find / -path '*@backstage/core-components*' -iname 'Link.*'", # whole_disk_find (crew#85)
 	"cd /tmp && find ~ -name '*.plist' | head", # whole_disk_find (crew#85)
 	"find $HOME/ -type f -name settings.json", # whole_disk_find (crew#85)
@@ -106,6 +108,7 @@ refuse := [
 # Commands that must go through. A guard that refuses correct work is an
 # outage (LAW 38), and half of these exist because one did.
 permit := [
+	"find \"$HOME/dev/code/idp\" -name '*.yml'", # quoted one-repo root, crew#85
 	"find ~/dev/code/idp -name '*.yml' -path '*workflows*'", # one repo, crew#85
 	"find / -maxdepth 2 -name Applications", # bounded, crew#85
 	"mdfind -name Link.tsx", # the substitute, crew#85

@@ -450,7 +450,9 @@ deny contains msg if {
 # (node_modules/@backstage/core-components). A bounded `-maxdepth N` is permitted.
 # ---------------------------------------------------------------------------
 
-whole_disk_find_re := `(?:^|[\s;&|(])find\s+(?:-[A-Z]\s+)*(?:/|/Users(?:/[\w.-]+)?/?|~/?|\$HOME/?|\$\{HOME\}/?)(?:\s|$)`
+# The root may be quoted: find "$HOME" -name x and find '/' -type f walk the same disk
+# (code-2d, reviewing claude-guards#157).
+whole_disk_find_re := `(?:^|[\s;&|(])find\s+(?:-[A-Z]\s+)*["']?(?:/|/Users(?:/[\w.-]+)?/?|~/?|\$HOME/?|\$\{HOME\}/?)["']?(?:\s|$)`
 
 deny contains msg if {
 	not contains(input.command, "whole-disk-find-intended")
