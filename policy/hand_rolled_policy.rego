@@ -63,7 +63,12 @@ legacy := {
 	# is still 6. strip_echo_payloads drops what echo/printf prints before the command reaches
 	# Rego, next to heredoc bodies and -m messages; Rego judges the command it is handed, so
 	# the stripping is the adapter's job. Both-ways cases are in the selftest.
-	"rule-guard.py": 1282, # crew#332: foreign_changes() asks git status and stats files; the refusal is Rego
+	"rule-guard.py": 1282,
+	# crew#407 (claude-guards#118): the credential shapes use lookarounds ((?!...), (?<!...)) that
+	# RE2, and so OPA, cannot run, and the one definition is estate_alert.credential_shape, shared
+	# with the Telegram senders (#113). The hook is the adapter for two events (Stop reply text,
+	# PreToolUse gh writes); the decision is one function call. Ceiling only ever falls.
+	"credential-guard.py": 118, # crew#332: foreign_changes() asks git status and stats files; the refusal is Rego
 	# 1098 -> 1107 on 2026-08-26 (crew#323, claude-guards#92). No refusal was added: the gate
 	# graded a compaction summary ("This session is being continued from a previous
 	# conversation", "Caveat:", "Stop hook") as founder words and demanded a ticket for it.
