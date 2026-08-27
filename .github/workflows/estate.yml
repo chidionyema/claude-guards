@@ -31,6 +31,9 @@ jobs:
       - name: estate_watch selftest
         run: python estate/estate_watch.py --selftest
 
+      - name: ciphertext repos are hidden from the anonymous internet (crew#227)
+        run: python estate/repo_must_be_private.py
+
       - name: no credential value committed under estate/
         run: |
           # LAW 21: naming a secret is fine, printing one is not.
