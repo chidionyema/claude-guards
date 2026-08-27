@@ -61,3 +61,29 @@ def test_no_gh_fails_open(tmp_path):
 def test_selftest_is_green():
     r = subprocess.run([sys.executable, GUARD, "--selftest"], capture_output=True, text=True, timeout=120, check=False)
     assert r.returncode == 0, r.stdout + r.stderr
+
+
+def _env_with_stack(tmp_path) -> dict:
+    """A `gh` whose open-PR list has #458 based on #454's head branch (idp, 2026-08-27)."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    rows = [
+        {"number": 454, "created_at": "2026-08-27T00:00:00Z", "head": {"ref": "cp1"}, "base": {"ref": "main"}},
+        {"number": 458, "created_at": "2026-08-27T00:00:00Z", "head": {"ref": "cp2"}, "base": {"ref": "cp1"}},
+    ]
+    gh = bindir / "gh"
+    gh.write_text("#!/bin/sh\ncat <<'J'\n" + json.dumps(rows) + "\nJ\n")
+    gh.chmod(0o755)
+    env = dict(os.environ)
+    env["PATH"] = f"{bindir}:{env['PATH']}"
+    return env
+
+
+def test_delete_branch_under_a_stacked_pr_is_refused(tmp_path):
+    """crew#66: merging idp#454 with --delete-branch made GitHub close idp#458, which was based on it."""
+    env = _env_with_stack(tmp_path)
+    r = _run(f"gh pr {SHRINK[0]} 454 -R chidionyema/idp --squash --delete-branch", env)
+    assert r.returncode == 2, r.stderr
+    assert "chidionyema/idp#454 is the base of open PR(s) #458" in r.stderr
+    assert _run(f"gh pr {SHRINK[0]} 454 -R chidionyema/idp --squash", env).returncode == 0
+    assert _run(f"gh pr {SHRINK[0]} 458 -R chidionyema/idp --squash --delete-branch", env).returncode == 0

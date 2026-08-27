@@ -20,3 +20,10 @@ PASS merge stays allowed at 11: want 0 got 0
 PASS close stays allowed at 11: want 0 got 0
 PASS unknown repo fails open: want 0 got 0
 ```
+
+## Second fence: stacked PRs (crew#66, 2026-08-27)
+
+    gh pr merge 454 -R chidionyema/idp --squash --delete-branch
+    BLOCKED by pr-cap-guard: chidionyema/idp#454 is the base of open PR(s) #458; --delete-branch would make GitHub close them ...
+
+Merging idp#454 with `--delete-branch` closed idp#458, which was based on it; restoring the ref, reopening and retargeting cost a cap slot and an hour. Merge the bottom without deleting, retarget the stacked PR to main, delete the branch at the top.
