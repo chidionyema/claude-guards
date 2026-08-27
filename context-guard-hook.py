@@ -73,7 +73,11 @@ RESIDENT_WARN = min(85_000, RESIDENT_HARD - 10_000)
 PROMPTS_WARN  = 25                 # user prompts in one session ≈ a task boundary passed
 SIZE_WARN     = 20 * 1024 * 1024   # transcript bytes ≈ proxy for turn count
 AGE_WARN      = 8 * 3600           # seconds; marathons ran ~3 days
-RENUDGE_EVERY = 10                 # min prompts between nudges (no spam)
+RENUDGE_EVERY = 10
+#: crew#26, measured 2026-08-27: one session reached 28 compactions and a 30 MB transcript; each
+#: compaction re-injects the SessionStart hooks (17 KB after claude-guards#147, 46 KB before) and
+#: the playbook measured one compaction at $2.53. Four is a marathon, whatever the other signals.
+COMPACT_WARN = 4                 # min prompts between nudges (no spam)
 TAIL          = 200_000            # bytes of transcript scanned for resident ctx
 
 
@@ -172,7 +176,26 @@ def save_state(path, st):
         except Exception: pass
 
 
-def assess(r, prompts, size, age):
+def compactions(path):
+    """How many compactions this transcript has been through. Whole file, cheap: a substring
+    test per line and a JSON parse only on candidate lines."""
+    n = 0
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if "isCompactSummary" not in line:
+                    continue
+                try:
+                    if json.loads(line).get("isCompactSummary"):
+                        n += 1
+                except Exception:
+                    continue
+    except Exception:
+        return 0
+    return n
+
+
+def assess(r, prompts, size, age, compacts=0):
     """(signals, strong, fires) for one session shape. Pure, so it can be tested.
 
     Lifted out of main() on 2026-08-19 for exactly that reason: this is the whole hook -- when
@@ -191,9 +214,11 @@ def assess(r, prompts, size, age):
         signals.append(f"{size/1024/1024:.0f}MB transcript (high turn count)")
     if age >= AGE_WARN:
         signals.append(f"session is {age/3600:.0f}h old")
+    if compacts >= COMPACT_WARN:
+        signals.append(f"{compacts} compactions (each re-injects the SessionStart hooks; crew#26)")
 
     strong = (r >= RESIDENT_HARD or prompts >= 2 * PROMPTS_WARN
-              or size >= 2 * SIZE_WARN or age >= 24 * 3600)
+              or size >= 2 * SIZE_WARN or age >= 24 * 3600 or compacts >= COMPACT_WARN)
     fires = bool(signals) and (len(signals) >= 2 or strong)
     return signals, strong, fires
 
@@ -216,6 +241,9 @@ def selftest():
         ((RESIDENT_WARN - 1, PROMPTS_WARN - 1, 0, 0), (False, False)),   # just under both
         # The measured median session on 2026-08-19: 165K resident. Must fire STRONG.
         ((165_553, 30, 0, 2 * hour), (True, True)),
+        # crew#26: compactions alone are a STRONG signal at COMPACT_WARN, silent one under it.
+        ((0, 0, 0, 0, COMPACT_WARN), (True, True)),
+        ((0, 0, 0, 0, COMPACT_WARN - 1), (False, False)),
     ]
     failures = []
     for args, (want_fires, want_strong) in cases:
@@ -466,7 +494,7 @@ def main():
         size = 0
     age = time.time() - st.get("first_seen", time.time())
 
-    signals, strong, fires = assess(r, prompts, size, age)
+    signals, strong, fires = assess(r, prompts, size, age, compactions(path))
     if not fires:
         sys.exit(0)  # healthy shape — stay silent
 
