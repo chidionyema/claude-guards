@@ -34,7 +34,9 @@ def test_incident_crew26_a_meter_the_author_wrote_is_not_doubled(tmp_path, monke
 
 
 def test_incident_crew26_meter_is_blind_not_a_guess_when_the_script_is_missing(monkeypatch):
-    fg = _fg()
-    monkeypatch.setattr(fg, "Path", type("P", (), {}))  # any exception path -> BLIND
-    line = fg.meter_line(timeout=1)
+    import sys
+    sys.path.insert(0, str(HERE))
+    import feed_meter  # the meter is a library beside the guard
+    monkeypatch.setattr(feed_meter, "Path", type("P", (), {}))  # any exception path -> BLIND
+    line = feed_meter.meter_line(timeout=1)
     assert line.startswith("📍 METER: BLIND")
