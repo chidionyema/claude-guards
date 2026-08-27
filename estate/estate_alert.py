@@ -17,6 +17,7 @@ import time
 import urllib.parse
 import urllib.request
 import pathlib
+import re
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -135,6 +136,43 @@ def _cap_notice_due() -> bool:
     return not any(r.get("key") == _CAP_NOTICE_KEY for r in telegram_ledger.read(3600.0))
 
 
+# crew#407 (2026-08-27): a session sent the router Admin UI password to the founder's Telegram.
+# A delivery channel is not a secret store. Every sender in this tree passes through here; text
+# shaped like a credential is refused before the API call, and the caller sees REFUSED on stderr.
+# The shapes are the value, never the word: "password rotated" passes, "password: hunter2" does not.
+_CREDENTIAL_SHAPES = [
+    # "<name>: <value>" where the value looks like a value: not a placeholder (${X}, {{x}}, <x>,
+    # os.environ/X, ***), not an ALL_CAPS env name (vault-seed writes KEY=ENVKEY mappings).
+    re.compile(r"(?i)(?:password|passwd|passphrase|client[_ -]?secret|master[_ -]?key|api[_ -]?key|"
+               r"private[_ -]?key|(?<![a-z])(?:secret|token))\s*[:=]\s*[`'\"]?"
+               r"(?!\$|\{|<|\*|os\.environ|os\.getenv|process\.env|get[A-Za-z]*\(|"
+               r"(?-i:[A-Z][A-Z0-9_]{5,})(?:[^A-Za-z0-9_]|$))[A-Za-z0-9!#$%&*+\[\]{}<>?_./=-]{8,}"),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{16,}"),                 # OpenAI / LiteLLM keys
+    re.compile(r"\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}"),  # GitHub tokens
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                    # AWS access key id
+    re.compile(r"\bxox[abposr]-[A-Za-z0-9-]{10,}"),          # Slack
+    re.compile(r"\b\d{8,10}:[A-Za-z0-9_-]{30,}"),           # Telegram bot token
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    # "user: x / <value>" pairs where the value is not an ALL_CAPS name
+    re.compile(r"(?i)\b(?:user(?:name)?|login)\s*[:=]\s*\S+\s*[/,\n]\s*(?:pass(?:word)?\s*[:=]\s*)?"
+               r"(?!(?-i:[A-Z][A-Z0-9_]{5,})\b)[A-Za-z0-9!#$%&*()+_./=-]{10,}\s*$"),
+]
+
+
+def credential_shape(text: str) -> str | None:
+    """Name the first credential shape in text, or None. Pure, so both senders and the test share it."""
+    for rx in _CREDENTIAL_SHAPES:
+        m = rx.search(text)
+        if m:
+            return m.group(0)[:12] + "…"
+    return None
+
+
+class CredentialRefused(ValueError):
+    """Raised by every Telegram sender when the text carries a credential shape (crew#407)."""
+
+
 def _post(token: str, chat: str, text: str) -> int:
     """The raw send. Kept separate so the cap notice can go out without being capped.
 
@@ -142,6 +180,10 @@ def _post(token: str, chat: str, text: str) -> int:
     the API took the call. Returns 0 on a 200 with no id. An int is truthy, so callers
     written against the old bool return are unaffected.
     """
+    hit = credential_shape(text)
+    if hit:
+        print(f"REFUSED: credential shape ({hit}) in Telegram text; never sent (crew#407)", file=sys.stderr)
+        raise CredentialRefused(hit)
     payload = urllib.parse.urlencode({
         "chat_id": chat, "text": text, "disable_web_page_preview": "true",
     }).encode()
