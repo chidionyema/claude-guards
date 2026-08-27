@@ -21,12 +21,15 @@ deny contains msg if {
 	input.event == "Stop"
 	some line in split(input.reply, "\n")
 	regex.match(pause_re, line)
-	msg := sprintf(concat("", [
-		"VIOLATION: Law of Continuous Execution. Do not ask to fix the bug. Fix it and report.\n",
-		"  %s\n",
-		"Report as: Found X broken. Fixed it in PR Y. Status is now green. ",
-		"Reversible work is announced STAGED: with a 60-minute timer, never asked (LAW 48, LAW 49).",
-	]), [trim_space(line)])
+	msg := sprintf(
+		concat("", [
+			"VIOLATION: Law of Continuous Execution. Do not ask to fix the bug. Fix it and report.\n",
+			"  %s\n",
+			"Report as: Found X broken. Fixed it in PR Y. Status is now green. ",
+			"Reversible work is announced STAGED: with a 60-minute timer, never asked (LAW 48, LAW 49).",
+		]),
+		[trim_space(line)],
+	)
 }
 
 # crew#395 (founder, 2026-08-26: "forget about fly, you have one mission"). A BLOCKED: reply
@@ -45,8 +48,37 @@ deny contains msg if {
 	startswith(trim_space(line), "Need:")
 	regex.match(asks_founder_re, line)
 	regex.match(asks_direction_re, line)
-	msg := sprintf(concat("", [
-		"BLOCKED: asks the founder for a direction he has already given. The standing focus is: %q. ",
-		"Work that, or run goal_graph.py --add under it; do not stop for an answer that is on disk.",
-	]), [substring(input.focus, 0, 160)])
+	msg := sprintf(
+		concat("", [
+			"BLOCKED: asks the founder for a direction he has already given. The standing focus is: %q. ",
+			"Work that, or run goal_graph.py --add under it; do not stop for an answer that is on disk.",
+		]),
+		[substring(input.focus, 0, 160)],
+	)
+}
+
+# LAW 31 (the founder does not run scripts) and LAW 20 (seamless is the deliverable). crew#431:
+# crew#423's enforcement map graded the rule "absent", no guard. THE CLASS: a line above the
+# fold that opens with an order aimed at him: run, type, paste, open, click, install. What
+# passes: the INVENTORY `Use:` line (one command he may choose to use), `FOUNDER ACTION:`
+# (blocker-guard already limits it to physical and billing steps), `STAGED:` (its only ask is
+# the word hold), `Expect:` and `Evidence:`, and everything below the fold.
+chore_prefix_re := `(?i)^\s*(?:[-*]\s*)?(?:\*\*)?(?:use|founder action|staged|expect|evidence):`
+
+chore_re := `(?i)^\s*(?:[-*]\s*|\d+[.)]\s*)?(?:\*\*)?(?:(?:please|then|now|just)\s+)?(?:you(?:'ll| will)? need to\s+|you (?:have|need) to\s+)?(?:run|type|execute|paste|open|click|go to|navigate to|install|copy|tap|ssh into|log in to|login to)\b`
+
+deny contains msg if {
+	input.event == "Stop"
+	some line in split(input.reply, "\n")
+	not regex.match(chore_prefix_re, line)
+	regex.match(chore_re, line)
+	msg := sprintf(
+		concat("", [
+			"THE FOUNDER DOES NOT RUN SCRIPTS (LAW 31). This reply hands him a chore:\n",
+			"  %s\n",
+			"Do it yourself, or make it a scheduled job, a workflow_dispatch, or a STAGED: line. ",
+			"A command he may choose to use goes on the INVENTORY Use: line; a physical or billing step is a FOUNDER ACTION: line.",
+		]),
+		[trim_space(line)],
+	)
 }

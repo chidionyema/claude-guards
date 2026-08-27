@@ -135,11 +135,6 @@
           },
           {
             "type": "command",
-            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/founder-imperative-guard.py",
-            "timeout": 10
-          },
-          {
-            "type": "command",
             "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/dod-guard.py",
             "timeout": 10
           },
