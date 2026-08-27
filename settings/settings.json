@@ -282,6 +282,18 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "WebSearch|WebFetch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/research-capture.py",
+            "timeout": 30
+          }
+        ]
+      }
     ]
   },
   "statusLine": {

@@ -21,6 +21,10 @@
       "is": "the Fly control plane every deploy and secret goes through",
       "dismissed": "the estate is moving off Fly, founder 2026-08-23. It returns to this file named for the platform that replaces it"
     },
+    "api.github.com": {
+      "is": "the crew docs/rulings listing the policy job reads (claude-guards#60); same outage surface as github.com",
+      "covered_by": "github-gone"
+    },
     "api.groq.com": {
       "is": "substrate rail",
       "covered_by": "no-anthropic"
@@ -65,6 +69,10 @@
       "is": "a dashboard a person opens",
       "dismissed": "same"
     },
+    "fluxcd.io": {
+      "is": "a fixture URL in tests/test_incident_crew72_*; nothing runs against it",
+      "dismissed": "test fixture, never fetched"
+    },
     "fly.io": {
       "is": "Fly's own site and API surface",
       "dismissed": "the estate is moving off Fly, founder 2026-08-23. It returns to this file named for the platform that replaces it"
@@ -80,6 +88,10 @@
     "generativelanguage.googleapis.com": {
       "is": "substrate rail, prepaid credits empty since 2026-08-23",
       "covered_by": "no-anthropic"
+    },
+    "gist.github.com": {
+      "is": "gh's credential helper entry in shell/gitconfig; same outage surface as github.com",
+      "covered_by": "github-gone"
     },
     "github.com": {
       "is": "where every recovery path starts",
@@ -156,14 +168,6 @@
     "www.minimax.io": {
       "is": "a marketing page",
       "dismissed": "same"
-    },
-    "api.github.com": {
-      "is": "the crew docs/rulings listing the policy job reads (claude-guards#60); same outage surface as github.com",
-      "covered_by": "github-gone"
-    },
-    "gist.github.com": {
-      "is": "gh's credential helper entry in shell/gitconfig; same outage surface as github.com",
-      "covered_by": "github-gone"
     }
   },
   "credentials": {
