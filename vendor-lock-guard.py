@@ -32,7 +32,7 @@ VENDOR = re.compile(
     r"remote[ -]control|claude\s+app|claude\.ai|anthropic\s+(?:app|console|relay)|"
     r"openai\s+assistants?|chatgpt(?:\s+app)?|gemini\s+live|gemini\s+app|"
     r"copilot\s+workspace|github\s+copilot\s+chat|cursor\s+(?:app|cloud)|"
-    r"codex\s+(?:app|cloud)|/config\b",
+    r"codex\s+(?:app|cloud)|(?<![\w./-])/config\b",  # the slash command, not a path segment
     re.I,
 )
 MANDATE = re.compile(
