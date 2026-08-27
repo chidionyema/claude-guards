@@ -276,6 +276,97 @@ def assignment_for(session: str, issues: list[dict] | None = None) -> dict | Non
     return None
 
 
+# crew#526 CP2 (founder 2026-08-27: "158 unclaimed open how come this never goes down"): nothing ever
+# read a ticked checklist or a Closes-when line back. The nightly close turn does both, and every
+# close carries the receipt (the command and its exit, or the ticked count and how long it stood).
+CLOSES_WHEN = re.compile(r"^Closes-when:\s*`?([^`\n]+?)`?\s*$", re.M)
+CLOSER_LOG = os.environ.get("ESTATE_CLOSER_LOG", "")
+
+
+def closes_when(issue: dict) -> str | None:
+    """The exact command whose exit 0 closes the issue, backticks stripped (code-99 on crew#531)."""
+    m = CLOSES_WHEN.search(issue.get("body") or "")
+    return m.group(1).strip() if m else None
+
+
+def _run_closes_when(cmd: str, cwd: str) -> tuple[int, str]:
+    import shlex
+    try:
+        r = subprocess.run(shlex.split(cmd), cwd=cwd, capture_output=True, text=True, timeout=300, check=False)
+        return r.returncode, (r.stdout or r.stderr).strip()[-300:]
+    except (OSError, ValueError, subprocess.TimeoutExpired) as e:
+        return 3, f"could not run: {e}"[:300]
+
+
+def close_issue(number: int, receipt: str) -> bool:
+    fx = _fixture()
+    if fx:
+        try:
+            with open(str(fx) + ".posted.jsonl", "a") as fh:
+                fh.write(json.dumps({"number": number, "close": receipt}) + "\n")
+            return True
+        except OSError:
+            return False
+    try:
+        r = subprocess.run([gh_bin(), "issue", "close", str(number), "-R", REPO, "--reason", "completed",
+                            "--comment", receipt], capture_output=True, text=True, timeout=40, check=False)
+        return r.returncode == 0
+    except OSError:
+        return False
+
+
+def close_pass(issues: list[dict], now: float, seen: dict[int, tuple[int, float]], cwd: str,
+               post: bool = True, run=_run_closes_when, stale_hours: float = STALE_HOURS) -> dict:
+    """One close turn. Returns {closed: [(n, why)], ran: n, held: n, no_rule: n}.
+    - an issue with a Closes-when line closes when that command exits 0;
+    - an issue with every box ticked closes once the board has seen that count for stale_hours;
+    - anything else is held, counted, never touched."""
+    out = {"closed": [], "ran": 0, "held": 0, "no_rule": 0}
+    for i in issues:
+        n = i["number"]
+        cmd = closes_when(i)
+        if cmd:
+            out["ran"] += 1
+            rc, tail = run(cmd, cwd)
+            if rc == 0:
+                why = f"CLOSED {utc()} by the board: `{cmd}` exit 0\n\n```\n{tail}\n```"
+                if not post or close_issue(n, why):
+                    out["closed"].append((n, "closes-when"))
+                    ledger({"guard": "board", "event": "closed", "item": n, "rule": "closes-when", "cmd": cmd})
+                continue
+            out["held"] += 1
+            continue
+        if all_ticked(i):
+            t, _u = boxes(i)
+            since = seen.get(n, (t, now))
+            if since[0] == t and now - since[1] >= stale_hours * 3600:
+                hrs = int((now - since[1]) // 3600)
+                why = f"CLOSED {utc()} by the board: all {t} boxes ticked for {hrs}h (crew#526)"
+                if not post or close_issue(n, why):
+                    out["closed"].append((n, "all-ticked"))
+                    ledger({"guard": "board", "event": "closed", "item": n, "rule": "all-ticked", "hours": hrs})
+                continue
+            out["held"] += 1
+            continue
+        out["no_rule"] += 1
+    return out
+
+
+def log_close_pass(r: dict, open_count: int, path: str = CLOSER_LOG) -> None:
+    """One line per turn to the science log (crew#526: counts land where velocity reads them)."""
+    if not path:
+        return
+    row = {"ts": utc(), "open": open_count, "closed": len(r["closed"]), "ran": r["ran"],
+           "held": r["held"], "no_rule": r["no_rule"],
+           "by_rule": {k: sum(1 for _, w in r["closed"] if w == k) for k in ("closes-when", "all-ticked")}}
+    try:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(row) + "\n")
+    except OSError:
+        pass
+
+
 def comment(number: int, body: str) -> bool:
     fx = _fixture()
     if fx:
@@ -421,6 +512,8 @@ if __name__ == "__main__":
     sub = ap.add_subparsers(dest="cmd", required=True)
     rk = sub.add_parser("rank", help="the board in finish-first order, top N unclaimed items")
     rk.add_argument("--top", type=int, default=20)
+    cls = sub.add_parser("close", help="the board's close turn: run Closes-when lines, close all-ticked items >24h")
+    cls.add_argument("--dry-run", action="store_true")
     asg = sub.add_parser("assign", help="the board's turn: release stale claims, assign alive idle sessions")
     asg.add_argument("--dry-run", action="store_true")
     for name in ("claim", "release"):
@@ -444,6 +537,18 @@ if __name__ == "__main__":
             lane = next((l for l in i.get("labels", []) if l.startswith("lane:")), "lane:unsorted")
             pr = next((l for l in i.get("labels", []) if l.upper() in ("P0", "P1")), "  ")
             print(f"  #{i['number']:<4} {t}/{t + u:<3} {pr:<2} {lane:<19} {'BLOCKED-ON ' + ','.join('#%d' % n for n in sorted(blk)) if blk else ''} {i['title'][:60]}")
+        sys.exit(0)
+    if a.cmd == "close":
+        issues = open_issues()
+        if issues is None:
+            print("BLIND: the board cannot be read"); sys.exit(3)
+        work = [i for i in issues if is_work(i)]
+        r = close_pass(work, time.time(), _last_boxes_seen(), os.getcwd(), post=not a.dry_run)
+        if not a.dry_run:
+            log_close_pass(r, len(issues) - len(r["closed"]))
+        print(f"board close ({'dry-run' if a.dry_run else 'posted'}) {utc()}: {len(issues)} open; "
+              f"closed {', '.join(f'#{n} ({w})' for n, w in r['closed']) or '-'}; "
+              f"ran {r['ran']} Closes-when line(s); held {r['held']}; no rule {r['no_rule']}")
         sys.exit(0)
     if a.cmd == "assign":
         issues = open_issues()
