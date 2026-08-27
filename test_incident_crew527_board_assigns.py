@@ -60,3 +60,25 @@ def test_assignment_for_is_the_open_claim_this_session_holds():
 def test_auto_objective_reads_the_assignment_first():
     src = (Path(__file__).resolve().parent / "auto-objective.py").read_text()
     assert "board.assignment_for(session) or board.next_unclaimed()" in src
+
+
+def test_the_baseline_is_the_oldest_seen_row_with_the_current_count(tmp_path):
+    """code-99 REWORK on claude-guards#166: the board writes a `seen` row every turn, so the newest
+    row can never be 24h old and the stale release never fired. Three daily rows, same count."""
+    import json
+    led = tmp_path / "ledger.jsonl"
+    rows = [{"guard": "board", "event": "seen", "item": 5, "ticked": 0, "ts": "2026-08-25T18:00:00Z"},
+            {"guard": "board", "event": "seen", "item": 5, "ticked": 0, "ts": "2026-08-26T18:00:00Z"},
+            {"guard": "board", "event": "seen", "item": 5, "ticked": 0, "ts": "2026-08-27T17:00:00Z"},
+            {"guard": "board", "event": "seen", "item": 6, "ticked": 0, "ts": "2026-08-25T18:00:00Z"},
+            {"guard": "board", "event": "seen", "item": 6, "ticked": 1, "ts": "2026-08-27T17:00:00Z"},
+            {"guard": "other", "event": "seen", "item": 7, "ticked": 0, "ts": "2026-08-25T18:00:00Z"}]
+    led.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    seen = eb._last_boxes_seen(led)
+    assert seen[5] == (0, eb._ts("2026-08-25T18:00Z"))       # oldest row of the unbroken run
+    assert seen[6] == (1, eb._ts("2026-08-27T17:00Z"))       # the count moved: the run restarts
+    assert 7 not in seen
+    stuck = _i(5, "- [ ] a", claim=("dddddddd", "2026-08-25T17:00:00Z"))
+    moved = _i(6, "- [x] a\n- [ ] b", claim=("eeeeeeee", "2026-08-25T17:00:00Z"))
+    r = eb.assign([stuck, moved], {}, NOW, seen, post=False)
+    assert r["released"] == [5] and r["held"] == {"eeeeeeee": [6]}

@@ -204,14 +204,20 @@ def alive_sessions(feed_text: str, now: float, hours: float = ALIVE_HOURS) -> di
     return {s: lane for s, (t, lane) in latest.items() if now - t <= hours * 3600}
 
 
-def _last_boxes_seen() -> dict[int, tuple[int, float]]:
-    """item -> (ticked, when) from the newest board_seen ledger row per item."""
+def _last_boxes_seen(path: Path = LEDGER) -> dict[int, tuple[int, float]]:
+    """item -> (ticked, since): the ticked count the board sees now and the FIRST `board seen`
+    row of the unbroken run that has shown it. The board writes a row every turn, so the newest
+    row is never 24h old (code-99 REWORK on claude-guards#166); the oldest row with the
+    current count is the baseline that lets the stale-release fire."""
     seen: dict[int, tuple[int, float]] = {}
     try:
-        for line in LEDGER.read_text().splitlines():
+        for line in path.read_text().splitlines():
             e = json.loads(line)
-            if e.get("guard") == "board" and e.get("event") == "seen":
-                seen[int(e["item"])] = (int(e["ticked"]), _ts(e["ts"]))
+            if e.get("guard") != "board" or e.get("event") != "seen":
+                continue
+            n, t, at = int(e["item"]), int(e["ticked"]), _ts(e["ts"])
+            if n not in seen or seen[n][0] != t:
+                seen[n] = (t, at)
     except (OSError, ValueError, KeyError):
         pass
     return seen
