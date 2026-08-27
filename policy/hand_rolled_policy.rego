@@ -63,7 +63,12 @@ legacy := {
 	# is still 6. strip_echo_payloads drops what echo/printf prints before the command reaches
 	# Rego, next to heredoc bodies and -m messages; Rego judges the command it is handed, so
 	# the stripping is the adapter's job. Both-ways cases are in the selftest.
-	"rule-guard.py": 1282,
+	# 1282 -> 1310 on 2026-08-27 (session 78caaa17, crew#423 row 25, claude-guards#137). No refusal
+	# was added: rules_count is still 6 and the refusal is command.rego's LAW 25 rule (a switch
+	# command while checkpoints/LATEST.md is more than 30 min old). The lines are the state Rego
+	# cannot gather: checkpoint_age_s() stats LATEST.md next to the transcript, walks up from a
+	# subagents/ transcript, and hands None (BLIND) when there is no file. Adapter gathers, Rego decides.
+	"rule-guard.py": 1310,
 	# crew#407 (claude-guards#118): the credential shapes use lookarounds ((?!...), (?<!...)) that
 	# RE2, and so OPA, cannot run, and the one definition is estate_alert.credential_shape, shared
 	# with the Telegram senders (#113). The hook is the adapter for two events (Stop reply text,
