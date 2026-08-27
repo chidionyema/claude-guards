@@ -21,7 +21,11 @@ PAGE = ("# What is planned\n\n- Checkpoints: **2 BLOCKING**, **4 ACTIVE**, **99 
 
 def test_incident_crew403_status_prompt_injects_the_page(tmp_path):
     m = _mod(); page = tmp_path / "NEXT.md"; page.write_text(PAGE)
-    for prompt in ("Status", "what capabilities are you working towards", "how is progress", "when to expect the store"):
+    for prompt in ("Status", "how is progress",
+                   # the founder's three verbatim prompts, 2026-08-27 (claude-guards#152 review)
+                   "what major capablities and showcase do you have planned",
+                   "what capalilities are outstanding or blocking",
+                   "nd when to epect"):
         out = m.next_answer(prompt, page, "https://x/NEXT.md")
         assert out and "https://x/NEXT.md" in out and "**2 BLOCKING**" in out and "**105 NO DATE**" in out, prompt
         assert "| BLOCKING | crew#488" in out and "| PLANNED |" not in out, "red rows only; the page holds the rest"
