@@ -280,11 +280,8 @@ def observe(path: Path, session: str) -> None:
         before = last_assistant_text(path)
         settle(path)
         after = last_assistant_text(path)
-        # crew#73: every observation carries its time, or the series is unorderable.
-        line = json.dumps({
-            "at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "kind": "observe",
-            "session": session,
+        line = json.dumps({  # crew#73: "at" + "kind" so the series is orderable
+            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "kind": "observe", "session": session,
             "waited_ms": int((time.time() - t0) * 1000),
             "changed": before != after,
             "before_marker": marker_of(before),
