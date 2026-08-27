@@ -25,6 +25,8 @@ from __future__ import annotations
 import json
 import re
 import os
+import pathlib
+import sqlite3
 import sys
 import urllib.error
 import urllib.parse
@@ -138,9 +140,46 @@ def _api(tok: str, method: str, **p):
         return json.load(r)
 
 
+# crew#284, 2026-08-27: three FOUNDER ACTION lines asked him to resend /sb-list. Every send was
+# already a user row in the gateway's state.db; the session could have replayed it through the
+# fixed dispatch and proved the fix itself. His words: "how many times do I need to send /sb-list,
+# this is major friction", "do your own testing". Class: asking the founder to reproduce an input
+# the machine already holds. The gateway home comes from HERMES_HOME (LAW 46), never a literal.
+_RESEND = re.compile(r"\b(?:re)?send\s+`?(/[A-Za-z][\w-]*)`?")
+
+
+def state_db_path() -> pathlib.Path | None:
+    home = os.environ.get("HERMES_HOME")
+    return pathlib.Path(home) / "state.db" if home else None
+
+
+def already_on_disk(action: str, db: pathlib.Path | None = None) -> str | None:
+    """The slash command the text asks him to (re)send, if state.db already holds it from him."""
+    m = _RESEND.search(action)
+    if not m:
+        return None
+    db = db or state_db_path()
+    if not db or not db.exists():
+        return None
+    try:
+        con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        row = con.execute("select id from messages where role='user' and trim(content) like ? "
+                          "order by id desc limit 1", (m.group(1) + "%",)).fetchone()
+        con.close()
+    except sqlite3.Error:
+        return None
+    return f"{m.group(1)} is state.db row {row[0]}" if row else None
+
+
 def send(action: str, target: str = "", session: str = "", *, staged_minutes: int | None = None,
          physical: bool = False, register: str | None = None) -> int:
     """Returns Telegram message_id (>0) or 0 when blind or refused."""
+    held = already_on_disk(action)
+    if held:
+        telegram_ledger.record(SOURCE, "refused", action, key="on-disk")
+        print(f"REFUSED: {held}; the founder already sent it (crew#284). Replay that row through the "
+              "dispatch under test and post the reply as the receipt. Do your own testing.", file=sys.stderr)
+        return 0
     if physical:
         rows = register_rows()
         if register is None:
