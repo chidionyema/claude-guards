@@ -126,11 +126,39 @@ def block_text(session: str, lane: str, age: int) -> str:
             f"Eight lines at most; TOUCHES and OVERLAP are required (crew#259, policy/feed.rego).")
 
 
+# crew#403 CP6: the founder asked three times on 2026-08-27 what is planned, what is blocking and
+# when. The answer is a generated page, never a session's memory. NEXT_PAGE is the hourly render's
+# docs/NEXT.md (idp bin/estate-next); NEXT_URL is where it is published.
+NEXT_PAGE = Path(os.environ.get("ESTATE_NEXT_PAGE") or Path.home() / "dev" / "code" / ".idp-state" / "docs" / "NEXT.md")
+NEXT_URL = os.environ.get("ESTATE_NEXT_URL") or "https://github.com/chidionyema/idp/blob/state/live-diagram/docs/NEXT.md"
+STATUS_RE = re.compile(r"\b(status|capabilit\w*|progress|what (is|are) (planned|outstanding|blocking)|when (to|can i|do you) expect|eta)\b", re.I)
+
+
+def next_answer(prompt: str, page: Path = NEXT_PAGE, url: str = NEXT_URL) -> str | None:
+    """The text to inject when the founder asks about status, capabilities, progress or when.
+    None when the prompt is not that question. A missing page is BLIND and says so (LAW 28)."""
+    if not STATUS_RE.search(prompt or ""):
+        return None
+    if not page.is_file():
+        return (f"[next] The founder is asking about status/capabilities/progress/when (crew#403 CP6). Answer from the "
+                f"generated page, never from memory: {url}. BLIND: no local copy at {page}; quote the URL and say the page is the answer.")
+    lines = page.read_text(encoding="utf-8", errors="ignore").splitlines()
+    bar = [l for l in lines if l.startswith("- Checkpoints:") or l.startswith("- When:") or l.startswith("- Lanes reporting:")]
+    red = [l for l in lines if l.startswith("| BLOCKING |") or l.startswith("| ACTIVE |")][:12]
+    return ("[next] The founder is asking about status/capabilities/progress/when (crew#403 CP6). Answer from the generated "
+            f"page, never from memory. Quote its URL and its bar; the table is the plan, the Expect column is the date:\n{url}\n"
+            + "\n".join(bar + red))
+
+
 def hook(kind: str) -> int:
     try: payload = json.load(sys.stdin)
     except Exception: payload = {}
     session = (payload.get("session_id") or "unknown")[:8]
     lane = Path(payload.get("cwd") or os.getcwd()).name
+    if kind == "UserPromptSubmit":
+        ans = next_answer(payload.get("prompt") or "")
+        if ans:
+            print(ans)
     if kind == "SessionStart":
         tail = entries(FEED)[-6:]
         if tail:
