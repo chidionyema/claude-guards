@@ -106,6 +106,8 @@ def _needs_ticket(tool: str, tool_input: dict) -> bool:
 # opened crew#323 as a ticket titled "This session is being continued..." (2026-08-26).
 NOT_FOUNDER_WORDS = (
     "Caveat:",
+    #: liveness probes sent to a session by a monitor; crew#334-#337 were four issues titled with one
+    "Answer with one word and nothing else",
     "Stop hook",
     "This session is being continued from a previous conversation",
 )
