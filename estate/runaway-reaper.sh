@@ -30,6 +30,10 @@ GRACE="${REAPER_GRACE:-5}"
 GREP_MAX_AGE="${REAPER_GREP_MAX_AGE:-300}"
 PI_MAX_AGE="${REAPER_PI_MAX_AGE:-3600}"
 CHROME_MAX_AGE="${REAPER_CHROME_MAX_AGE:-1800}"
+# crew#85 row 2 (2026-08-27): a headless `claude -p` from prospector/claude_cli.py outlived its
+# SIGKILLed caller for hours at 60-88% of a core, ppid 1, nobody reading its output.
+# subprocess.run's timeout cannot fire once the caller is gone, so the reaper is the guard.
+CLAUDE_P_MAX_AGE="${REAPER_CLAUDE_P_MAX_AGE:-3600}"
 
 DRY_RUN=0
 [ "${1:-}" = "--dry-run" ] && DRY_RUN=1
@@ -42,8 +46,8 @@ SELF_PID=$$
 # reap rule. etime is parsed in awk because BSD/macOS ps has no `etimes` keyword
 # (verified 2026-08-10: `ps: etimes: keyword not found`).
 candidates() {
-  ps -Ao pid=,etime=,args= | awk -v self="$SELF_PID" \
-      -v gmax="$GREP_MAX_AGE" -v pimax="$PI_MAX_AGE" -v cmax="$CHROME_MAX_AGE" '
+  ps -Ao pid=,ppid=,etime=,args= | awk -v self="$SELF_PID" \
+      -v gmax="$GREP_MAX_AGE" -v pimax="$PI_MAX_AGE" -v cmax="$CHROME_MAX_AGE" -v cpmax="$CLAUDE_P_MAX_AGE" '
     function etime_secs(e,   d, hms, n, p, s) {
       d = 0
       if (e ~ /-/) { n = index(e, "-"); d = substr(e, 1, n - 1) + 0; e = substr(e, n + 1) }
@@ -55,14 +59,15 @@ candidates() {
     }
     {
       pid = $1 + 0
-      age = etime_secs($2)
+      ppid = $2 + 0
+      age = etime_secs($3)
       argv = ""
-      for (i = 3; i <= NF; i++) argv = argv (i > 3 ? " " : "") $i
+      for (i = 4; i <= NF; i++) argv = argv (i > 4 ? " " : "") $i
       if (pid == self || pid <= 1) next
       # the argv of this reaper (and any editor viewing it) must never match
       if (argv ~ /runaway-reaper/) next
 
-      cmd = $3
+      cmd = $4
       n = split(cmd, seg, "/"); base = seg[n]
 
       rule = ""
@@ -70,7 +75,7 @@ candidates() {
       #     a recursive flag. `-v`/`--include` alone must NOT match.
       if (base ~ /^(grep|egrep|fgrep|ggrep|rgrep)$/) {
         rec = 0
-        for (i = 4; i <= NF; i++) {
+        for (i = 5; i <= NF; i++) {
           if ($i == "--recursive" || $i == "--dereference-recursive") rec = 1
           else if ($i ~ /^-[a-zA-Z]*[rR]/ && $i !~ /^--/) rec = 1
         }
@@ -80,6 +85,9 @@ candidates() {
       else if (base == "pi" && age > pimax) rule = "stale-pi"
       # (c) leaked headless browser
       else if (base ~ /^chrome-headless-shell$/ && age > cmax) rule = "chrome-headless-shell"
+      # (d) orphaned headless claude: `claude -p ...` whose caller is gone (ppid 1). A live caller
+      #     (ppid != 1) is never touched, whatever its age; interactive `claude` never matches.
+      else if (base == "claude" && $5 == "-p" && ppid == 1 && age > cpmax) rule = "orphan-headless-claude"
 
       if (rule != "") printf "%d\t%d\t%s\t%s\n", pid, age, rule, argv
     }'
