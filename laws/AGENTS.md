@@ -140,7 +140,7 @@ keep.
 | 47 | A founder blocker is loud, visible and one action: push notification plus a `FOUNDER ACTION:` line with the exact URL or word | the moment any step depends on the founder |
 | 48 | Continuous execution: a broken state found while answering a question is fixed in the same turn, never reported and parked | the moment a status check, a question or an investigation turns up a P1, a broken state or an easy bug |
 | 49 | Lazy consensus: a safe or reversible action is done and announced `STAGED:` with a 60-minute timer, never asked | before any action that can be defaulted or reversed |
-| 50 | The data map is discovered, never typed: every producer of data in the estate carries a verdict, every gap carries a ticket, and one UNEXPLAINED producer is a red gate | every run of `crew/science/datamap.py --check`, and the moment the estate grows a kind of world no domain enumerates |
+| 50 | Every workload emits to the central collector, and coverage is proved by querying the backend, never by scanning files; admission refuses a workload that does not emit | every workload admitted to a cluster, every Mac and cloud surface, and every coverage query the snapshot runs |
 
 **The full text of every law lives in `~/AGENTS-FULL.md`, and it is not injected.** Each law's
 prose — the founder's words, the incident that paid for it, the axis re-ranking paragraphs, and
@@ -178,7 +178,7 @@ Ranking: both sit on the HOW axis directly after LAW 5 (unblock yourself) as 5d(
 They never override LAW 1, LAW 2 or LAW 11: an irreversible production change is still proved and
 still shared before it happens; everything reversible is done, not asked.
 
-# LAW OF THE DATA MAP — LAW 50
+# LAW OF TELEMETRY COVERAGE — LAW 50
 
 Founder, 2026-08-26: "map all the data points in the estate, anything that produces data and
 anything that can be measured ... nothing is missed from infra to platform to agent transcripts to
@@ -186,34 +186,36 @@ apps and apis to our k8s and internals ... find a creative way to automate this 
 first and last time we ever need to do this and also a way to guarantee you don't miss anything.
 this needs to be encapsulated in law."
 
-The map before this law was two hand-typed Python dicts in `crew/science/datamap.py`: 18 reasons
-a thing was not collected and 8 things never emitted. 154 of 192 inventory rows had no verdict at
-all, and nothing could tell the difference between "nobody typed it" and "it does not exist".
+Founder, 2026-08-27, on the first draft of this law, which was a Python gate over a discovered
+register: "Stop pushing custom code as the law. I won't make LAW 50 depend on Python scripts.
+LAW 50 will require that every workload emits telemetry to SigNoz (or OTel collector), and that
+the coverage is verified by querying the backend, not by scanning files ... The platform
+discovers itself."
 
-1. THE WORLD IS ENUMERATED BY CLASS, NEVER BY NAME. `crew/science/producers.py` holds one domain
-   per kind of world (the Mac inventory, the warehouse, the cluster manifests, the live cluster,
-   public endpoints, hooks, MCP servers, GitHub repos and workflows, agent transcripts, the act
-   register). A domain lists every producer of its kind from the world itself. A producer typed
-   into a list is the violation this law exists to stop.
-2. EVERY PRODUCER CARRIES A VERDICT. `crew/science/verdicts.json` is the register. Each producer
-   must match an entry: COLLECTED names its reader, EXCLUDED names its why, and a gap
-   (WIRED_NEVER, WRITER_DEAD, NEVER_EMITTED) names its crew ticket. A producer no entry matches is
-   UNEXPLAINED, and one UNEXPLAINED producer turns the gate red.
-3. A BLIND DOMAIN IS A VERDICT, NOT A SILENCE. A domain that cannot read its world reports BLIND
-   and fails the gate unless `blind_allowed` names it with the ticket that will restore sight. A
-   domain that shrinks by more than half against `census.json` fails the gate as SHAPE CHANGED.
-4. A NEW KIND OF WORLD IS A NEW DOMAIN IN THE SAME PR. Whoever adds a scheduler, a data store, a
-   listener, a cloud account or any new class of thing that emits data adds the domain that
-   enumerates it before the PR merges. The residual this law cannot see is a class with no domain;
-   the register is the place that residual is written down.
-5. THE GATE RUNS WITHOUT A PERSON. `crew/scripts/verify.d/26-datamap-register.sh` in CI and the
-   `data map` row of `crew/STATE.md` (estate-snapshot, hourly) print the same GREEN or RED line.
-   A red row is a P1 under LAW 1.
+1. EVERY WORKLOAD EMITS TO THE ONE COLLECTOR. The estate has one telemetry backend, the SigNoz
+   row of `crew/docs/STANDARDS.md` in `idp`, fed through its OTel collector. A cluster workload
+   emits traces, metrics or logs to it, or the node agent (`idp` `platform/observability/k8s-infra.yaml`) emits them on its behalf. A Mac
+   emits through a local OTel collector; a cloud account through its audit and metrics export.
+   A second backend, a private log file that nothing forwards, or a metric nobody can query in
+   the backend is the violation.
+2. COVERAGE IS A QUERY AGAINST THE BACKEND. The proof that a thing is measured is a query that
+   returns its rows: `resource.k8s.pod.name`, `host.name`, `service.name` seen in the last
+   interval. Coverage is that set against the denominator the platform already holds, the
+   Backstage catalog and the Kubernetes API. A file scan is not a proof; a claim without the
+   query is a wish (LAW 44).
+3. ADMISSION REFUSES WHAT DOES NOT EMIT. Kyverno at the cluster and OPA at the reply are the
+   enforcement: a workload without the collector endpoint in its spec, or without a catalog
+   entity to be counted against, is not admitted. A workload that never appears in the backend
+   after admission is a red row in `crew/STATE.md` and a P1 under LAW 1.
+4. THE BOOTSTRAP REGISTER IS TEMPORARY AND SAYS SO. Until the coverage query is live on every
+   surface, `crew/science/datamap.py --check` (crew#394) is the bootstrap list of what exists
+   and what is not yet emitting. Every gap in it is a ticket. It is retired, surface by surface,
+   as the backend query takes over, and it is never the law.
 
 Ranking: HOW axis as 3d(50), a sharpening of LAW 3 (never make the same mistake twice): the
-mistake was a hand-typed inventory, and the guard is a closed-world register no session can walk
-past. It never overrides LAW 1 or LAW 2. It outranks LAW 6 and everything below it, because a
-producer nobody can name is a root cause nobody can find.
+mistake was a map kept by hand in a session that ended; the guard is a platform that cannot admit
+a thing it will not measure. It never overrides LAW 1 or LAW 2. It outranks LAW 6 and everything
+below it, because a producer nobody can query is a root cause nobody can find.
 
 # THE FOUR HARD RULES
 
