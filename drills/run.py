@@ -126,7 +126,7 @@ def status_of(d, reg):
 
 
 def run_one(d):
-    cmd = [c.replace("{HERE}", HERE).replace("{HOME}", os.path.expanduser("~")).replace("{IDP}", os.environ.get("IDP_DIR", os.path.expanduser("~/dev/code/idp")))
+    cmd = [c.replace("{HERE}", HERE).replace("{HOME}", os.path.expanduser("~")).replace("{IDP}", os.environ.get("IDP_DIR", os.path.expanduser("~/dev/code/idp"))).replace("{CREW}", os.environ.get("CREW_DIR", os.path.expanduser("~/dev/code/crew")))
            for c in d["cmd"]]
     t0 = time.time()
     try:
