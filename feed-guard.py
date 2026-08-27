@@ -90,15 +90,15 @@ def collisions(feed: Path, at: dt.datetime | None = None) -> list[tuple[dt.datet
 METER_MARK = "📍 METER:"
 
 
-def meter_line(timeout: float = 20.0) -> str:
+def meter_line(timeout: float = 90.0) -> str:
     """crew#26 CP-D: the token bill rides on every handoff, measured, never remembered.
 
     Reads estate/estate_spend.py --json (the meter that reproduces ~/.claude.json costUSD to 7
     figures). Founder, 2026-08-27: "so how do we solve this, super crucial." A number nobody sees
     is not an instrument (LAW 28); a handoff that carries $/request makes the cut visible daily.
     BLIND when the meter cannot run; never a guess."""
-    script = Path(__file__).resolve().parent / "estate" / "estate_spend.py"
     try:
+        script = Path(__file__).resolve().parent / "estate" / "estate_spend.py"
         out = subprocess.run([sys.executable, str(script), "--json"], capture_output=True,
                              text=True, timeout=timeout).stdout
         d = json.loads(out)
