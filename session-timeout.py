@@ -26,7 +26,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-import estate_board as board  # noqa: E402
+import estate_board as board
 
 HOME = Path(os.path.expanduser("~"))
 GOAL_DIR = HOME / ".claude/state/goal"
@@ -83,7 +83,7 @@ def idle_sessions(now: float) -> list[dict]:
         if pid is None:
             continue                       # nobody has it open: the session already ended
         found.append({"session": session, "goal": st["goal"], "quiet_s": int(quiet), "pid": pid,
-                      "item": board.goal_number(st["goal"]), "state_file": f})
+                      "item": board.goal_number(st["goal"]), "state_file": f, "transcript": t})
     return found
 
 
@@ -92,9 +92,29 @@ def act(row: dict, enforce: bool, kill=os.kill) -> str:
         board.ledger({"guard": "session-timeout", "event": "would_kill", "session": row["session"][:8],
                       "quiet_s": row["quiet_s"], "item": row["item"]})
         return f"WOULD KILL session {row['session'][:8]} pid {row['pid']} quiet {row['quiet_s']//60}m goal {row['goal'][:50]}"
+    event = "killed"
     try:
         kill(row["pid"], signal.SIGTERM)
+    except ProcessLookupError:
+        # crew#306 CP3, 2026-08-27: the first enforce hits were `FAILED kill 9f8f4f5f pid 72761`
+        # and later `pid 8338` for the same session -- lsof names whoever has the transcript open
+        # at that instant, and a transient reader can be gone by kill time. Re-resolve; a
+        # transcript nobody holds means the session ended, and its claim is released the same
+        # way a kill releases it. Before this the claim stayed held and nothing reached the ledger.
+        again = pid_holding(row["transcript"]) if row.get("transcript") else None
+        if again and again != row["pid"]:
+            try:
+                kill(again, signal.SIGTERM)
+            except Exception as e:
+                board.ledger({"guard": "session-timeout", "event": "kill_failed", "session": row["session"][:8],
+                              "pid": again, "error": str(e), "item": row["item"]})
+                return f"FAILED kill {row['session'][:8]} pid {again}: {e}"
+            row["pid"] = again
+        else:
+            event = "ended"
     except Exception as e:
+        board.ledger({"guard": "session-timeout", "event": "kill_failed", "session": row["session"][:8],
+                      "pid": row["pid"], "error": str(e), "item": row["item"]})
         return f"FAILED kill {row['session'][:8]} pid {row['pid']}: {e}"
     try:
         st = json.loads(row["state_file"].read_text())
@@ -104,9 +124,10 @@ def act(row: dict, enforce: bool, kill=os.kill) -> str:
         pass
     if row["item"]:
         board.release(row["item"], row["session"], f"session-timeout: no output for {row['quiet_s']//60}m")
-    board.ledger({"guard": "session-timeout", "event": "killed", "session": row["session"][:8],
+    board.ledger({"guard": "session-timeout", "event": event, "session": row["session"][:8],
                   "quiet_s": row["quiet_s"], "item": row["item"]})
-    return f"KILLED session {row['session'][:8]} pid {row['pid']} quiet {row['quiet_s']//60}m; crew#{row['item']} released"
+    verb = "KILLED" if event == "killed" else "ENDED"
+    return f"{verb} session {row['session'][:8]} pid {row['pid']} quiet {row['quiet_s']//60}m; crew#{row['item']} released"
 
 
 def run() -> int:
@@ -156,7 +177,22 @@ def selftest() -> int:
        and "RELEASE " in open(str(fx) + ".posted.jsonl").read())
     ck("the goal is cleared so the item is back on the board", json.loads((GOAL_DIR / "idle1.json").read_text())["goal"] == "")
     ck("both outcomes are on the ledger", "would_kill" in board.LEDGER.read_text() and '"killed"' in board.LEDGER.read_text())
-    h1.close(); h3.close()
+    h1.close()
+    # crew#306 CP3: the pid lsof named is gone by kill time and nobody holds the transcript
+    dead = {"session": "idle1", "goal": "crew#41: x", "quiet_s": 900, "pid": 4_000_000, "item": 41,
+            "state_file": GOAL_DIR / "idle1.json", "transcript": PROJECTS / "slug" / "idle1.jsonl"}
+    (GOAL_DIR / "idle1.json").write_text(json.dumps({"goal": "crew#41: x", "last_progress_at": 0}))
+    def gone(pid, sig):
+        raise ProcessLookupError(3, "No such process")
+    msg = act(dead, True, kill=gone)
+    ck("a pid that vanished before the kill is ENDED, the claim released, the goal cleared",
+       msg.startswith("ENDED") and json.loads((GOAL_DIR / "idle1.json").read_text())["goal"] == ""
+       and '"ended"' in board.LEDGER.read_text())
+    def denied(pid, sig):
+        raise PermissionError(1, "Operation not permitted")
+    msg = act(dict(dead, pid=4_000_001), True, kill=denied)
+    ck("any other kill failure is refused and lands on the ledger", msg.startswith("FAILED") and '"kill_failed"' in board.LEDGER.read_text())
+    h3.close()
     print("PASS session-timeout" if ok else "FAIL session-timeout")
     return 0 if ok else 1
 
