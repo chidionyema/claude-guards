@@ -281,6 +281,9 @@ def assignment_for(session: str, issues: list[dict] | None = None) -> dict | Non
 # close carries the receipt (the command and its exit, or the ticked count and how long it stood).
 CLOSES_WHEN = re.compile(r"^Closes-when:\s*`?([^`\n]+?)`?\s*$", re.M)
 CLOSER_LOG = os.environ.get("ESTATE_CLOSER_LOG", "")
+# LAW 21 (code-99 on cg#169): an issue body is anyone's text. The board runs exactly one shape of
+# command, the datamap row probe; every other Closes-when line is refused, counted, never executed.
+ALLOWED_CLOSES_WHEN = re.compile(r"^python3 science/datamap\.py --row [A-Za-z0-9_.-]+$")
 
 
 def closes_when(issue: dict) -> str | None:
@@ -317,14 +320,19 @@ def close_issue(number: int, receipt: str) -> bool:
 
 def close_pass(issues: list[dict], now: float, seen: dict[int, tuple[int, float]], cwd: str,
                post: bool = True, run=_run_closes_when, stale_hours: float = STALE_HOURS) -> dict:
-    """One close turn. Returns {closed: [(n, why)], ran: n, held: n, no_rule: n}.
-    - an issue with a Closes-when line closes when that command exits 0;
+    """One close turn. Returns {closed: [(n, why)], ran: n, held: n, no_rule: n, refused: n}.
+    - an issue with an allow-listed Closes-when line closes when that command exits 0;
+    - a Closes-when line outside ALLOWED_CLOSES_WHEN is refused: counted, logged, never run;
     - an issue with every box ticked closes once the board has seen that count for stale_hours;
     - anything else is held, counted, never touched."""
-    out = {"closed": [], "ran": 0, "held": 0, "no_rule": 0}
+    out = {"closed": [], "ran": 0, "held": 0, "no_rule": 0, "refused": 0}
     for i in issues:
         n = i["number"]
         cmd = closes_when(i)
+        if cmd and not ALLOWED_CLOSES_WHEN.match(cmd):
+            out["refused"] += 1
+            ledger({"guard": "board", "event": "refused", "item": n, "rule": "closes-when", "cmd": cmd[:120]})
+            continue
         if cmd:
             out["ran"] += 1
             rc, tail = run(cmd, cwd)
@@ -357,7 +365,7 @@ def log_close_pass(r: dict, open_count: int, path: str = CLOSER_LOG) -> None:
     if not path:
         return
     row = {"ts": utc(), "open": open_count, "closed": len(r["closed"]), "ran": r["ran"],
-           "held": r["held"], "no_rule": r["no_rule"],
+           "held": r["held"], "no_rule": r["no_rule"], "refused": r.get("refused", 0),
            "by_rule": {k: sum(1 for _, w in r["closed"] if w == k) for k in ("closes-when", "all-ticked")}}
     try:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -548,7 +556,8 @@ if __name__ == "__main__":
             log_close_pass(r, len(issues) - len(r["closed"]))
         print(f"board close ({'dry-run' if a.dry_run else 'posted'}) {utc()}: {len(issues)} open; "
               f"closed {', '.join(f'#{n} ({w})' for n, w in r['closed']) or '-'}; "
-              f"ran {r['ran']} Closes-when line(s); held {r['held']}; no rule {r['no_rule']}")
+              f"ran {r['ran']} Closes-when line(s); refused {r['refused']}; held {r['held']}; "
+              f"no rule {r['no_rule']}")
         sys.exit(0)
     if a.cmd == "assign":
         issues = open_issues()
