@@ -19,4 +19,4 @@ def test_incident_crew306_timeout_reaps_a_dead_pid():
                        capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "PASS a pid that vanished before the kill is ENDED" in r.stdout, r.stdout
-    assert "PASS any other kill failure is FAILED and on the ledger" in r.stdout, r.stdout
+    assert "PASS any other kill failure is refused and lands on the ledger" in r.stdout, r.stdout

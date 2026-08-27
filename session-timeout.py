@@ -191,7 +191,7 @@ def selftest() -> int:
     def denied(pid, sig):
         raise PermissionError(1, "Operation not permitted")
     msg = act(dict(dead, pid=4_000_001), True, kill=denied)
-    ck("any other kill failure is FAILED and on the ledger", msg.startswith("FAILED") and '"kill_failed"' in board.LEDGER.read_text())
+    ck("any other kill failure is refused and lands on the ledger", msg.startswith("FAILED") and '"kill_failed"' in board.LEDGER.read_text())
     h3.close()
     print("PASS session-timeout" if ok else "FAIL session-timeout")
     return 0 if ok else 1
