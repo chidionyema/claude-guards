@@ -67,7 +67,7 @@ jobs:
           # depth-1 PR ref with no origin/main, so three two-ref cases found one ref and
           # failed (run 33021781271, 95/98). Give it the ref it grades against.
           git fetch -q --no-tags --depth=1 origin main:refs/remotes/origin/main || true
-          python -m pip -q install pytest
+          python -m pip -q install pytest pytest-bdd  # pytest-bdd binds features/*.feature (crew#26, spec-gate)
           python -m pytest -q -p no:cacheprovider \
             --ignore=test_bridge_edges.py --ignore=test_bridge_live.py --ignore=test_kimi_bridge_reap.py \
             --ignore=test_incident_rule_guard_quiet_push.py \
