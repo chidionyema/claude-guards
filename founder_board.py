@@ -132,7 +132,9 @@ def collect_spend() -> list[Row]:
     except json.JSONDecodeError as e:
         return [_unknown("Claude spend today", f"meter printed no JSON: {e}", " ".join(cmd))]
 
-    budget_path = os.path.join(HOME, ".claude", "estate-budget.json")
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "estate"))
+    from budget_path import budget_path as _budget_path  # crew#91
+    budget_path = _budget_path()
     try:
         with open(budget_path) as fh:
             budget = json.load(fh)

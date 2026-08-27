@@ -51,7 +51,9 @@ def fmt_tok(n):
     return f"{n/1000:.0f}K" if n < 1_000_000 else f"{n/1_000_000:.2f}M"
 
 HISTORY = os.path.expanduser("~/.claude/estate-spend-history.jsonl")
-BUDGET = os.path.expanduser("~/.claude/estate-budget.json")
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "estate"))
+from budget_path import budget_path  # noqa: E402  crew#91
+BUDGET = budget_path()
 
 def estate_spend():
     """Today's ESTATE-WIDE spend, from the sentinel's cached history.

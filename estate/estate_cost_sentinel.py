@@ -50,7 +50,8 @@ sys.path.append(os.path.expanduser("~/.hermes/scripts"))
 
 import estate_spend  # noqa: E402
 
-CONFIG = os.path.expanduser("~/.claude/estate-budget.json")
+from budget_path import budget_path  # crew#91
+CONFIG = budget_path()
 HISTORY = os.path.expanduser("~/.claude/estate-spend-history.jsonl")
 DEFAULTS = {
     "warn_usd": 120.0,
