@@ -124,3 +124,7 @@ test_no_checkpoint_age_supplied_is_blind_not_a_verdict if {
 test_dropped_pods_in_a_report_are_not_a_parked_thread if {
 	count(deny) == 0 with input as stop_aged("The receipt dropped the two pods that were Succeeded; see checkpoints/LATEST.md.", 7200)
 }
+
+test_an_uppercase_constant_is_not_a_parked_thread if {
+	count(deny) == 0 with input as stop_aged("The demotion must not set retrieval_failed; that fires DEFER at verify.py:693 and dropped 10 criticals.", 7200)
+}
