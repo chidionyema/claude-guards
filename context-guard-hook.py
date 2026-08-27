@@ -10,8 +10,7 @@ v2.1 (2026-08-06) RETUNED against measured data. Audit of 37 prospector sessions
 (`token-audit.py -Users-chidionyema`): $374.64 / 4,183 requests = $0.0896 per request,
 near-constant; cost drivers cache_read 55.6% + cache_write 23.3% = 79% context
 transport, output only 21.1%. Peaks cluster at 160-167K (the 200K auto-compact knee)
-and only 1 of 37 sessions ever reached 170K — so the old RESIDENT_HARD=170_000 fired
-about ONCE in 37 sessions and the resident "strong" path was effectively dead. Warn
+and 1 of 37 sessions reached 170K, so RESIDENT_HARD=170_000 fired once in 37 sessions. Warn
 130_000 -> 85_000 (the measured mean-of-medians), hard 170_000 -> 140_000 (under the
 knee, so it can actually fire). Beware: peak CAN exceed the window (max seen 277,374)
 when one turn dumps a lot before compaction triggers.
@@ -22,15 +21,13 @@ tells Claude to (a) write a handoff to checkpoints/LATEST.md and (b) hand the us
 one-keystroke /compact. Loss-proof either way: memory-loop.py (SessionStart hook) re-injects
 checkpoints/LATEST.md into the next fresh session automatically.
 
-Per-session state lives next to the transcript: <session>.jsonl.guard.json
-Cost when it fires: ~70 tokens of injected context. Silent otherwise. Never blocks.
+Per-session state lives next to the transcript: <session>.jsonl.guard.json. Silent unless it fires.
 """
 import json, os, re, sys, time
 
 #: Above this, the PreToolUse half refuses ONE context-growing call per session. Same
 #: number as RESIDENT_HARD on purpose: the nudge and the block must not disagree about
 #: when a session is too fat, or the nudge trains you to ignore the block.
-#:
 #: It is one refusal, not a wall. Founder directive 2026-08-19: "have ne type sonethig is
 #: friction, the goal is autonony / i should not have to nanually be involced". A guard
 #: whose only escape is the founder typing `touch .../OFF` has moved the work onto the
@@ -74,6 +71,7 @@ PROMPTS_WARN  = 25                 # user prompts in one session ≈ a task boun
 SIZE_WARN     = 20 * 1024 * 1024   # transcript bytes ≈ proxy for turn count
 AGE_WARN      = 8 * 3600           # seconds; marathons ran ~3 days
 RENUDGE_EVERY = 10                 # min prompts between nudges (no spam)
+COMPACT_WARN  = 4                  # compactions; each re-injects the SessionStart hooks (crew#26)
 TAIL          = 200_000            # bytes of transcript scanned for resident ctx
 
 
@@ -172,7 +170,7 @@ def save_state(path, st):
         except Exception: pass
 
 
-def assess(r, prompts, size, age):
+def assess(r, prompts, size, age, compacts=0):
     """(signals, strong, fires) for one session shape. Pure, so it can be tested.
 
     Lifted out of main() on 2026-08-19 for exactly that reason: this is the whole hook -- when
@@ -191,9 +189,11 @@ def assess(r, prompts, size, age):
         signals.append(f"{size/1024/1024:.0f}MB transcript (high turn count)")
     if age >= AGE_WARN:
         signals.append(f"session is {age/3600:.0f}h old")
+    if compacts >= COMPACT_WARN:
+        signals.append(f"{compacts} compactions (each re-injects the SessionStart hooks; crew#26)")
 
     strong = (r >= RESIDENT_HARD or prompts >= 2 * PROMPTS_WARN
-              or size >= 2 * SIZE_WARN or age >= 24 * 3600)
+              or size >= 2 * SIZE_WARN or age >= 24 * 3600 or compacts >= COMPACT_WARN)
     fires = bool(signals) and (len(signals) >= 2 or strong)
     return signals, strong, fires
 
@@ -204,7 +204,7 @@ def selftest():
 
     hour = 3600
     cases = [
-        # (resident, prompts, bytes, age_s) -> (fires, strong)
+        # (resident, prompts, bytes, age_s[, compactions]) -> (fires, strong)
         ((0, 1, 0, 0), (False, False)),                                  # fresh session
         ((RESIDENT_WARN, 1, 0, 0), (False, False)),                      # one weak signal only
         ((RESIDENT_WARN, PROMPTS_WARN, 0, 0), (True, False)),            # two weak signals
@@ -216,6 +216,8 @@ def selftest():
         ((RESIDENT_WARN - 1, PROMPTS_WARN - 1, 0, 0), (False, False)),   # just under both
         # The measured median session on 2026-08-19: 165K resident. Must fire STRONG.
         ((165_553, 30, 0, 2 * hour), (True, True)),
+        ((0, 0, 0, 0, COMPACT_WARN), (True, True)),                     # crew#26: compactions
+        ((0, 0, 0, 0, COMPACT_WARN - 1), (False, False)),
     ]
     failures = []
     for args, (want_fires, want_strong) in cases:
@@ -224,11 +226,8 @@ def selftest():
             failures.append(f"  assess{args}: want fires={want_fires} strong={want_strong}, "
                             f"got fires={fires} strong={strong}")
 
-    # A COMPACTION throws the context away. Everything measured above the boundary describes
-    # a context that no longer exists, so quoting it makes the guard fire hardest at the moment
-    # the session got cheap. Caught by the founder on 2026-08-19: the guard said 165K while the
-    # statusline said 73K, and both were reading the same file with the same formula.
-    def _fat(n):
+    def _fat(n):  # compaction reset: the comment on resident() says why
+
         return json.dumps({"type": "assistant", "message": {"usage": {
             "input_tokens": 0, "cache_read_input_tokens": n,
             "cache_creation_input_tokens": 0}}}) + "\n"
@@ -462,11 +461,12 @@ def main():
     r = resident(path)
     try:
         size = os.path.getsize(path)
+        compacts = sum('"isCompactSummary":true' in l for l in open(path, encoding="utf-8", errors="replace"))
     except Exception:
-        size = 0
+        size = compacts = 0
     age = time.time() - st.get("first_seen", time.time())
 
-    signals, strong, fires = assess(r, prompts, size, age)
+    signals, strong, fires = assess(r, prompts, size, age, compacts)
     if not fires:
         sys.exit(0)  # healthy shape — stay silent
 
