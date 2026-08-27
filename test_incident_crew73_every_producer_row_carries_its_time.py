@@ -37,5 +37,12 @@ def test_stuck_detector_session_rows_are_stamped(tmp_path):
 
 
 def test_tick_header_names_its_shape():
-    sh = (HERE / "stuck_detector_tick.sh").read_text()
-    assert '"kind":"tick"' in sh and '"ts":"%s"' in sh
+    # crew#73 REWORK (claude-guards#123 review): run the header lines the shell emits and parse
+    # the row. sources.json declares stuck_detector time_field "at"; a header keyed only "ts"
+    # is an at-IS-NULL row that crew#418's null_time_verdict fails on every run.
+    sh = (HERE / "stuck_detector_tick.sh").read_text().splitlines()
+    header = [ln for ln in sh if ln.startswith("TICK_AT=") or ln.startswith("printf '{")]
+    assert len(header) == 2, header
+    out = subprocess.run(["bash", "-c", "RC=0; N=0; " + "\n".join(header)], capture_output=True, text=True, check=True)
+    row = json.loads(out.stdout)
+    assert ISO.match(row["at"]) and row["kind"] == "tick", row

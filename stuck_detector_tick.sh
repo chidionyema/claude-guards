@@ -18,6 +18,7 @@ if [ -n "$OUT" ]; then
 else
   N=0
 fi
-printf '{"ts":"%s","kind":"tick","rc":%d,"findings":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$RC" "$N"
+TICK_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"  # crew#73: "at" is the key sources.json reads; "ts" kept for older readers
+printf '{"at":"%s","ts":"%s","kind":"tick","rc":%d,"findings":%d}\n' "$TICK_AT" "$TICK_AT" "$RC" "$N"
 [ -n "$OUT" ] && printf '%s\n' "$OUT"
 exit 0   # a detector that cannot classify must not make launchd throttle the job that runs it
