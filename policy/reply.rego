@@ -3,6 +3,7 @@
 # Input (built by opa-hook.py on the Stop event, which decides nothing):
 #   input.event  == "Stop"
 #   input.reply  the last assistant message above the --- fold, code fences removed
+#   input.focus  the founder's standing FOCUS: line from ~/.claude/state/goal/FOCUS.json, or ""
 #
 # LAW 48 (founder, 2026-08-26, crew#280). Session 8f034e1e found the KINI worker down,
 # ticketed it and wrote "I stop here since you asked for a status, not a repair; say
@@ -26,4 +27,26 @@ deny contains msg if {
 		"Report as: Found X broken. Fixed it in PR Y. Status is now green. ",
 		"Reversible work is announced STAGED: with a 60-minute timer, never asked (LAW 48, LAW 49).",
 	]), [trim_space(line)])
+}
+
+# crew#395 (founder, 2026-08-26: "forget about fly, you have one mission"). A BLOCKED: reply
+# whose Need: line asks the founder for a direction is a false blocker while a FOCUS: stands:
+# the direction is the focus. A Need: for a hand only he has (a YubiKey tap, a billing
+# authorisation) is not a direction and passes. Moved here from dod-guard.py on crew#398.
+asks_founder_re := `(?i)\b(founder|him|his)\b`
+
+asks_direction_re := `(?i)\b(decid\w*|decision|direction|priorit\w*|which (?:one|item|ticket|lane|goal)|choose|choice|go-ahead|tell me|say (?:go|which|what)|what to (?:do|work on)|confirm (?:the|which|what) (?:goal|priority|lane|item|ticket))\b`
+
+deny contains msg if {
+	input.event == "Stop"
+	input.focus != ""
+	startswith(trim_space(input.reply), "BLOCKED:")
+	some line in split(input.reply, "\n")
+	startswith(trim_space(line), "Need:")
+	regex.match(asks_founder_re, line)
+	regex.match(asks_direction_re, line)
+	msg := sprintf(concat("", [
+		"BLOCKED: asks the founder for a direction he has already given. The standing focus is: %q. ",
+		"Work that, or run goal_graph.py --add under it; do not stop for an answer that is on disk.",
+	]), [substring(input.focus, 0, 160)])
 }
