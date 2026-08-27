@@ -101,6 +101,25 @@ rules := [
 		]),
 	},
 	{
+		"id": "local_vm_start",
+		# 2026-08-24 02:23 BST (crew#85): a colima restart brought every container back at once
+		# and 1-min load hit 255 on 12 cores. R26 (2026-08-25): no session starts colima, lima,
+		# k3d, k3s or Docker Desktop on the founder's Mac; containers and k8s run on the OKE row.
+		# no-local-vm-guard.sh finds a running VM after the fact; this refuses the command first.
+		# k3d/k3s are not listed: `k3d cluster create prospector-rehearsal` is on permitted_commands
+		# (the rehearsal runs where docker runs), and k3d cannot start a VM by itself.
+		"re": `(?:\bcolima\s+(?:start|restart)\b|\blimactl\s+(?:start|create)\b|\bopen\s+(?:-a\s+)?["']?Docker(?:\s|["']|$)|\blaunchctl\s+(?:bootstrap|kickstart|load|enable)\b[^|;&\n\r]*(?:colima|lima|docker))`,
+		"marker": "local-vm-intended",
+		"must_match": "colima start --cpu 2 --memory 5",
+		"must_not_match": "colima stop && colima ssh -- docker ps",
+		"msg": concat("", [
+			"BLOCKED by rule-guard: starting a VM on the founder's Mac (R26, crew#85).\n",
+			"On 2026-08-24 a colima restart brought every container back at once and load hit 255 ",
+			"on 12 cores. Containers and k8s run on the OKE row (idp clusters/*); a local VM is ",
+			"never started by a session. Read state instead:  colima status; colima ssh -- docker ps",
+		]),
+	},
+	{
 		"id": "quiet_push",
 		# 2026-08-26, session 78caaa17: `git push -q ... 2>&1 | tail -1` printed nothing when
 		# the pre-push hook refused, and the reply said "pushed". The reviewer found the
