@@ -126,6 +126,9 @@ def scan(day: str | None, full: bool = False) -> dict:
     # halt cap has to be set against.
     reqs_owner: dict[str, int] = defaultdict(int)
     by_model: dict[str, float] = defaultdict(float)
+    # Per-model REQUEST counts for the same reason as per-owner: $/call per model is the
+    # figure a routing decision rests on (crew#371 act/model_routing).
+    reqs_model: dict[str, int] = defaultdict(int)
     by_driver: dict[str, float] = defaultdict(float)
     reqs = 0
     files = 0
@@ -133,7 +136,7 @@ def scan(day: str | None, full: bool = False) -> dict:
     if not os.path.isdir(PROJECTS):
         return {"day": day, "total": 0.0, "requests": 0, "files": 0,
                 "by_owner": {}, "by_model": {}, "by_driver": {},
-                "reqs_by_owner": {}}
+                "reqs_by_owner": {}, "reqs_by_model": {}}
 
     with os.scandir(PROJECTS) as projects:
         for entry in projects:
@@ -183,6 +186,7 @@ def scan(day: str | None, full: bool = False) -> dict:
                             by_owner[owner] += c
                             reqs_owner[owner] += 1
                             by_model[norm_model(msg.get("model", ""))] += c
+                            reqs_model[norm_model(msg.get("model", ""))] += 1
                             for k, v in parts.items():
                                 by_driver[k] += v
                             reqs += 1
@@ -191,7 +195,8 @@ def scan(day: str | None, full: bool = False) -> dict:
 
     return {"day": day, "total": round(total, 4), "requests": reqs, "files": files,
             "by_owner": dict(by_owner), "by_model": dict(by_model),
-            "by_driver": dict(by_driver), "reqs_by_owner": dict(reqs_owner)}
+            "by_driver": dict(by_driver), "reqs_by_owner": dict(reqs_owner),
+            "reqs_by_model": dict(reqs_model)}
 
 
 def _local_day(ts: str | None) -> str | None:

@@ -157,6 +157,11 @@ def record(res: dict) -> None:
                 "day": res["day"], "total": res["total"], "requests": res["requests"],
                 "by_owner": {k: round(v, 2) for k, v in res["by_owner"].items()},
                 "reqs_by_owner": res.get("reqs_by_owner", {}),
+                # Which model served the calls and what each cost (crew#371). scan() has
+                # always computed by_model; the row dropped it, so the warehouse could not
+                # answer "calls per model" from history.
+                "by_model": {k: round(v, 2) for k, v in res.get("by_model", {}).items()},
+                "reqs_by_model": res.get("reqs_by_model", {}),
             }) + "\n")
     except OSError:
         try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 129))
