@@ -46,6 +46,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 
 #: One Mac's absolute path. Off that Mac the directory is simply not there, `_git`
 #: answers "cannot tell" to every question, and every rule that asks git something
@@ -690,6 +691,31 @@ def orphan_state(cmd: str) -> dict | None:
 #: cannot -- "which modified tracked files here are older than this session" -- and Rego refuses.
 _SESSION_STARTED: float | None = None
 
+#: Seconds since this project's checkpoints/LATEST.md was written; None when there is nothing to
+#: measure. Measured here, judged in policy/command.rego (crew#423 row 25, LAW 25).
+_CHECKPOINT_AGE_S: int | None = None
+
+
+def checkpoint_age_s(transcript_path: str | None) -> int | None:
+    """Seconds since the project's checkpoints/LATEST.md was written; None when there is nothing to
+    measure (crew#423 rows 16 and 25). None is BLIND, and the policy makes no verdict on it:
+    - no transcript path: no project directory to look in;
+    - no LATEST.md in the project: 3 of 8 active project dirs have never written one (#137 review),
+      and a session that never wrote a checkpoint has not dropped a thread; a large number here was
+      a refusal forever.
+    A subagent's transcript sits at <project>/<session>/subagents/agent-*.jsonl, so the project
+    directory is two levels up from there, not the subagents directory (#137 review: every subagent
+    `git worktree add` was refused). The policy decides; this adapter only measures."""
+    if not transcript_path:
+        return None
+    project = os.path.dirname(transcript_path)
+    if os.path.basename(project) == "subagents":
+        project = os.path.dirname(os.path.dirname(project))
+    try:
+        return int(time.time() - os.stat(os.path.join(project, "checkpoints", "LATEST.md")).st_mtime)
+    except OSError:
+        return None
+
 _DISCARDS = re.compile(
     r"\bgit\s+(?:-C\s+\S+\s+)?(?:reset\s+(?:-\S+\s+)*--hard\b|checkout\s+(?:--\s|\.(?:\s|$)|-\s*-\s)"
     r"|restore\s(?!.*--staged)|clean\s+(?:-\S*f|--force))")
@@ -780,7 +806,8 @@ def opa_ask(cmd: str) -> tuple[list[str], list[str], str | None]:
     try:
         out = subprocess.run(argv, input=json.dumps({"command": cmd, "arch": platform.machine(),
                                                "orphaned_worktree": orphan_state(cmd),
-                                               "foreign_changes": foreign_changes(cmd)}),
+                                               "foreign_changes": foreign_changes(cmd),
+                                               "checkpoint_age_s": _CHECKPOINT_AGE_S}),
                              capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError) as exc:
         return [], [], f"opa eval did not run: {exc}"
@@ -1251,9 +1278,10 @@ def main() -> int:
     cmd = str(payload.get("tool_input", {}).get("command", ""))
     if not cmd:
         return 0
-    global _ACTIVE_REPO, _SESSION_CWD, _SESSION_STARTED
+    global _ACTIVE_REPO, _SESSION_CWD, _SESSION_STARTED, _CHECKPOINT_AGE_S
     _SESSION_CWD = payload.get("cwd")
     _SESSION_STARTED = _session_started(payload.get("transcript_path"))
+    _CHECKPOINT_AGE_S = checkpoint_age_s(payload.get("transcript_path"))
     _ACTIVE_REPO = _repo_for(cmd, payload.get("cwd"))
     verdict = decide(cmd)
     if verdict:

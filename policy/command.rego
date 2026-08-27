@@ -432,16 +432,19 @@ deny contains msg if {
 deny contains msg if {
 	input.orphaned_worktree
 	regex.match(`(?:^|[\s;&|(])git\s`, input.command)
-	msg := sprintf(concat("", [
-		"BLOCKED by rule-guard: `%s` has no .git entry, so git there acts on `%s` ",
-		"(the checkout that CONTAINS it), not on the worktree you meant.\n",
-		"  why              2026-08-26: an interrupted `git worktree remove` had deleted the\n",
-		"                   .git link; the next `git reset --hard` there wiped the main checkout\n",
-		"  instead          `git -C %s worktree prune`, `rm -rf %s`, then\n",
-		"                   `git worktree add` a fresh one; never run git inside a dead worktree\n",
-		"  no override      there is no correct git command to run in a directory that is\n",
-		"                   not the repository you think it is.",
-	]), [input.orphaned_worktree.dir, input.orphaned_worktree.parent, input.orphaned_worktree.parent, input.orphaned_worktree.dir])
+	msg := sprintf(
+		concat("", [
+			"BLOCKED by rule-guard: `%s` has no .git entry, so git there acts on `%s` ",
+			"(the checkout that CONTAINS it), not on the worktree you meant.\n",
+			"  why              2026-08-26: an interrupted `git worktree remove` had deleted the\n",
+			"                   .git link; the next `git reset --hard` there wiped the main checkout\n",
+			"  instead          `git -C %s worktree prune`, `rm -rf %s`, then\n",
+			"                   `git worktree add` a fresh one; never run git inside a dead worktree\n",
+			"  no override      there is no correct git command to run in a directory that is\n",
+			"                   not the repository you think it is.",
+		]),
+		[input.orphaned_worktree.dir, input.orphaned_worktree.parent, input.orphaned_worktree.parent, input.orphaned_worktree.dir],
+	)
 }
 
 # ---------------------------------------------------------------------------
@@ -459,16 +462,19 @@ deny contains msg if {
 deny contains msg if {
 	input.foreign_changes
 	not contains(input.command, "# discard-foreign-intended")
-	msg := sprintf(concat("", [
-		"BLOCKED by rule-guard: this discards tracked edits in `%s` that are OLDER than this ",
-		"session, so they are another session's work: %s\n",
-		"  why              2026-08-26: `git reset --hard` in ~/.estate wiped a peer session's\n",
-		"                   uncommitted REQUIREMENTS.jsonl edit (crew#332)\n",
-		"  instead          `git -C %s stash push -m 'from <session>'` in the SAME command, then\n",
-		"                   discard; or ask the owner (ListAgents, SendMessage) before you do\n",
-		"  override         append `# discard-foreign-intended` when you have confirmed with the\n",
-		"                   owner that the edit is abandoned.",
-	]), [input.foreign_changes.repo, concat(", ", input.foreign_changes.files), input.foreign_changes.repo])
+	msg := sprintf(
+		concat("", [
+			"BLOCKED by rule-guard: this discards tracked edits in `%s` that are OLDER than this ",
+			"session, so they are another session's work: %s\n",
+			"  why              2026-08-26: `git reset --hard` in ~/.estate wiped a peer session's\n",
+			"                   uncommitted REQUIREMENTS.jsonl edit (crew#332)\n",
+			"  instead          `git -C %s stash push -m 'from <session>'` in the SAME command, then\n",
+			"                   discard; or ask the owner (ListAgents, SendMessage) before you do\n",
+			"  override         append `# discard-foreign-intended` when you have confirmed with the\n",
+			"                   owner that the edit is abandoned.",
+		]),
+		[input.foreign_changes.repo, concat(", ", input.foreign_changes.files), input.foreign_changes.repo],
+	)
 }
 
 # ---------------------------------------------------------------------------
@@ -777,4 +783,31 @@ broken contains msg if {
 	native := native_platform
 	count(deny) > 0 with input as {"command": sprintf("docker buildx build --platform linux/%s -t x .", [native]), "arch": input.arch}
 	msg := "rule foreign_platform refuses a native build, which is an outage (LAW 38)."
+}
+
+# LAW 25, checkpoint before you switch (crew#423 row 25). A command that opens a new thread of work
+# (a new worktree, a new branch, claiming an issue) while checkpoints/LATEST.md is more than 30 min
+# old leaves the current thread silently. The path back is the checkpoint: write LATEST.md (or the
+# CHECKPOINT comment on the issue) first, and the same command is allowed. rule-guard.py measures
+# the age; no age supplied (no transcript path) means no verdict.
+switch_re := `(?:^|[\s;&|(])(?:git\s+(?:-C\s+\S+\s+)*(?:worktree\s+add|checkout\s+(?:-q\s+)?-b|switch\s+(?:-q\s+)?-c)\b|gh\s+issue\s+edit\s+\S+.*--add-assignee\b)`
+
+checkpoint_re := `(?i)LATEST\.md|CHECKPOINT`
+
+deny contains msg if {
+	input.checkpoint_age_s > 1800
+	regex.match(switch_re, input.command)
+	not regex.match(checkpoint_re, input.command)
+	msg := sprintf(
+		concat("", [
+			"BLOCKED by rule-guard: this command opens a new thread of work and checkpoints/LATEST.md ",
+			"is %d s old (LAW 25: checkpoint before you switch).\n",
+			"  why              leaving an issue is legal; leaving it silently is not. The next session\n",
+			"                   finds a worktree and no note of what it was for\n",
+			"  instead          write `## RESUME HERE` in checkpoints/LATEST.md (and a CHECKPOINT comment\n",
+			"                   on the issue you are leaving), then run this command again\n",
+			"  (map row 25, crew#423)",
+		]),
+		[input.checkpoint_age_s],
+	)
 }
