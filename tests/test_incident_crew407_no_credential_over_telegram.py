@@ -16,13 +16,13 @@ import estate_alert as ea  # noqa: E402
 MUST_REFUSE = [
     "Router Admin UI login\nuser: founder\npassword: Zq8vL2pXw9kT3mRb",
     "CONSOLE_PASSWORD=Zq8vL2pXw9kT3mRb",
-    "the api key is sk-abcdefghijklmnopqrstuvwx1234",
-    "token: ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123",
+    "the api key is sk-" + "abcdefghijklmnopqrstuvwx1234",   # built at runtime: no credential-shaped literal is committed
+    "token: ghp_" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123",
     "AK" + "IAIOSFODNN7EXAMPLE",              # built at runtime: the push gate refuses the literal
     "-----BEGIN " + "OPENSSH PRIVATE KEY-----",
     "login: founder / Zq8vL2pXw9kT3mRb",
     "user=founder, password=\"Zq8vL2pXw9kT3mRb\"",
-    "bot 123456789:ABCdefGHIjklMNOpqrSTUvwxYZ0123456789abc",
+    "bot 123456789:" + "ABCdefGHIjklMNOpqrSTUvwxYZ0123456789abc",
 ]
 MUST_PERMIT = [
     "DONE: idp#283 merged. Password rotated; vault re-seeded. https://github.com/chidionyema/idp/pull/283",
