@@ -17,14 +17,31 @@ SCRIPTS = pathlib.Path(__file__).resolve().parent
 RETIRED = {
     "consult-verify.sh": "one-off wrapper for hermes-v2/bin/verify-consult; retire with crew#69",
     "setup-kimi-bridge.sh": "one-off venv setup for the Kimi bridge; retire with crew#69",
+    "edge_test.py": "edge-case mapper, used once by hand for action_items.py; no hook, no lane calls it (crew#69)",
+    "batching-compliance.py": "the measuring half of tool-drip-guard.py; no job runs it and nobody reads its number (LAW 28, crew#69)",
 }
+
+
+def _code_lines(text: str):
+    """Lines that can invoke or import something: comments, docstring prose and markdown are not
+    wiring. crew#69 third instance: edge_test.py and rotate-key.py graded 'called' on a comment."""
+    in_doc = False
+    for line in text.splitlines():
+        st = line.strip()
+        if st.count('"""') == 1 or st.count("'''") == 1:
+            in_doc = not in_doc
+            continue
+        if in_doc or not st or st.startswith(("#", "//", "*")):
+            continue
+        yield line
 
 
 def _states():
     hooks = json.dumps(json.load(open(HOME / ".claude" / "settings.json")))
     plists = "".join(open(f).read() for f in glob.glob(str(HOME / "Library/LaunchAgents/*.plist")))
     local_bin = HOME / ".local" / "bin"
-    on_path = {p.name for p in local_bin.iterdir()} if local_bin.exists() else set()
+    # a symlink counts by what it points at, not what it is called: ~/.local/bin/rotate-key -> rotate-key.py
+    on_path = {p.resolve().name for p in local_bin.iterdir()} | {p.name for p in local_bin.iterdir()} if local_bin.exists() else set()
     sources = {str(p.relative_to(SCRIPTS)): p.read_text(errors="ignore") for p in SCRIPTS.rglob("*")
                if p.is_file() and p.suffix != ".pyc" and ".wt-" not in str(p.relative_to(SCRIPTS)) and p.stat().st_size < 400_000}
     hook_dir = HOME / ".estate" / "guards"
@@ -43,7 +60,7 @@ def _states():
             out[n] = "launchd"
         elif n in on_path:
             out[n] = "path"
-        elif any(k != n and (n in t or n[:-3] in t) for k, t in sources.items()):
+        elif any(k != n and any(n in line or n[:-3] in line for line in _code_lines(t)) for k, t in sources.items()):
             out[n] = "called"
         elif n in RETIRED:
             out[n] = "retired"
@@ -100,3 +117,15 @@ def test_incident_crew69_law_named_scripts_resolve_in_a_zsh_c_shell():
 
 def test_incident_crew69_the_probe_itself_can_fail():
     assert not _resolves_in_zsh_c("crew69-no-such-script.py")
+
+
+def test_incident_crew69_a_prose_mention_is_not_wiring():
+    assert list(_code_lines("# rotate-key.py does X\n\"\"\"\nedge_test.py found it\n\"\"\"\n")) == []
+    assert list(_code_lines("import silent_side_effect as det\n")) == ["import silent_side_effect as det"]
+
+
+def test_incident_crew69_a_symlink_that_drops_the_suffix_still_counts(tmp_path):
+    target = tmp_path / "rotate-key.py"; target.write_text("#!/usr/bin/env python3\n")
+    (tmp_path / "rotate-key").symlink_to(target)
+    names = {p.resolve().name for p in tmp_path.iterdir()} | {p.name for p in tmp_path.iterdir()}
+    assert "rotate-key.py" in names
