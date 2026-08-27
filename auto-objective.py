@@ -54,6 +54,19 @@ def _in_flight(transcript: str) -> list[str]:
         return []
 
 
+WAITING = "WAITING:"
+
+
+def waiting_on(reply: str, pending: list[str]) -> bool:
+    """True when line 1 opens WAITING: and names at least one run still in flight (its task id).
+    A WAITING: that names no live run is the old idle claim in a new word and is graded as such."""
+    first = reply.strip().splitlines()[0] if reply.strip() else ""
+    first = first.lstrip("* ").strip()
+    if not first.startswith(WAITING):
+        return False
+    return any(tid and tid in first for tid in pending)
+
+
 def retry_decision(payload: dict, pending: list[str]) -> dict | None:
     """CP2, idle-guard v2. idle-guard.py blocks once while runs are in flight and lets the retry
     through; that retry is the claim "nothing independent to do", and here the board grades it.
@@ -64,6 +77,14 @@ def retry_decision(payload: dict, pending: list[str]) -> dict | None:
     if board.founder_word(user):
         return None
     if reply.lstrip().startswith(board.BLOCKED) and not board.blocked_missing(reply):
+        return None
+    if waiting_on(reply, pending):
+        # crew#506 CP2 (consultant review, founder 2026-08-27): a run in flight is a reason to end
+        # the turn, not a claim of idleness. The harness re-invokes the session when the run
+        # reports; a board-claim prompt here only forced a context switch mid-task. The escape
+        # is the word WAITING: on line 1 naming the run, so it is graded, not assumed.
+        board.ledger({"guard": "idle-guard-v2", "event": "waiting", "session": (payload.get("session_id") or "")[:8],
+                      "runs": pending})
         return None
     issues = board.open_issues()
     if issues is None:
@@ -299,6 +320,13 @@ def selftest() -> int:
     r = retry_decision({"transcript_path": p, "session_id": "s7"}, ["live1"])
     ck("v2: retry with runs in flight and unclaimed items is refused", r and "crew#5" in r["reason"])
     ck("v2: false_idle is on the ledger", "false_idle" in board.LEDGER.read_text())
+    p = tr(reply="WAITING: CI on idp#412, run live1 reports when it settles")
+    ck("v2 CP2: WAITING: naming the live run permits the retry, no claim prompt",
+       retry_decision({"transcript_path": p, "session_id": "s7"}, ["live1"]) is None)
+    ck("v2 CP2: waiting is on the ledger", '"event": "waiting"' in board.LEDGER.read_text())
+    p = tr(reply="WAITING: for things")
+    r = retry_decision({"transcript_path": p, "session_id": "s7"}, ["live1"])
+    ck("v2 CP2: WAITING: naming no live run is still refused", r and "crew#5" in r["reason"])
     ck("v2: a validated BLOCKED: permits the retry",
        retry_decision({"transcript_path": tr(reply="BLOCKED: x\nTried: a\nError: b\nNeed: c\nWho: d")}, ["live1"]) is None)
     ck("v2: founder STOP permits the retry", retry_decision({"transcript_path": tr(user="STOP")}, ["live1"]) is None)

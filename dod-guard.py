@@ -17,7 +17,7 @@ WHAT IT ENFORCES, mechanically, on the text above the fold of the last assistant
   Evidence:   must carry something checkable: a URL, a commit hash, a file path, or a
               command in backticks. A bare sentence is not evidence.
 
-WORKING: and BLOCKED: replies are untouched. So is anything below the first `---`.
+WORKING:, WAITING: and BLOCKED: replies are untouched. So is anything below the first `---`.
 
 WHAT IT CANNOT SEE (residual, stated per LAW 45 step 5). It checks the shape of the claim,
 not its truth. A false `Founder receipt:` line passes this guard; the founder is the oracle
@@ -51,7 +51,7 @@ def above_the_fold(text: str) -> str:
 
 def first_word(text: str) -> str:
     line = text.strip().splitlines()[0] if text.strip() else ""
-    m = re.match(r"\s*\**\s*(DONE|INVENTORY|WORKING|BLOCKED|STAGED):", line)
+    m = re.match(r"\s*\**\s*(DONE|INVENTORY|WORKING|WAITING|BLOCKED|STAGED):", line)
     return m.group(1) if m else ""
 
 
@@ -134,7 +134,7 @@ def save_state(state: dict) -> None:
 def report(found: list[str]) -> str:
     lines = ["BLOCKED by dod-guard (Definition of Done v2.1, founder 2026-08-25):"]
     lines += [f"  - {f}" for f in found]
-    lines.append("  Shape: line 1 DONE:/INVENTORY:/WORKING:/BLOCKED:/STAGED:. INVENTORY carries Built:, Use:, "
+    lines.append("  Shape: line 1 DONE:/INVENTORY:/WORKING:/WAITING:/BLOCKED:/STAGED:. INVENTORY carries Built:, Use:, "
                  "Expect:, Not done:, Evidence:. DONE additionally carries Founder receipt:.")
     return "\n".join(lines)
 
