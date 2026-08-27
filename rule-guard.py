@@ -374,13 +374,8 @@ def _merge_refusal(pr: str, states: list[tuple[str, str]] | None) -> str | None:
                 "  why              main ran commit 5b8d010 in production on 2026-08-17 with\n"
                 "                   zero finished runs; 'no checks' looked identical to green\n"
                 "  instead          push a commit that triggers CI, or wait for the run to\n"
-                "                   register, then re-read: gh pr checks " + pr + "\n"
-                "  first check      GitHub creates no pull_request run for a PR that conflicts\n"
-                "                   with its base (crew#490, 2026-08-27: 0 checks for 40 min,\n"
-                "                   a close/reopen and an empty commit changed nothing; merging\n"
-                "                   main in produced 6). Read it before waiting:\n"
-                "                   gh pr view " + pr + " --json mergeable --jq .mergeable\n"
-                "                   CONFLICTING means merge the base in and push."
+                "                   register, then re-read: gh pr checks " + pr + "\n  first check      GitHub creates no pull_request run for a PR that conflicts with its base (crew#490, 2026-08-27:\n"
+                "                   0 checks for 40 min; close/reopen and an empty commit changed nothing; merging main in produced 6).\n                   Read it before waiting: gh pr view " + pr + " --json mergeable --jq .mergeable ; CONFLICTING means merge the base in and push."
                 + _escape("merge-red-intended"))
 
     waiting = [n for n, s in states if s.upper() in _PENDING_STATES]
