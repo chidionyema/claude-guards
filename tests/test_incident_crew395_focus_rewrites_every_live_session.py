@@ -55,11 +55,12 @@ def test_incident_crew395_claim_list_under_a_focus_never_offers_the_off_mission_
     spec = importlib.util.spec_from_file_location("goal_guard", GG)
     gg = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(gg)
+    sys.path.insert(0, HERE); import goal_focus as gf
     items = [{"number": 66, "title": "eradicate fly io"}, {"number": 284, "title": "KINI delivered"},
              {"number": 306, "title": "hard execution chain for kini"}]
-    kept = [i["number"] for i in gg.focus_filter(items, "crew#284: finish KINI")]
+    kept = [i["number"] for i in gf.focus_filter(items, "crew#284: finish KINI")]
     assert kept == [284, 306]
-    assert gg.focus_filter(items, "") == items
+    assert gf.focus_filter(items, "") == items
 
 
 def test_incident_crew395_a_founder_focus_line_on_the_board_rewrites_goals_once(tmp_path, monkeypatch):
@@ -83,18 +84,23 @@ def test_incident_crew395_a_founder_focus_line_on_the_board_rewrites_goals_once(
     assert sum(1 for l in gg.LEDGER.read_text().splitlines() if '"kind":"focus"' in l) == 1
 
 
-def test_incident_crew395_blocked_on_a_direction_the_focus_already_gives_is_refused(tmp_path):
+def test_incident_crew395_blocked_on_a_direction_the_focus_already_gives_is_refused():
+    """crew#398: the rule is policy/reply.rego, evaluated through opa-hook.denials with the focus
+    the adapter hands it. BLIND (skipped) without opa, never green."""
     import importlib.util
-    spec = importlib.util.spec_from_file_location("dod_guard", os.path.join(HERE, "dod-guard.py"))
-    dg = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(dg)
-    dg.FOCUS_FILE = tmp_path / "FOCUS.json"
+    import shutil
+    import pytest
+    if not shutil.which("opa"):
+        pytest.skip("BLIND: opa not installed")
+    spec = importlib.util.spec_from_file_location("opa_hook", os.path.join(HERE, "opa-hook.py"))
+    oh = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(oh)
     asks = ("BLOCKED: the board has 138 items.\nTried: the claim list.\nError: none.\n"
             "Need: the founder to decide which item comes first.\nWho: founder.\n")
     hand = ("BLOCKED: vault seed needs a tap.\nTried: gh workflow run vault-seed.yml.\n"
             "Error: touch required.\nNeed: a YubiKey tap from the founder.\nWho: founder.\n")
-    assert dg.offences(asks) == []                      # no focus: nothing to hold it to
-    dg.FOCUS_FILE.write_text(json.dumps({"text": "crew#284: finish KINI"}))
-    out = dg.offences(asks)
+    q = oh.REPLY_QUERY
+    assert oh.denials({"event": "Stop", "reply": asks, "focus": ""}, q) == []          # no focus: nothing to hold it to
+    out = oh.denials({"event": "Stop", "reply": asks, "focus": "crew#284: finish KINI"}, q)
     assert len(out) == 1 and "crew#284: finish KINI" in out[0]
-    assert dg.offences(hand) == []                      # a physical hand is not a direction
+    assert oh.denials({"event": "Stop", "reply": hand, "focus": "crew#284: finish KINI"}, q) == []  # a hand is not a direction
