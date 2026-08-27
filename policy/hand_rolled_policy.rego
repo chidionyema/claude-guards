@@ -91,6 +91,9 @@ legacy := {
 	"context-guard-hook.py": 499,
 	"idle-guard.py": 336,
 	"dupe-work-fence.py": 289,
+	# crew#504: the decision is an authenticated GitHub call (open PR count) per
+	# invocation; Rego would need the gh token in the hook input to http.send it.
+	"pr-cap-guard.py": 143,
 	"peer-loop-fence.py": 285,
 	"repeat-guard.py": 283,
 	"jargon-guard.py": 269,
