@@ -83,7 +83,7 @@ def _pr_text(argv: list[str], cwd: str) -> tuple[str, str]:
     # a line, and a space-joined title ran straight into the body so the hatch never matched.
     text = "\n".join([_opt(argv, "--title", "-t"), _opt(argv, "--body", "-b")])
     missing = ""
-    body_file = _opt(argv, "--body-file", "-F")
+    body_file = os.path.expandvars(os.path.expanduser(_opt(argv, "--body-file", "-F")))  # crew#153
     if body_file:
         path = body_file if os.path.isabs(body_file) else os.path.join(cwd, body_file)
         try:
