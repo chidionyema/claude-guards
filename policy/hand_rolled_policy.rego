@@ -119,7 +119,7 @@ legacy := {
 	# capabilities, progress or when. It is content, not a decision: OPA cannot read the page
 	# or print it into the prompt. The prompt match (STATUS_RE) is the only rule, and it has
 	# no refusal to migrate; three incident tests prove it both ways.
-	"feed-guard.py": 240,
+	"feed-guard.py": 242,
 }
 
 # How many command refusals each guard still implements in Python. Same direction

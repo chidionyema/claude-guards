@@ -63,7 +63,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import estate_spend  # noqa: E402
 
 SETTINGS = os.path.expanduser("~/.claude/settings.json")
-CONFIG = os.path.expanduser("~/.claude/estate-budget.json")
+from budget_path import budget_path  # crew#91
+CONFIG = budget_path()
 BACKUPS = os.path.expanduser("~/.claude/settings-backups")
 
 DEFAULTS = {"downshift_usd": 0.0, "downshift_model": "sonnet", "restore_model": None}
