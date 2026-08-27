@@ -6,10 +6,10 @@ easily." A dead session has left its last state in the feed; "Status" is answere
 
 Hooks: Stop blocks the turn once when this session's entry is older than 30 minutes or absent;
 SessionStart injects the last entries; UserPromptSubmit reminds when overdue.
-Commands: append --session ID --lane NAME (shape is policy/feed.rego: 8 lines max, 🔴 🟡 🟢 ⚪
-🔧 🔀 📍 marks, TOUCHES and OVERLAP required); status [--n 5]; selftest (both ways, temp feed).
-Residual: Stop fires only at turn end, so a 90-minute turn appends late; a session that never
-stops is reached by no hook. Without opa the shape check is BLIND, never a verdict.
+Commands: append --session ID --lane NAME (shape is policy/feed.rego: 8 lines max, 🔴 🟡 🟢 ⚪ 🔧 🔀 📍
+marks, TOUCHES and OVERLAP required; a measured 📍 METER line is added, crew#26); status [--n 5];
+selftest (both ways, temp feed). Residual: Stop fires only at turn end, so a 90-minute turn appends
+late; a session that never stops is reached by no hook. Without opa the shape check is BLIND.
 """
 from __future__ import annotations
 
@@ -23,12 +23,12 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from feed_meter import METER_MARK, meter_line  # crew#26 CP-D: a library, not a guard
 
 FEED = Path(os.environ.get("ESTATE_FEED") or os.path.expanduser("~/.estate/feed.md"))
 INTERVAL_S = 30 * 60
 HOLD_S = 2 * 60 * 60  # crew#331: a lane is held by whoever wrote on it inside this window
-# The handoff shape is policy/feed.rego (crew#259); this file only asks OPA about it.
-POLICY = Path(__file__).resolve().parent / "policy"
+POLICY = Path(__file__).resolve().parent / "policy"  # the shape is policy/feed.rego (crew#259); this file only asks OPA
 HEAD = re.compile(r"^## (\S+) · session (\S+) · lane (.*)$")
 
 
@@ -87,39 +87,9 @@ def collisions(feed: Path, at: dt.datetime | None = None) -> list[tuple[dt.datet
     return out
 
 
-METER_MARK = "📍 METER:"
-
-
-def meter_line(timeout: float = 90.0) -> str:
-    """crew#26 CP-D: the token bill rides on every handoff, measured, never remembered.
-
-    Reads estate/estate_spend.py --json (the meter that reproduces ~/.claude.json costUSD to 7
-    figures). Founder, 2026-08-27: "so how do we solve this, super crucial." A number nobody sees
-    is not an instrument (LAW 28); a handoff that carries $/request makes the cut visible daily.
-    BLIND when the meter cannot run; never a guess."""
-    try:
-        script = Path(__file__).resolve().parent / "estate" / "estate_spend.py"
-        out = subprocess.run([sys.executable, str(script), "--json"], capture_output=True,
-                             text=True, timeout=timeout).stdout
-        d = json.loads(out)
-        total, reqs = float(d["total"]), int(d["requests"])
-        per = total / reqs if reqs else 0.0
-        drv = d.get("by_driver") or {}
-        transport = sum(float(drv.get(k, 0)) for k in ("cache_read", "cache_write", "raw_input"))
-        share = (transport / total * 100) if total else 0.0
-        models = ", ".join(f"{m} {v / total * 100:.0f}%" for m, v in
-                           sorted((d.get("by_model") or {}).items(), key=lambda kv: -kv[1])[:3])
-        return (f"{METER_MARK} {d['day']} ${total:,.2f} {reqs:,} req ${per:.3f}/req "
-                f"transport {share:.0f}% | {models} (crew#26)")
-    except Exception as exc:  # noqa: BLE001
-        return f"{METER_MARK} BLIND: estate_spend.py did not answer ({type(exc).__name__}) (crew#26)"
-
-
-def append(feed: Path, session: str, lane: str, body: str, at: dt.datetime | None = None,
-           meter: str | None = None) -> str | None:
+def append(feed: Path, session: str, lane: str, body: str, at: dt.datetime | None = None, meter: str | None = None) -> str | None:
     lines = [l.rstrip() for l in body.strip().splitlines() if l.strip()]
-    if not any(l.startswith(METER_MARK) for l in lines) and len(lines) < 8:
-        lines.append(meter if meter is not None else meter_line())
+    if not any(l.startswith(METER_MARK) for l in lines) and len(lines) < 8: lines.append(meter if meter is not None else meter_line())
     denied = denials(lines, session, lane, holders(feed, session, lane, at))
     if denied:
         return "; ".join(denied)
@@ -206,8 +176,7 @@ def selftest() -> int:
         ok &= holders(f, "dddd", "idp", t0 + dt.timedelta(hours=3)) == []
         ok &= append(f, "dddd", "idp", good, t0 + dt.timedelta(hours=3)) is None
         ok &= len(collisions(f, t0 + dt.timedelta(hours=3))) == 0
-    print(f"{'ok  ' if ok else 'FAIL'}  feed-guard selftest: refuses no-entry and the old form (shape: policy/feed.rego), permits the new form, "
-          f"overdue at 31 min and not at 29, per session; refuses a held lane unless OVERLAP names the holder (crew#331)")
+    print(f"{'ok  ' if ok else 'FAIL'}  feed-guard selftest: refuses no-entry and the old form (shape: policy/feed.rego), permits the new form, overdue at 31 min and not at 29, per session; refuses a held lane unless OVERLAP names the holder (crew#331)")
     return 0 if ok else 1
 
 
