@@ -68,6 +68,26 @@ import rego.v1
 # instead -- and rewording them while moving them would lose the receipts.
 rules := [
 	{
+		# crew#345 (founder, 2026-08-26): "zero-touch OCI auth, no local oci session authenticate".
+		# Every session that wanted the cluster state minted a laptop token, and the token expired
+		# while the estate ran (crew#325: cluster access lost mid-incident). The substitute is the
+		# cluster's own state receipt, idp#267: platform/state writes it, bin/idp-cluster-state
+		# grades it, and the cluster-state job in oke-check.yml runs that on the runner's OIDC.
+		"id": "oci_session_authenticate",
+		"re": `\boci\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*session\s+(?:authenticate|refresh)\b`,
+		"marker": "oci-session-intended",
+		"must_match": "OCI_CLI_PROFILE=otto oci session authenticate --no-browser",
+		"must_not_match": "oci os object head --bucket-name estate-drill-receipts --name state/cluster",
+		"msg": concat("", [
+			"BLOCKED by rule-guard: `oci session authenticate` in a session (crew#345).\n",
+			"A laptop session token is the thing the founder retired: it expires mid-incident ",
+			"(crew#325) and only the Mac's IP reaches the control plane.\n",
+			"Read the cluster's own receipt instead:  gh workflow run oke-check.yml -f mode=check ",
+			"then read the cluster-state job log, or bin/idp-cluster-state --json on any OCI auth.\n",
+			"A one-off that genuinely needs a laptop token appends  # oci-session-intended  and says why.",
+		]),
+	},
+	{
 		"id": "add_all",
 		"re": `\bgit\s+(?:-\S+\s+|--\S+(?:=\S+)?\s+)*add\s+(?:-A\b|--all\b|\.(?:\s|$))`,
 		"marker": "add-all-intended",
