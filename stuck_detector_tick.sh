@@ -18,6 +18,6 @@ if [ -n "$OUT" ]; then
 else
   N=0
 fi
-printf '{"ts":"%s","rc":%d,"findings":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$RC" "$N"
+printf '{"ts":"%s","kind":"tick","rc":%d,"findings":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$RC" "$N"
 [ -n "$OUT" ] && printf '%s\n' "$OUT"
 exit 0   # a detector that cannot classify must not make launchd throttle the job that runs it
