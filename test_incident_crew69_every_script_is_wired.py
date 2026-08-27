@@ -76,3 +76,27 @@ def test_incident_crew69_scripts_on_path_are_executable():
     ours = [p for p in local_bin.iterdir() if p.is_symlink() and SCRIPTS.name in str(os.readlink(p))]
     bad = sorted(p.name for p in ours if not p.resolve().exists() or not p.resolve().stat().st_mode & stat.S_IXUSR)
     assert bad == [], f"symlinked into ~/.local/bin but dangling or not executable: {bad}"
+
+
+# crew#69, second instance (2026-08-27): the PATH row was added to ~/.zshrc, which `zsh -c` never
+# reads, so every agent Bash-tool call still got "command not found: founder-blocker.py". The
+# laws name these two by bare filename (LAW 22, LAW 47); the shell agents run is `zsh -c`.
+NAMED_IN_LAWS = ("founder-blocker.py", "pr-evidence.py")
+
+
+def _resolves_in_zsh_c(name):
+    import shutil
+    import subprocess
+
+    zsh = shutil.which("zsh")
+    assert zsh, "zsh is the shell every agent Bash-tool call runs; it is missing here"
+    return subprocess.run([zsh, "-c", f"command -v {name}"], capture_output=True, text=True).returncode == 0
+
+
+def test_incident_crew69_law_named_scripts_resolve_in_a_zsh_c_shell():
+    missing = [n for n in NAMED_IN_LAWS if not _resolves_in_zsh_c(n)]
+    assert not missing, f"named by the laws as if on PATH, not found by `zsh -c command -v`: {missing}; the export belongs in ~/.zshenv, not ~/.zshrc"
+
+
+def test_incident_crew69_the_probe_itself_can_fail():
+    assert not _resolves_in_zsh_c("crew69-no-such-script.py")
