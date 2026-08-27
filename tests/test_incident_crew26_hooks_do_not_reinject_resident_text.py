@@ -19,7 +19,10 @@ def _load(name):
 
 
 def test_incident_crew26_laws_block_is_a_pointer_unless_asked_for_the_copy(tmp_path):
-    env = dict(os.environ, MEMORY_LOOP_LAWS="pointer")
+    # CI has no ~/.claude/CLAUDE.md; the hook reads $HOME/.claude/CLAUDE.md, so give it one.
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / "CLAUDE.md").write_text("# LAW 1 — Put the fire out first\n\n" + "the law text, longer than the pointer. " * 40 + "\n\n# How to work\n\nx\n")
+    env = dict(os.environ, MEMORY_LOOP_LAWS="pointer", HOME=str(tmp_path))
     stdin = json.dumps({"hook_event_name": "PostCompact", "transcript_path": str(tmp_path / "none.jsonl")})
     out = subprocess.run([sys.executable, str(HERE / "memory-loop.py")], input=stdin, env=env,
                          capture_output=True, text=True).stdout
@@ -44,12 +47,7 @@ def test_incident_crew26_rulings_keep_verbatim_and_stay_under_16kb():
 
 def test_incident_crew26_compactions_are_a_strong_signal(tmp_path):
     cg = _load("context-guard-hook")
-    path = tmp_path / "t.jsonl"
-    lines = [json.dumps({"type": "user", "isCompactSummary": True}) for _ in range(cg.COMPACT_WARN)]
-    lines.append(json.dumps({"type": "assistant", "message": {"usage": {"input_tokens": 5}}}))
-    path.write_text("\n".join(lines) + "\n")
-    assert cg.compactions(path) == cg.COMPACT_WARN
-    signals, strong, fires = cg.assess(0, 0, 0, 0, cg.compactions(path))
+    signals, strong, fires = cg.assess(0, 0, 0, 0, cg.COMPACT_WARN)
     assert fires and strong and any("compactions" in s for s in signals)
     _, strong, fires = cg.assess(0, 0, 0, 0, cg.COMPACT_WARN - 1)
     assert not fires and not strong
