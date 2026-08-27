@@ -6,5 +6,9 @@
   "pause_files": [
     "~/Documents/code/prospector/store/scheduler/PAUSE"
   ],
-  "digest_debounce_s": 3600
+  "digest_debounce_s": 3600,
+  "_downshift_note": "0 = DISARMED. Rewrites settings.json 'model' when the ESTATE total crosses this. settings.json is read once at process start, so this never interrupts a running session - it makes the NEXT one cheaper. estate_downshift.py --restore puts it back.",
+  "downshift_usd": 0.0,
+  "downshift_model": "sonnet",
+  "restore_model": null
 }
