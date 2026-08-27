@@ -76,8 +76,12 @@ def test_incident_crew69_no_script_is_reachable_by_nothing():
 
 
 def test_incident_crew69_retired_list_names_only_real_files():
-    stale = sorted(n for n in RETIRED if not (SCRIPTS / n).exists())
-    assert stale == [], f"RETIRED names files that no longer exist, delete the lines: {stale}"
+    # crew#69 row 2: a retired script lives in retired/, out of the top level that PATH,
+    # hooks and launchd read. A name here that is still at the top level was not retired.
+    stale = sorted(n for n in RETIRED if not (SCRIPTS / "retired" / n).exists())
+    assert stale == [], f"RETIRED names files not in retired/, delete the lines: {stale}"
+    still_live = sorted(n for n in RETIRED if (SCRIPTS / n).exists())
+    assert still_live == [], f"RETIRED names files still at the top level, git mv them to retired/: {still_live}"
 
 
 def test_incident_crew69_agents_md_names_resolve_on_path():
