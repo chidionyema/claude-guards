@@ -25,7 +25,8 @@ def test_incident_crew403_status_prompt_injects_the_page(tmp_path):
                    # the founder's three verbatim prompts, 2026-08-27 (claude-guards#152 review)
                    "what major capablities and showcase do you have planned",
                    "what capalilities are outstanding or blocking",
-                   "nd when to epect"):
+                   "nd when to epect",
+                   "what next", "whats next"):  # named next* as a stem, 78caaa17 on #153
         out = m.next_answer(prompt, page, "https://x/NEXT.md")
         assert out and "https://x/NEXT.md" in out and "**2 BLOCKING**" in out and "**105 NO DATE**" in out, prompt
         assert "| BLOCKING | crew#488" in out and "| PLANNED |" not in out, "red rows only; the page holds the rest"
