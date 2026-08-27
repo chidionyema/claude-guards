@@ -123,6 +123,11 @@ legacy := {
 	# or print it into the prompt. The prompt match (STATUS_RE) is the only rule, and it has
 	# no refusal to migrate; three incident tests prove it both ways.
 	"feed-guard.py": 270,
+	# vendor-lock-guard (crew#273, claude-guards#63): scans PROSE -- markdown, .feature and
+	# the last assistant message -- for a vendor name in the same sentence as a word that
+	# makes it mandatory. conftest has no parser for markdown or free text, so this rule
+	# cannot be Rego; recorded at its landing size. Only ever falls.
+	"vendor-lock-guard.py": 196,
 }
 
 # How many command refusals each guard still implements in Python. Same direction
