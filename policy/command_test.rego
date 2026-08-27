@@ -98,6 +98,7 @@ refuse := [
 	"env", # value dump
 	"env | sort", # value dump
 ]
+
 # Commands that must go through. A guard that refuses correct work is an
 # outage (LAW 38), and half of these exist because one did.
 permit := [
@@ -192,6 +193,7 @@ permit := [
 	"env PROSPECTOR_STORE_DIR=/data/store python3 run.py", # allowed: sets, does not print
 	"git diff --stat  # nothing to do with env", # allowed
 ]
+
 test_every_refused_command_is_refused if {
 	every cmd in refuse {
 		count(deny) > 0 with input as {"command": cmd}
@@ -254,4 +256,24 @@ test_discarding_a_peer_sessions_edit_is_refused if {
 test_discarding_your_own_edits_or_with_the_marker_is_allowed if {
 	count(deny) == 0 with input as {"command": "cd /x/.estate && git reset --hard origin/main", "foreign_changes": null}
 	count(deny) == 0 with input as {"command": "cd /x/.estate && git reset --hard origin/main  # discard-foreign-intended", "foreign_changes": foreign}
+}
+
+# crew#423 row 25: opening a new thread with a stale checkpoint is refused; a fresh checkpoint, no
+# age, a non-switch command, or the checkpoint write itself is allowed.
+test_new_worktree_with_a_stale_checkpoint_is_refused if {
+	count(deny) == 1 with input as {"command": "cd ~/dev/code/crew && git worktree add --detach ../.wt-x origin/main", "checkpoint_age_s": 7200}
+	count(deny) == 1 with input as {"command": "git checkout -q -b feat/next origin/main", "checkpoint_age_s": 1801}
+	count(deny) == 1 with input as {"command": "gh issue edit 42 -R o/r --add-assignee @me", "checkpoint_age_s": 7200}
+}
+
+test_new_worktree_with_a_fresh_checkpoint_or_no_age_is_allowed if {
+	count(deny) == 0 with input as {"command": "git worktree add --detach ../.wt-x origin/main", "checkpoint_age_s": 120}
+	count(deny) == 0 with input as {"command": "git worktree add --detach ../.wt-x origin/main"}
+	count(deny) == 0 with input as {"command": "git worktree add --detach ../.wt-x origin/main", "checkpoint_age_s": null}
+}
+
+test_non_switch_commands_and_the_checkpoint_write_are_allowed if {
+	count(deny) == 0 with input as {"command": "git worktree remove ../.wt-x && git checkout -q main", "checkpoint_age_s": 7200}
+	count(deny) == 0 with input as {"command": "git worktree list", "checkpoint_age_s": 7200}
+	count(deny) == 0 with input as {"command": "python3 - <<'E'\nwrite checkpoints/LATEST.md\nE\ngit worktree add --detach ../.wt-x origin/main", "checkpoint_age_s": 7200}
 }
