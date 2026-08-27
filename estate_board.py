@@ -10,7 +10,7 @@ then age; an issue whose `Blocked-on: #N` names an open issue ranks below every 
 never work items.
 
 Every gh call fails open: a board that cannot be read returns None, never an empty list, so
-a caller can tell BLIND from "nothing left" (memory: an-audit-that-crashes-reports-nothing).
+a caller can tell BLIND (exit 3, never argparse's 2) from "nothing left" (memory: an-audit-that-crashes-reports-nothing).
 
 A selftest can point ESTATE_BOARD_FIXTURE at a JSON file of issues; then nothing shells out
 and nothing is posted -- comments land in <fixture>.posted.jsonl instead.
@@ -25,7 +25,6 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-
 
 # launchd jobs start with PATH=/usr/bin:/bin, where gh is not. Standard install
 # dirs, not machine names (LAW 46). Incident: crew#306 --scan printed BLIND every 5 min.
@@ -124,11 +123,11 @@ def claimed(issue: dict) -> bool:
 
 def boxes(issue: dict) -> tuple[int, int]:
     b = issue.get("body") or ""
-    return len(re.findall(r"- \[x\]", b, re.I)), len(re.findall(r"- \[ \]", b))
+    return len(re.findall(r"- \[x\]", b, re.IGNORECASE)), len(re.findall(r"- \[ \]", b))
 
 
 def blocked_on(issue: dict) -> set[int]:
-    return {int(n) for n in re.findall(r"^Blocked-on:.*?#(\d+)", issue.get("body") or "", re.M | re.I)}
+    return {int(n) for n in re.findall(r"^Blocked-on:.*?#(\d+)", issue.get("body") or "", re.MULTILINE | re.IGNORECASE)}
 
 
 def rank_key(issue: dict, open_numbers: set[int]) -> tuple:
@@ -164,6 +163,117 @@ def next_unclaimed() -> dict | None | str:
 
 
 oldest_unclaimed = next_unclaimed  # the name auto-objective.py imports; the rule is finish-first now
+
+# --- crew#527 CP3: the board assigns ------------------------------------------------------------
+FEED = Path(os.environ.get("ESTATE_FEED") or os.path.expanduser("~/.estate/feed.md"))
+ALIVE_HOURS = float(os.environ.get("ESTATE_BOARD_ALIVE_HOURS", "2"))
+STALE_HOURS = float(os.environ.get("ESTATE_BOARD_STALE_HOURS", "24"))
+_CLAIM_RE = re.compile(r"^CLAIM (\S+) session (\w{1,8})")
+_FEED_RE = re.compile(r"^## (\S+) · session (\w{1,8}) · lane (\S+)", re.MULTILINE)
+
+
+def _ts(s: str) -> float:
+    import calendar
+    return calendar.timegm(time.strptime(s[:16], "%Y-%m-%dT%H:%M"))
+
+
+def claimed_by(issue: dict) -> tuple[str, str] | None:
+    """(session, utc) of the claim in force, or None. The CLAIM body carries its own stamp."""
+    state = None
+    for c in issue.get("comments", []):
+        b = (c.get("body") or "").lstrip()
+        m = _CLAIM_RE.match(b)
+        if m:
+            state = (m.group(2), m.group(1))
+        elif b.startswith(RELEASE):
+            state = None
+    return state
+
+
+def alive_sessions(feed_text: str, now: float, hours: float = ALIVE_HOURS) -> dict[str, str]:
+    """session -> lane for every session whose newest feed handoff is younger than `hours`."""
+    latest: dict[str, tuple[float, str]] = {}
+    for at, sess, lane in _FEED_RE.findall(feed_text):
+        try:
+            t = _ts(at)
+        except ValueError:
+            continue
+        if sess not in latest or t > latest[sess][0]:
+            latest[sess] = (t, lane)
+    return {s: lane for s, (t, lane) in latest.items() if now - t <= hours * 3600}
+
+
+def _last_boxes_seen(path: Path = LEDGER) -> dict[int, tuple[int, float]]:
+    """item -> (ticked, since): the ticked count the board sees now and the FIRST `board seen`
+    row of the unbroken run that has shown it. The board writes a row every turn, so the newest
+    row is never 24h old (code-99 REWORK on claude-guards#166); the oldest row with the
+    current count is the baseline that lets the stale-release fire."""
+    seen: dict[int, tuple[int, float]] = {}
+    try:
+        for line in path.read_text().splitlines():
+            e = json.loads(line)
+            if e.get("guard") != "board" or e.get("event") != "seen":
+                continue
+            n, t, at = int(e["item"]), int(e["ticked"]), _ts(e["ts"])
+            if n not in seen or seen[n][0] != t:
+                seen[n] = (t, at)
+    except (OSError, ValueError, KeyError):
+        pass
+    return seen
+
+
+def assign(issues: list[dict], alive: dict[str, str], now: float, seen: dict[int, tuple[int, float]],
+           post: bool = True) -> dict:
+    """The board's turn. Returns {"released": [...], "assigned": [...], "held": {...}}.
+
+    1. A claim older than STALE_HOURS whose ticked count has not moved since the board last
+       saw it is released and re-ranked (the ledger row `board seen` is the baseline).
+    2. Every alive session (a feed handoff in the last ALIVE_HOURS) holding no claim gets the
+       top unclaimed item, one per session, in rank order. A session holding a claim keeps it:
+       nobody starts a new feature while their half-done one is above it (crew#527 CP3)."""
+    released, assigned, held = [], [], {}
+    for i in issues:
+        who = claimed_by(i)
+        if not who or not is_work(i):
+            continue
+        sess, at = who
+        t, _u = boxes(i)
+        base = seen.get(i["number"])
+        try:
+            age = now - _ts(at)
+        except ValueError:
+            age = 0.0
+        if base and age > STALE_HOURS * 3600 and now - base[1] > STALE_HOURS * 3600 and base[0] == t:
+            if post:
+                release(i["number"], "board", f"assignment {at} by {sess}: {STALE_HOURS:g}h with no box ticked, re-ranked")
+                i["comments"] = [*i.get("comments", []), {"body": f"{RELEASE}{utc()} session board"}]
+            released.append(i["number"])
+            continue
+        held.setdefault(sess, []).append(i["number"])
+    if post:
+        for i in issues:
+            if is_work(i):
+                t, _u = boxes(i)
+                ledger({"guard": "board", "event": "seen", "item": i["number"], "ticked": t})
+    queue = unclaimed(issues)
+    for sess, lane in sorted(alive.items()):
+        if sess in held or not queue:
+            continue
+        item = queue.pop(0)
+        if post:
+            claim(item["number"], sess, lane, "assigned by the board: top of the finish-first rank")
+        assigned.append((sess, item["number"]))
+    return {"released": released, "assigned": assigned, "held": held}
+
+
+def assignment_for(session: str, issues: list[dict] | None = None) -> dict | None:
+    """The open item this session holds a claim on, if any (auto-objective reads this first)."""
+    issues = open_issues() if issues is None else issues
+    for i in issues or []:
+        who = claimed_by(i)
+        if who and who[0] == session[:8] and is_work(i) and not all_ticked(i):
+            return i
+    return None
 
 
 def comment(number: int, body: str) -> bool:
@@ -311,6 +421,8 @@ if __name__ == "__main__":
     sub = ap.add_subparsers(dest="cmd", required=True)
     rk = sub.add_parser("rank", help="the board in finish-first order, top N unclaimed items")
     rk.add_argument("--top", type=int, default=20)
+    asg = sub.add_parser("assign", help="the board's turn: release stale claims, assign alive idle sessions")
+    asg.add_argument("--dry-run", action="store_true")
     for name in ("claim", "release"):
         sp = sub.add_parser(name)
         sp.add_argument("number", type=int)
@@ -322,7 +434,7 @@ if __name__ == "__main__":
     if a.cmd == "rank":
         issues = open_issues()
         if issues is None:
-            print("BLIND: the board cannot be read"); sys.exit(2)
+            print("BLIND: the board cannot be read"); sys.exit(3)
         open_numbers = {i["number"] for i in issues}
         items = unclaimed(issues)
         print(f"finish-first rank, {len(items)} unclaimed of {len(issues)} open ({utc()})")
@@ -332,6 +444,21 @@ if __name__ == "__main__":
             lane = next((l for l in i.get("labels", []) if l.startswith("lane:")), "lane:unsorted")
             pr = next((l for l in i.get("labels", []) if l.upper() in ("P0", "P1")), "  ")
             print(f"  #{i['number']:<4} {t}/{t + u:<3} {pr:<2} {lane:<19} {'BLOCKED-ON ' + ','.join('#%d' % n for n in sorted(blk)) if blk else ''} {i['title'][:60]}")
+        sys.exit(0)
+    if a.cmd == "assign":
+        issues = open_issues()
+        if issues is None:
+            print("BLIND: the board cannot be read"); sys.exit(3)
+        feed = FEED.read_text() if FEED.is_file() else ""
+        now = time.time()
+        alive = alive_sessions(feed, now)
+        r = assign(issues, alive, now, _last_boxes_seen(), post=not a.dry_run)
+        print(f"board assign ({'dry-run' if a.dry_run else 'posted'}) {utc()}: {len(alive)} alive session(s) "
+              f"{', '.join(sorted(alive)) or '-'}; released {r['released'] or '-'}; "
+              f"assigned {', '.join(f'{s}->#{n}' for s, n in r['assigned']) or '-'}; "
+              f"holding {', '.join(f'{s}:{v}' for s, v in sorted(r['held'].items())) or '-'}")
+        if not feed:
+            print(f"BLIND: no feed at {FEED}; nobody is alive to the board"); sys.exit(3)
         sys.exit(0)
     okp = (claim(a.number, a.session, a.lane, a.why) if a.cmd == "claim"
            else release(a.number, a.session, a.why))
