@@ -164,9 +164,11 @@ deny contains msg if {
 # it parks, drops, defers or switches away from an item, on a line that names no way back (a
 # checkpoint file, a ticket number, a branch or a "path back:"), while the session's
 # checkpoints/LATEST.md is older than 30 minutes or missing. Verbs are matched in lower or sentence
-# case only: a live sweep refused a report over the constant DEFER. opa-hook.py supplies
+# case only: a live sweep refused a report over the constant DEFER. A park verb needs a thread-like
+# object (thread, lane, item, ticket, issue, task, work, ...) or "away from": claude-guards#134 review
+# found "Switched to --force-with-lease" and "Dropping the worktree" refused, neither a dropped thread. opa-hook.py supplies
 # checkpoint_age_s from the file's mtime; with no value at all the rule stays silent (BLIND, LAW 45).
-park_re := `\b(?:[Pp]ark(?:ed|ing)?|[Dd]ropp(?:ed|ing)\s+(?:it|this|that|the)\b|[Dd]efer(?:red|ring)?\s+(?:it|this|that|the|until|to)\b|[Ss]helv(?:ed|ing)|[Ss]witch(?:ed|ing)\s+(?:to|away)|[Ll]eav(?:e|ing)\s+(?:it|this|that|[a-z#\d]+)\s+for\s+(?:later|now|another)|[Pp]ick(?:ing)?\s+(?:it|this|that|[a-z#\d]+)\s+up\s+later|[Cc]ome\s+back\s+to\s+(?:it|this|that)\s+later)\b`
+park_re := `\b(?:[Pp]ark(?:ed|ing)?\s+(?:the\s+|this\s+|that\s+|my\s+|it\s+)?(?:[a-z#\d./-]+\s+){0,3}?(?:thread|lane|item|ticket|issue|task|work|investigation|fix|repair|lead|question|row|checkpoint|cp\d)\b|[Pp]ark(?:ed|ing)?\s+(?:it|this|that)\b|[Dd]ropp(?:ed|ing)\s+(?:the\s+|this\s+|that\s+|my\s+|it\s+)?(?:[a-z#\d./-]+\s+){0,3}?(?:thread|lane|item|ticket|issue|task|work|investigation|fix|repair|lead|question|row|checkpoint|cp\d)\b|[Dd]efer(?:red|ring)?\s+(?:the\s+|this\s+|that\s+|my\s+|it\s+)?(?:[a-z#\d./-]+\s+){0,3}?(?:thread|lane|item|ticket|issue|task|work|investigation|fix|repair|lead|question|row|checkpoint|cp\d)\b|[Ss]helv(?:ed|ing)\s+(?:the\s+|this\s+|that\s+|my\s+|it\s+)?(?:[a-z#\d./-]+\s+){0,3}?(?:thread|lane|item|ticket|issue|task|work|investigation|fix|repair|lead|question|row|checkpoint|cp\d)\b|[Ss]witch(?:ed|ing)\s+away\s+from\b|[Ss]witch(?:ed|ing)\s+to\s+(?:another|a\s+different|the\s+next)\s+(?:thread|lane|item|ticket|issue|task)\b|[Ll]eav(?:e|ing)\s+(?:it|this|that|[a-z#\d]+)\s+for\s+(?:later|now|another)|[Pp]ick(?:ing)?\s+(?:it|this|that|[a-z#\d]+)\s+up\s+later|[Cc]ome\s+back\s+to\s+(?:it|this|that)\s+later)`
 
 path_back_re := `(?i)LATEST\.md|checkpoint|\bpath\s+back\b|#\d+|\b[a-z]+/[a-z0-9._/-]+\b`
 
