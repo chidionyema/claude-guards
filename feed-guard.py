@@ -151,7 +151,7 @@ def hook(kind: str) -> int:
 
 
 def selftest() -> int:
-    ok = True
+    ok = True; globals()["meter_line"] = lambda: f"{METER_MARK} selftest"  # the real meter takes ~26 s
     with tempfile.TemporaryDirectory() as td:
         f = Path(td) / "feed.md"
         t0 = now()
@@ -165,7 +165,7 @@ def selftest() -> int:
         ok &= overdue(f, "aaaa", t0 + dt.timedelta(minutes=31)) == 31 * 60
         # another session is judged on its own entries
         ok &= overdue(f, "bbbb", t0) == -1
-        ok &= len(entries(f)) == 1 and entries(f)[0][3] == good.split("\n")
+        ok &= len(entries(f)) == 1 and entries(f)[0][3] == good.split("\n") + [f"{METER_MARK} selftest"]
         # crew#331: bbbb may not take lane idp while aaaa holds it, unless OVERLAP names aaaa; after 2h it is free
         t1 = t0 + dt.timedelta(minutes=10)
         ok &= holders(f, "bbbb", "idp", t1) == ["aaaa"]
