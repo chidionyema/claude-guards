@@ -797,10 +797,67 @@ def foreign_changes(cmd: str) -> dict | None:
             old.append(rel)
     return {"repo": top, "files": sorted(old)} if old else None
 
+#: A variable name that says it holds a credential. These are substrings, not whole words, so
+#: GH_TOKEN, LANGFUSE_SECRET_KEY and MY_JWT all match. "AUTH" is deliberately absent: it is a
+#: substring of AUTHOR and would refuse correct work, which is the outage (LAW 38).
+_SECRET_NAME = r"(?:TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|CREDENTIAL|BEARER|JWT|APIKEY|_KEY\b|\bKEY_)"
+_PRINTS = re.compile(r"\b(?:echo|printf)\b")
+#: ${VAR:-x} and ${VAR-x} print the VALUE when VAR is set; ${VAR:+x} prints x. The first two are
+#: the trap. Bare $VAR and ${VAR} print the value unconditionally.
+_SECRET_EXPANSION = re.compile(
+    r"\$\{\s*\w*" + _SECRET_NAME + r"\w*\s*(?::?-[^}]*)?\}"      # ${TOK}  ${TOK:-x}  ${TOK-x}
+    r"|\$\w*" + _SECRET_NAME + r"\w*",                              # $TOKEN
+    re.I)
+#: ${VAR:+literal} is the CORRECT idiom for "say whether it is set". Never refuse it.
+_SAFE_EXPANSION = re.compile(r"\$\{\s*\w+\s*:\+[^}]*\}")
+_CMD_SUBST = re.compile(r"\$\((?:[^()]|\([^()]*\))*\)")
+#: A name ending this way holds a PATH to the credential, not the credential. $KEY_FILE and
+#: $TOKEN_PATH are safe to print and several estate scripts do exactly that.
+_PATHISH = re.compile(r"(?:_FILE|_PATH|_DIR|_REL|_NAME|_ID|_VAR|_ENV)$", re.I)
+#: The transcript is stdout. A print redirected to a file or piped into another command does
+#: not reach it -- `printf '%s\\n' "$AGE_PRIVATE_KEY" > "$KEY"` is how hermes-v2's entrypoint
+#: materialises its age key, and refusing that is the outage (LAW 38). Measured 2026-08-24:
+#: of 21 lines the first draft flagged across 200 shell scripts, 20 were this shape.
+_REDIRECTED = re.compile(r"(?:^|[^>|])(?:>>?\s*\S|\|)")
+
+
+def rule_prints_a_secret(cmd: str) -> str | None:
+    """Refuse echo/printf that would put a credential's VALUE in the transcript.
+
+    INCIDENT, 2026-08-24. Reaching for a Backstage guest token I wrote
+    `echo "token: ${TOKEN:+acquired}${TOKEN:-MISSING}"`, meaning "say whether it is set".
+    `${VAR:+x}` does that; `${VAR:-x}` prints the value when the variable IS set, which is
+    every successful case. A signed JWT went into the transcript.
+
+    The class is not "that one idiom". It is printing a credential-named variable at all --
+    LAW 21 says a secret value never appears anywhere it can be read again. Naming a secret
+    is fine, passing it to curl is fine; printing it is not. So what is graded is the
+    expansion inside a print, and `$(...)` is stripped first because a subshell that merely
+    TESTS the variable (`$([ -n "$T" ] && echo yes || echo no)`) prints nothing secret.
+    """
+    if "print-secret-intended" in cmd or not _PRINTS.search(cmd):
+        return None
+    scan = _CMD_SUBST.sub(" ", cmd)          # a subshell's own output is its own business
+    scan = _SAFE_EXPANSION.sub(" ", scan)    # ${VAR:+literal} is the idiom we WANT
+    if _REDIRECTED.search(scan):             # not stdout, so not the transcript
+        return None
+    hits = sorted({m.group(0) for m in _SECRET_EXPANSION.finditer(scan)
+                   if not _PATHISH.search(m.group(0).strip("${}").split(":")[0])})
+    if not hits:
+        return None
+    return ("BLOCKED by rule-guard: this prints a credential's value into the transcript.\n"
+            f"  expansion        {', '.join(hits)}\n"
+            "  why              LAW 21 -- a secret value never appears anywhere it can be read\n"
+            "                   again. ${VAR:-x} prints the VALUE when VAR is set; you almost\n"
+            "                   certainly meant ${VAR:+set}, which prints the literal.\n"
+            "Say whether it is set, not what it is:  echo \"token: ${TOKEN:+acquired}\""
+            + _escape("print-secret-intended"))
+
 
 RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
          rule_commit_in_shared_checkout, rule_merge_red_pr,
-         rule_restart_kills_a_live_build, rule_self_symlink)
+         rule_restart_kills_a_live_build, rule_self_symlink,
+         rule_prints_a_secret)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
@@ -951,6 +1008,18 @@ def selftest() -> int:
             return 1
         _SESSION_STARTED = None
     cases = [
+        # LAW 45, 2026-08-24: the ${VAR:-x} slip that put a guest JWT in a transcript.
+        # Both directions in the same run -- the trap refused, the correct idiom allowed.
+        ('echo "token: ${TOKEN:-MISSING}"', "rule_prints_a_secret"),
+        ('echo "token: ${TOKEN:+acquired}${TOKEN:-MISSING}"', "rule_prints_a_secret"),
+        ('echo $GH_TOKEN', "rule_prints_a_secret"),
+        ('printf "%s\\n" "$LANGFUSE_SECRET_KEY"', "rule_prints_a_secret"),
+        ('echo "token: ${TOKEN:+acquired}"', None),
+        ('echo "token acquired: $([ -n "$TOKEN" ] && echo yes || echo no)"', None),
+        ('curl -H "Authorization: Bearer $TOKEN" http://localhost:7107/api', None),
+        ('echo "author: $AUTHOR"', None),
+        ('echo $GH_TOKEN  # print-secret-intended', None),
+        ('gh pr view 179 --json body', None),
         ("gh workflow enable 337731742  # autoscale-intended", None),
         ("gh workflow disable 337731742", None),
         ("bash deploy/runners.sh scale 12", None),
@@ -1011,6 +1080,14 @@ def selftest() -> int:
         # crew#51: what echo or printf prints is text, not a command. The sentence that
         # explains a rule must not trip it; the command chained after it still must.
         ('echo "do not git add store/x.json" >> notes.md', None),
+        # claude-guards#46, 2026-08-28: crew#51 blanked the whole quoted payload, which
+        # disarmed rule_prints_a_secret for the one shape it was written for. Both
+        # directions of that collision are pinned here: prose in a payload is still not a
+        # command, and an expansion in a payload is still a value.
+        ('echo "do not run git push --force"', None),
+        ('echo "cd ~/dev/code/crew && git add -A"', None),
+        ('echo "tier: ${GH_TOKEN:-none}"', 'rule_prints_a_secret'),
+        ('printf "%s\\n" "${LANGFUSE_SECRET_KEY}"', 'rule_prints_a_secret'),
         ("printf 'git add -A is banned\\n' > a.txt", None),
         ('echo "prose" && git add store/x.json', "rule_runtime_state"),
         ("flyctl apps list", None),
@@ -1273,6 +1350,10 @@ _COMMIT_MSG = re.compile(r"""(-m|--message|--body|--title|--caption)(=|\s+)(?P<q
                          re.DOTALL)
 
 
+#: A shell expansion inside a double-quoted echo payload is a VALUE, not prose: the shell
+#: substitutes it before echo ever runs. strip_echo_payloads keeps these and blanks the rest.
+_EXPANSION = re.compile(r"\$\{[^}]*\}|\$\w+|\$\((?:[^()]|\([^()]*\))*\)")
+
 _ECHO_PAYLOAD = re.compile(r"""\b(echo|printf)(\s+-[a-zA-Z]+)*\s+(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
                            re.DOTALL)
 
@@ -1288,8 +1369,19 @@ def strip_echo_payloads(cmd: str) -> str:
     Only the quoted argument goes; the echo itself, any redirect after it, and anything
     chained with && or ; are still judged. An unquoted payload is left alone: it is one
     shell word per token and a guarded verb in it is as likely a mistake as prose.
+
+    What survives the blanking is any `$...` expansion inside a DOUBLE-quoted payload,
+    because the shell expands those -- they are not prose the shell never executes, they
+    are values. Dropping them blinded rule_prints_a_secret to the exact shape of its own
+    founding incident, `echo "token: ${TOKEN:-MISSING}"` (claude-guards#46, 2026-08-28):
+    two guards written five days apart, each correct alone, and the later one silently
+    disarmed by the earlier. A single-quoted payload has no expansion, so it blanks whole.
     """
-    return _ECHO_PAYLOAD.sub(lambda m: f"{m.group(1)}{m.group(2) or ''} {m.group('q')}{m.group('q')}", cmd)
+    def _blank(m: "re.Match[str]") -> str:
+        body = m.group("body") if m.group("q") == '"' else ""
+        kept = " ".join(x.group(0) for x in _EXPANSION.finditer(body))
+        return f"{m.group(1)}{m.group(2) or ''} {m.group('q')}{kept}{m.group('q')}"
+    return _ECHO_PAYLOAD.sub(_blank, cmd)
 
 
 def strip_commit_messages(cmd: str) -> str:
