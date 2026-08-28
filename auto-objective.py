@@ -76,7 +76,7 @@ def retry_decision(payload: dict, pending: list[str]) -> dict | None:
     user, reply = board.last_texts(payload.get("transcript_path") or "")
     if board.founder_word(user):
         return None
-    if reply.lstrip().startswith(board.BLOCKED) and not board.blocked_missing(reply):
+    if board.reply_opens_blocked(reply) and not board.blocked_missing(reply):
         return None
     if waiting_on(reply, pending):
         # crew#506 CP2 (consultant review, founder 2026-08-27): a run in flight is a reason to end
@@ -147,7 +147,7 @@ def decide(payload: dict, gg=None) -> dict | None:
         board.ledger({"guard": "auto-objective", "event": "founder_blocked", "session": session[:8], "item": num})
         return None
 
-    if reply.lstrip().startswith(board.BLOCKED):
+    if board.reply_opens_blocked(reply):
         missing = board.blocked_missing(reply)
         if missing:
             board.ledger({"guard": "auto-objective", "event": "false_blocker", "session": session[:8],
