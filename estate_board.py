@@ -493,6 +493,14 @@ def founder_word(user_text: str) -> str:
 BLOCKED_FIELDS = ("Tried:", "Error:", "Need:", "Who:")
 
 
+def reply_opens_blocked(text: str) -> bool:
+    """True when an agent reply opens with BLOCKED:, ignoring the markdown a reply-format law
+    itself teaches (`BLOCKED:`, **BLOCKED:**). 2026-08-28: a session declared a validated
+    BLOCKED: four times in a row inside backticks and idle-guard v2 refused every one, because
+    startswith() saw the backtick first. The escape existed and could not be reached."""
+    return text.lstrip().lstrip("`*_# ").startswith(BLOCKED)
+
+
 def blocked_missing(text: str) -> list[str]:
     """The fields a BLOCKED: reply lacks. Empty list means it is a validated escape."""
     return [f for f in BLOCKED_FIELDS if f not in text]
