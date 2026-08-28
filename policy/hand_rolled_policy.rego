@@ -279,3 +279,8 @@ adapter_wired(path) if {
 	some row in data.adapters.session_start
 	row[0] == path
 }
+
+adapter_wired(path) if {
+	some row in data.adapters.user_prompt_submit
+	row[0] == path
+}

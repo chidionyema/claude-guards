@@ -38,7 +38,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 POLICY = os.environ.get("OPA_HOOK_POLICY") or os.path.join(HERE, "policy")
 QUERY = "data.hooks.deny"
 REPLY_QUERY = "data.reply.deny"
-ADAPTERS_QUERY = "data.adapters.session_start"
+ADAPTER_EVENTS = {"SessionStart": "data.adapters.session_start",
+                  "UserPromptSubmit": "data.adapters.user_prompt_submit"}
 
 # policy/fixtures holds JSON test data for other policies. Loading it as --data
 # collides with itself ("merge error") and OPA then reports that as an empty
@@ -163,18 +164,18 @@ def main() -> int:
         return refuse(event, str(e))
 
 
-def session_start(payload: dict) -> int:
-    """crew#603 CP4: SessionStart is one door. The list of adapters that run, and their order,
-    is policy (policy/adapters.rego); each runs through hook-run.py so a crash, a missing file
+def run_adapters(payload: dict, event: str) -> int:
+    """crew#603 CP4: SessionStart and UserPromptSubmit are one door each. The list of adapters
+    that run, and their order, is policy (policy/adapters.rego); each runs through hook-run.py so a crash, a missing file
     or a timeout refuses the start instead of passing in silence. Their context is joined into
     one additionalContext, the shape Claude Code reads (code.claude.com/docs/en/hooks)."""
-    rows = denials({"event": "SessionStart"}, ADAPTERS_QUERY)
+    rows = denials({"event": event}, ADAPTER_EVENTS[event])
     stdin = json.dumps(payload).encode()
     runner = os.path.join(HERE, "hook-run.py")
     parts: list[str] = []
     for row in rows:
         if not isinstance(row, list) or not row or not isinstance(row[0], str):
-            raise NoVerdict(f"adapters.session_start row is not [name, args...]: {row!r}")
+            raise NoVerdict(f"adapters row for {event} is not [name, args...]: {row!r}")
         if "archive/" in row[0]:
             raise NoVerdict(f"{row[0]} is archived and cannot run")
         argv = [sys.executable, runner, os.path.join(HERE, row[0]), *map(str, row[1:])]
@@ -197,14 +198,14 @@ def session_start(payload: dict) -> int:
         if ctx:
             parts.append(ctx)
     if parts:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": event,
                                                  "additionalContext": "\n\n".join(parts)}}))
     return 0
 
 
 def decide(payload: dict, event: str) -> int:
-    if event == "SessionStart":
-        return session_start(payload)
+    if event in ADAPTER_EVENTS:
+        return run_adapters(payload, event)
     if event == "Stop":
         if payload.get("stop_hook_active"):
             return 0

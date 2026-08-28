@@ -27,11 +27,11 @@ def run(policy_dir: Path, payload: dict) -> subprocess.CompletedProcess:
                           text=True, env=env, timeout=60)
 
 
-def policy_with(tmp: Path, rows: list[list[str]]) -> Path:
+def policy_with(tmp: Path, rows: list[list[str]], event: str = "session_start") -> Path:
     pol = tmp / "policy"
     pol.mkdir()
     (pol / "adapters.rego").write_text(
-        "package adapters\nimport rego.v1\nsession_start := " + json.dumps(rows) + "\n")
+        f"package adapters\nimport rego.v1\n{event} := " + json.dumps(rows) + "\n")
     (pol / "hooks.rego").write_text("package hooks\nimport rego.v1\ndeny contains msg if { false; msg := \"\" }\n")
     return pol
 
@@ -45,6 +45,34 @@ def test_settings_session_start_is_exactly_one_command_and_it_is_opa_hook():
     cmds = [h["command"] for g in hooks for h in g["hooks"]]
     assert len(cmds) == 1, cmds
     assert cmds[0].endswith("hook-run.py $HOME/.claude/scripts/opa-hook.py"), cmds[0]
+
+
+def test_settings_user_prompt_submit_is_exactly_one_command_and_it_is_opa_hook():
+    hooks = json.loads((HERE / "settings" / "settings.json").read_text())["hooks"]["UserPromptSubmit"]
+    cmds = [h["command"] for g in hooks for h in g["hooks"]]
+    assert len(cmds) == 1 and cmds[0].endswith("hook-run.py $HOME/.claude/scripts/opa-hook.py"), cmds
+
+
+def test_the_user_prompt_submit_list_names_the_five_adapters_settings_used_to_name():
+    out = subprocess.run(["opa", "eval", "--format", "json", "--data", str(HERE / "policy" / "adapters.rego"),
+                          "data.adapters.user_prompt_submit"], capture_output=True, text=True, timeout=30)
+    rows = json.loads(out.stdout)["result"][0]["expressions"][0]["value"]
+    assert [r[0] for r in rows] == ["directive-capture.py", "context-guard-hook.py", "goal-guard.py",
+                                    "board-deliver.py", "feed-guard.py"]
+    for r in rows:
+        assert (HERE / r[0]).is_file(), f"{r[0]} is listed but not in the tree"
+
+
+def test_a_user_prompt_submit_adapter_runs_through_the_same_door(tmp_path):
+    adapter("zz-test-adapter-u.py", "print('UPS context')\n")
+    try:
+        pol = policy_with(tmp_path, [["zz-test-adapter-u.py"]], event="user_prompt_submit")
+        p = run(pol, {"hook_event_name": "UserPromptSubmit", "session_id": "t5", "prompt": "hi"})
+        assert p.returncode == 0, p.stderr
+        out = json.loads(p.stdout)["hookSpecificOutput"]
+        assert out["hookEventName"] == "UserPromptSubmit" and out["additionalContext"] == "UPS context"
+    finally:
+        (HERE / "zz-test-adapter-u.py").unlink(missing_ok=True)
 
 
 def test_the_policy_list_names_the_seven_adapters_settings_used_to_name():

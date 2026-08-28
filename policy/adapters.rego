@@ -1,4 +1,4 @@
-# What runs at SessionStart, in order. crew#603 CP4 (founder 2026-08-28: "Build ONE door
+# What runs at SessionStart and UserPromptSubmit, in order. crew#603 CP4 (founder 2026-08-28: "Build ONE door
 # (OPA). Every single action the agent takes must pass through hooks.rego").
 #
 # Before this file, settings/settings.json named seven Python files directly on SessionStart.
@@ -22,4 +22,14 @@ session_start := [
 	["canonical-root-guard.py"],
 	["friction-relay.py"],
 	["feed-guard.py", "SessionStart"],
+]
+
+# UserPromptSubmit, in order. Same batch rule: five adapters, none a refusal (the one refusal
+# in context-guard-hook.py is its PreToolUse half, which settings never wired).
+user_prompt_submit := [
+	["directive-capture.py"],
+	["context-guard-hook.py"],
+	["goal-guard.py"],
+	["board-deliver.py"],
+	["feed-guard.py", "UserPromptSubmit"],
 ]
