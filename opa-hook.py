@@ -39,7 +39,8 @@ POLICY = os.environ.get("OPA_HOOK_POLICY") or os.path.join(HERE, "policy")
 QUERY = "data.hooks.deny"
 REPLY_QUERY = "data.reply.deny"
 ADAPTER_EVENTS = {"SessionStart": "data.adapters.session_start",
-                  "UserPromptSubmit": "data.adapters.user_prompt_submit"}
+                  "UserPromptSubmit": "data.adapters.user_prompt_submit",
+                  "PreToolUse": "data.adapters.pre_tool_use"}
 
 # policy/fixtures holds JSON test data for other policies. Loading it as --data
 # collides with itself ("merge error") and OPA then reports that as an empty
@@ -164,6 +165,19 @@ def main() -> int:
         return refuse(event, str(e))
 
 
+def refuses(code: int, stdout: str) -> bool:
+    if code == 2:
+        return True
+    try:
+        out = json.loads(stdout or "null")
+    except ValueError:
+        return False
+    if not isinstance(out, dict):
+        return False
+    hso = out.get("hookSpecificOutput") if isinstance(out.get("hookSpecificOutput"), dict) else {}
+    return out.get("decision") == "block" or hso.get("permissionDecision") == "deny"
+
+
 def run_adapters(payload: dict, event: str) -> int:
     """crew#603 CP4: SessionStart and UserPromptSubmit are one door each. The list of adapters
     that run, and their order, is policy (policy/adapters.rego); each runs through hook-run.py so a crash, a missing file
@@ -173,39 +187,62 @@ def run_adapters(payload: dict, event: str) -> int:
     stdin = json.dumps(payload).encode()
     runner = os.path.join(HERE, "hook-run.py")
     parts: list[str] = []
+    system: list[str] = []
+    tool = str(payload.get("tool_name") or "")
     for row in rows:
+        tools: list = []
+        if isinstance(row, dict):
+            tools = list(row.get("tools") or [])
+            row = row.get("run")
         if not isinstance(row, list) or not row or not isinstance(row[0], str):
             raise NoVerdict(f"adapters row for {event} is not [name, args...]: {row!r}")
         if "archive/" in row[0]:
             raise NoVerdict(f"{row[0]} is archived and cannot run")
+        if tools and tool not in tools:
+            continue
         argv = [sys.executable, runner, os.path.join(HERE, row[0]), *map(str, row[1:])]
         try:
             proc = subprocess.run(argv, input=stdin, capture_output=True, timeout=150)
         except (OSError, subprocess.SubprocessError) as e:
             raise NoVerdict(f"{row[0]} did not run: {e}") from e
         text = proc.stdout.decode("utf-8", "replace")
+        if event == "PreToolUse" and refuses(proc.returncode, text):
+            # The adapter's refusal is the verdict; it passes through untouched so the
+            # override marker and the one command it names reach the model as written.
+            sys.stdout.write(text)
+            sys.stderr.write(proc.stderr.decode("utf-8", "replace"))
+            return 2 if proc.returncode == 2 else 0
         if proc.returncode != 0:
             tail = (proc.stderr.decode("utf-8", "replace").strip() or text.strip()).splitlines()
             raise NoVerdict(f"{row[0]} exit {proc.returncode}: {tail[-1] if tail else 'no output'}")
         ctx = text.strip()
         try:
             out = json.loads(text)
-            hso = out.get("hookSpecificOutput") if isinstance(out, dict) else None
-            if isinstance(hso, dict):
+            if isinstance(out, dict):
+                hso = out.get("hookSpecificOutput") if isinstance(out.get("hookSpecificOutput"), dict) else {}
                 ctx = str(hso.get("additionalContext") or "").strip()
+                sm = str(out.get("systemMessage") or "").strip()
+                if sm:
+                    system.append(sm)
         except ValueError:
             pass
         if ctx:
             parts.append(ctx)
+    out: dict = {}
     if parts:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": event,
-                                                 "additionalContext": "\n\n".join(parts)}}))
+        out["hookSpecificOutput"] = {"hookEventName": event, "additionalContext": "\n\n".join(parts)}
+    if system:
+        out["systemMessage"] = "\n\n".join(system)
+    if out:
+        print(json.dumps(out))
     return 0
 
 
 def decide(payload: dict, event: str) -> int:
     if event in ADAPTER_EVENTS:
-        return run_adapters(payload, event)
+        rc = run_adapters(payload, event)
+        if rc != 0 or event != "PreToolUse":
+            return rc
     if event == "Stop":
         if payload.get("stop_hook_active"):
             return 0

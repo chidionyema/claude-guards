@@ -33,3 +33,19 @@ user_prompt_submit := [
 	["board-deliver.py"],
 	["feed-guard.py", "UserPromptSubmit"],
 ]
+
+# PreToolUse, in order. These eight DO refuse (exit 2 with the reason on stderr, or a JSON
+# permissionDecision deny); the door passes the first refusal through untouched and then
+# asks hooks.deny. `tools` is the matcher settings.json used to carry; empty means every tool.
+# Each is a hand-rolled guard in policy/hand_rolled_policy.rego's ratchet; CP5 moves their
+# rules into rego one guard at a time and archives the Python.
+pre_tool_use := [
+	{"run": ["goal-guard.py"], "tools": []},
+	{"run": ["scope-guard.py"], "tools": ["Write", "Edit"]},
+	{"run": ["config-syntax-guard.py"], "tools": ["Write", "Edit"]},
+	{"run": ["dupe-work-fence.py"], "tools": ["Bash"]},
+	{"run": ["pr-cap-guard.py"], "tools": ["Bash"]},
+	{"run": ["rule-guard.py"], "tools": ["Bash"]},
+	{"run": ["ticket-gate.py"], "tools": ["Bash", "Edit", "Write", "MultiEdit", "NotebookEdit"]},
+	{"run": ["credential-guard.py"], "tools": ["Bash"]},
+]

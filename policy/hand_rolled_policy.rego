@@ -284,3 +284,8 @@ adapter_wired(path) if {
 	some row in data.adapters.user_prompt_submit
 	row[0] == path
 }
+
+adapter_wired(path) if {
+	some row in data.adapters.pre_tool_use
+	row.run[0] == path
+}
