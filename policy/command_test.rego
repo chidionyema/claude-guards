@@ -103,6 +103,11 @@ refuse := [
 	"printenv | grep PROSPECTOR", # value dump
 	"env", # value dump
 	"env | sort", # value dump
+	"pytest", # R45: the whole suite by hand
+	"python -m pytest -q", # R45
+	".venv/bin/python -m pytest tests -q -p no:cacheprovider", # R45: a directory is still the suite
+	"cd sovereign && python3 -m pytest sovereign/tests", # R45
+	"pytest -n auto -q 2>&1 | tail -5", # R45: pipes do not scope it
 ]
 
 # Commands that must go through. A guard that refuses correct work is an
@@ -205,6 +210,14 @@ permit := [
 	"printenv PROSPECTOR_STORE_DIR", # allowed: one name
 	"env PROSPECTOR_STORE_DIR=/data/store python3 run.py", # allowed: sets, does not print
 	"git diff --stat  # nothing to do with env", # allowed
+	"pytest -q tests/test_incident_crew292_drills_row_is_read_hourly.py", # R45: a file is scoped
+	".venv/bin/python -m pytest -n 0 sovereign/tests/bdd/test_policy_operating_model_gate.py", # R45
+	"pytest tests/test_x.py::test_one", # R45: a node id
+	"pytest -k drills_row", # R45: a keyword
+	"pytest --lf", # R45: last failed
+	"pytest --co -q", # R45: collection only, no test runs
+	"bin/idp-tests-for", # R45: the selection the hook runs
+	"pytest # full-suite-intended", # R45: the marker
 ]
 
 test_every_refused_command_is_refused if {
