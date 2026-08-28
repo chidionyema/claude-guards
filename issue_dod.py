@@ -11,11 +11,23 @@ from __future__ import annotations
 
 import re
 
+# Founder, 2026-08-28: "should be waiting on [me] unless its physical action [machines] cannot do"
+# (R5). The third box used to read "Founder used it and confirmed (receipt: the comment or message
+# where he said so)". Every auto-opened issue therefore ended its life on a message only he could
+# send, and on 2026-08-28 five finished issues -- one of them the P0 crew#307 -- were open on
+# nothing else. That is the template manufacturing founder debt, not a reporting problem: a box no
+# machine can ever tick is a permanent open item by construction.
+# The replacement asks for the same thing the receipt was standing in for -- evidence the thing was
+# actually used, rather than merely built and demoed -- in a form a probe, a query or a scheduled
+# run can satisfy. His confirmation still closes it; it is no longer the only thing that can.
+LEGACY_FOUNDER_BOX = "Founder used it and confirmed (receipt: the comment or message where he said so)"
+USED_BOX = ("Used: a probe, a query or a scheduled run shows a person or a job actually used it "
+            "(paste it; the founder saying so also counts)")
 DOD_BOXES = (
     "## Definition of done\n"
     "- [ ] Built: the change is merged and CI is green (inventory, not progress)\n"
     "- [ ] Proved: one command shows it running, its output pasted here\n"
-    "- [ ] Founder used it and confirmed (receipt: the comment or message where he said so)\n"
+    f"- [ ] {USED_BOX}\n"
 )
 LANE_BY_DIR = {"idp": "platform", "crew": "process", "hermes-v2": "agents", "prospector-main": "money",
                "mumchimp-medusa": "money", "estate": "platform", "claude-guards": "process"}

@@ -13,9 +13,10 @@ spec.loader.exec_module(tg)
 import issue_dod as dod  # noqa: E402
 
 
-def test_the_three_boxes_are_build_prove_and_founder_used_it():
+def test_the_three_boxes_are_build_prove_and_used(  # crew#526: the third box was founder-only
+):
     assert dod.has_dod(dod.DOD_BOXES)
-    for word in ("Built", "Proved", "Founder used it"):
+    for word in ("Built", "Proved", "Used"):
         assert word in dod.DOD_BOXES
 
 
