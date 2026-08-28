@@ -283,12 +283,19 @@
       "enforced_by": "idp policy/no-manual-steps.rego (no-toil gate on every PR body and changed doc/manifest, bin/idp-no-toil --sweep for the estate baseline); blocker-guard.py (FOUNDER ACTION must be a tap, never a hand verb); LAW 20 / LAW 27 / LAW 47"
     },
     {
-      "id": "R45-root-trust",
+      "id": "R45-no-full-local-suite",
+      "date": "2026-08-28",
+      "verbatim": "get better at getting better, we waste too nuch tine with tests and fiddlng around we need to be hyper ultra efficient ... how else cann we be ultra zealot efficient ... also whay are the tests flaky in the first place",
+      "meaning": "No session runs the whole test suite on a laptop by hand. The scoped run is the default nobody types: pytest on every core (-n auto), bin/idp-tests-for for the files whose source names a changed path, and .githooks/pre-push running that plus the PR-body gates before every push (measured: 160 s serial -> 17 s; hook 23 s). CI runs the suite on a clean checkout and is the proof. Measured the same day: 2 of 13 red commits in 100 CI runs were flaky (one wall-clock fixture, fixed by idp 00eb77c), 11 were real reds pushed 8 times per PR; so no retry policy, no merge queue, no runner pool (founder: no self-hosted for now; the old runner setup was Fly's, R1). Recorded verbatim on crew#584 (comment 5454986379).",
+      "enforced_by": "policy/command.rego (pytest naming no file, node id, -k or --lf is refused; # full-suite-intended escapes); idp .githooks/pre-push + bin/idp-tests-for (idp#613)"
+    },
+    {
+      "id": "R46-root-trust",
       "date": "2026-08-28",
       "verbatim": "but this standard has to be platforn wide ... not just tailscale ... oso update high tech tandards with this eanple ... case closed",
       "meaning": "Root trust is platform-wide: a provider's root credential is born by `bin/idp-bootstrap-<provider>` (one SSO consent, API mints the rest, vault written in-process, exit); the founder never pastes a secret or clicks console settings; a hand-set SEED_* repo secret is a MISS, ticketed. Said in reply to the locked Tailscale bootstrap (R44-high-tech-only): that spec was one instance, not the standard — every provider's root credential (GitHub App, OCI, Tailscale, litellm-upstream, flux-writer) is minted the same way. `gh secret set SEED_<KEY>` followed by `gh workflow run vault-seed.yml` (idp#243, idp#248) is the anti-pattern this closes; `bin/idp-github-app` installation-from-CI (crew#267, crew#301) is the first real instance of the shape. Recorded verbatim on crew#66 (comment 5453747447). Case closed by the founder.",
       "enforced_by": "bin/idp-bootstrap-<provider> convention (one SSO consent, API-minted credential, vault write in-process, exit); idp policy/no-manual-steps.rego no-toil gate refuses a hand-set SEED_* secret without a ticket; LAW 20 / LAW 27 / LAW 47"
     }
   ],
-  "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R46 (R45 landed 2026-08-28, crew#66; R44 landed 2026-08-28, crew#66; R43 landed 2026-08-28, crew#66; R42 landed 2026-08-27 via claude-guards#144, crew#488) (R34-R37 landed 2026-08-25 via claude-guards#60); grep the estate for the id before you add one."
+  "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R46 (R45 landed 2026-08-28, crew#584; R44 landed 2026-08-28, crew#66; R43 landed 2026-08-28, crew#66; R42 landed 2026-08-27 via claude-guards#144, crew#488) (R34-R37 landed 2026-08-25 via claude-guards#60); grep the estate for the id before you add one."
 }

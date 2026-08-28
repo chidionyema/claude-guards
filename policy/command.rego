@@ -489,6 +489,51 @@ deny contains msg if {
 }
 
 # ---------------------------------------------------------------------------
+# The whole test suite run on a laptop, by hand (R45, crew#584).
+#
+# Founder, 2026-08-28: "we waste too nuch tine with tests and fiddlng around we
+# need to be hyper ultra efficient". Measured the same day on idp: the full local
+# suite was killed at 13% after 10 minutes, and 127 of 230 test files spawn a
+# process each. The repo answers this with two defaults nobody types: pytest
+# runs on every core (`-n auto` in pyproject.toml) and `bin/idp-tests-for` runs
+# only the files whose source names a changed path; `.githooks/pre-push` runs
+# that before every push. CI runs the suite on a clean checkout and is the proof.
+#
+# So a pytest invocation that names no test file, node id, keyword or last-failed
+# set is the habit this replaces: `pytest`, `pytest tests`, `pytest -q sovereign/tests`.
+# A file, a `::` node id, `-k`, `--lf`/`--last-failed` or `--co` is a scoped run and
+# passes. A run that genuinely needs the suite appends  # full-suite-intended.
+# ---------------------------------------------------------------------------
+
+pytest_call_re := `(?:^|[;&|(]\s*)(?:[\w./~$-]*/)?(?:python[0-9.]*\s+-m\s+pytest|pytest)(?:\s|$)`
+
+# The arguments of the first pytest call: everything after it up to the next
+# separator or comment. RE2 has no lookahead, so the scoping test is a second step.
+pytest_args(cmd) := args if {
+	m := regex.find_all_string_submatch_n(`(?:^|[;&|(]\s*)(?:[\w./~$-]*/)?(?:python[0-9.]*\s+-m\s+pytest|pytest)([^;&|#]*)`, cmd, 1)
+	args := m[0][1]
+}
+
+pytest_is_scoped(args) if regex.match(`\.py\b|::|(?:^|\s)-k\s|(?:^|\s)--lf\b|(?:^|\s)--last-failed\b|(?:^|\s)--co\b|(?:^|\s)--collect-only\b|(?:^|\s)--version\b|(?:^|\s)(?:-h|--help)\b`, args)
+
+deny contains msg if {
+	not contains(input.command, "full-suite-intended")
+	regex.match(pytest_call_re, input.command)
+	args := pytest_args(input.command)
+	not pytest_is_scoped(args)
+	msg := concat("", [
+		"BLOCKED by rule-guard: pytest with no test file, node id, -k or --lf is the whole suite on a laptop (R45, crew#584).\n",
+		"  why              2026-08-28: the full idp suite was killed at 13% after 10 minutes; 127 of 230\n",
+		"                   test files spawn a process each. CI runs the suite on a clean checkout.\n",
+		"  instead          bin/idp-tests-for            the files whose source names what you changed\n",
+		"                   pytest tests/test_x.py       the file(s) you touched (-n auto is the default)\n",
+		"                   pytest --lf                  what failed last time\n",
+		"                   git push                     the pre-push hook runs tests-for + the PR gates\n",
+		"If you mean it, append  # full-suite-intended  to the command and say in your reply why this case is different.",
+	])
+}
+
+# ---------------------------------------------------------------------------
 # A `find` walk from the disk root or the home directory.
 #
 # crew#85, 2026-08-27 14:54Z: `find / -path '*@backstage/core-components*' -iname
