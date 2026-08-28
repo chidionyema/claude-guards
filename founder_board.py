@@ -50,6 +50,8 @@ HOME = os.path.expanduser("~")
 STATE = os.path.join(HOME, ".claude", "state", "founder_board.json")
 PROSPECTOR = os.path.join(HOME, "Documents", "code", "prospector")
 GH_REPO = "chidionyema/prospector"
+#: The platform repo. The product lives in GH_REPO; the cluster workflows live here.
+IDP_REPO = os.environ.get("IDP_REPO", "chidionyema/idp")
 LIVE_URL = "https://mumchimp.com"
 SCRIPTS = os.path.join(HOME, ".claude", "scripts")
 
@@ -620,11 +622,14 @@ def collect_founder_decisions() -> list[Row]:
 
 
 
-def _gh_runs_cmd(workflow: str, limit: int) -> list[str]:
+def _gh_runs_cmd(workflow: str, limit: int, repo: str = "") -> list[str]:
     """The gh command _gh_runs will run. Split out so the selftest can grade the argv
     without a network call — the defect this guards against was pure argument order and
     was invisible to every check that only looked at the row's rendered text."""
-    cmd = ["gh", "run", "list", "--repo", GH_REPO, "--limit", str(limit),
+    # crew#558: the platform workflows live in idp, not in the product repo, so the repo is a
+    # parameter. It DEFAULTS to GH_REPO so every existing caller's argv is byte-identical and
+    # the selftest that grades that argv keeps grading the same thing.
+    cmd = ["gh", "run", "list", "--repo", repo or GH_REPO, "--limit", str(limit),
            "--json", "databaseId,status,conclusion,createdAt"]
     if workflow:
         # APPEND, never insert at a fixed index. `cmd[4:4]` put --workflow between --repo
@@ -640,9 +645,9 @@ def _gh_runs_cmd(workflow: str, limit: int) -> list[str]:
     return cmd
 
 
-def _gh_runs(workflow: str, limit: int = 8) -> list[dict] | None:
+def _gh_runs(workflow: str, limit: int = 8, repo: str = "") -> list[dict] | None:
     """The last runs of one workflow, or None when the question could not be asked."""
-    cmd = _gh_runs_cmd(workflow, limit)
+    cmd = _gh_runs_cmd(workflow, limit, repo)
     rc, out, _ = sh(cmd, 45)
     if rc != 0:
         return None
@@ -2010,7 +2015,102 @@ def collect_research_and_docs() -> list[Row]:
     return out
 
 
+def _cluster_from_here() -> Row:
+    """Can this Mac see the cluster at all? crew#558, 2026-08-28: it could not.
+
+    The kubeconfig execs `oci ce cluster generate-token` with no --profile; ~/.oci/config has no
+    DEFAULT profile and both of its profiles authenticate with a browser-login session token,
+    which expires. The tokens were 1 and 2 days old. So every question about what the cluster is
+    RUNNING was unanswerable from this desk, and the data map fell back to what git DECLARES.
+    """
+    kube = os.path.join(HOME, ".kube", "oke-estate")
+    if not os.path.exists(kube):
+        return _unknown("Cluster, from this Mac", f"no kubeconfig at {kube}", f"ls {kube}")
+    cmd = ["kubectl", "--kubeconfig", kube, "--request-timeout=8s", "get", "nodes", "-o", "name"]
+    rc, out, err = sh(cmd, timeout=20)
+    if rc == 0:
+        n = len([x for x in out.splitlines() if x.strip()])
+        return Row(GOOD, "Cluster, from this Mac", f"{n} node(s)", "", " ".join(cmd))
+    why = (err or out).strip().splitlines()
+    why = next((x for x in why if x.strip()), "")[:140]
+    return Row(BAD, "Cluster, from this Mac", "UNREACHABLE",
+               f"{why}  --  the kubeconfig execs `oci` with no --profile and the session token "
+               f"expires; renewing it needs a browser, so this desk is not a way to operate from "
+               f"anywhere (crew#558)", " ".join(cmd))
+
+
+def _cluster_from_ci() -> Row:
+    """The same cluster, reached from GitHub's runners. This is the path that works from anywhere."""
+    runs = _gh_runs("login-drill.yml", limit=5, repo=IDP_REPO)
+    if runs is None:
+        return _unknown("Cluster, from CI", "gh could not list the workflow runs",
+                        " ".join(_gh_runs_cmd("login-drill.yml", 5, IDP_REPO)))
+    done = [r for r in runs if r.get("conclusion")]
+    if not done:
+        return _unknown("Cluster, from CI", "no completed run in the last 5",
+                        " ".join(_gh_runs_cmd("login-drill.yml", 5, IDP_REPO)))
+    last = done[0]
+    ok = last.get("conclusion") == "success"
+    return Row(GOOD if ok else BAD, "Cluster, from CI",
+               "reachable" if ok else f"last run {last.get('conclusion')}",
+               f"login-drill {_age(last.get('createdAt', ''))} -- runs on GitHub's machines, needs "
+               f"no laptop and no browser login",
+               " ".join(_gh_runs_cmd("login-drill.yml", 5, IDP_REPO)))
+
+
+def _runs_on_this_laptop() -> Row:
+    """What stops when the lid closes."""
+    rc, out, err = sh(["launchctl", "list"], timeout=15)
+    if rc != 0:
+        return _unknown("Runs on this laptop", (err or "launchctl failed")[:140], "launchctl list")
+    jobs = [ln.split()[-1] for ln in out.splitlines()[1:]
+            if ln.split() and ln.split()[-1].startswith("ai.estate.")]
+    sched = os.path.isdir(os.path.join(HOME, "dev", "code", "idp", "run", "dagster"))
+    detail = ", ".join(sorted(j.replace("ai.estate.", "") for j in jobs))[:200]
+    if sched:
+        detail = f"the Dagster scheduler is here too. {detail}"
+    return Row(WARN if jobs else UNKNOWN, "Runs on this laptop",
+               f"{len(jobs)} daemon(s)", detail, "launchctl list | grep ai.estate.")
+
+
+def _map_is_a_disk_scan() -> Row:
+    """How much of the estate's own map is a walk of this Mac's filesystem.
+
+    LAW 50: coverage is proved by querying the backend, never by scanning files, and
+    crew/science/datamap.py is the temporary bootstrap that retires surface by surface. The
+    ceiling file is the committed measurement; discovery itself is far too slow for this page.
+    """
+    f = os.path.join(HOME, "dev", "code", "crew", "science", "bootstrap-ceiling.json")
+    if not os.path.exists(f):
+        return _unknown("The estate's own map", "no bootstrap-ceiling.json on this checkout "
+                        "(crew#558 not merged here yet)", f"cat {f}")
+    try:
+        with open(f) as fh:
+            d = json.load(fh)
+    except (OSError, ValueError) as e:
+        return _unknown("The estate's own map", f"{type(e).__name__}: {e}", f"cat {f}")
+    n, of = d.get("scan_domains"), d.get("of_domains")
+    return Row(WARN, "The estate's own map", f"{n} of {of} domains scan files",
+               f"{d.get('measured_producer_share', '?')}, measured {d.get('measured', '?')}. "
+               f"A ceiling that may only ever fall; raising it is red in CI ({d.get('ticket', '')})",
+               f"python3 ~/dev/code/crew/science/datamap.py --check")
+
+
+def collect_bearing() -> list[Row]:
+    """Where the estate actually runs, as opposed to where it is deployed.
+
+    crew#558, founder 2026-08-28: "we need to get a bearing on where we are whats on mac vs whats
+    on cluster and cloud, whats a dev env and whats cloud env, we need to be able to seamlessly
+    work from anywhere". These four rows are that question, measured. The shape of the answer on
+    the day it was asked: the cluster was reachable from CI and not from this desk, eight daemons
+    and the scheduler ran on the laptop, and 98.7% of the estate's own map was a walk of the
+    laptop's disk.
+    """
+    return [_cluster_from_here(), _cluster_from_ci(), _runs_on_this_laptop(), _map_is_a_disk_scan()]
+
+
 COLLECTORS = [
+    ("Where it runs \u2014 mac, cluster, CI", collect_bearing),
     ("The board \u2014 nothing is live until you tick it", collect_estate_state),
     ("Is the machine able to work?", collect_machine),
     ("Money", collect_spend),
