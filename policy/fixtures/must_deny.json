@@ -1,5 +1,5 @@
 {
-  "_comment": "Two violations the policy must refuse. Case 1 is the reversion the founder predicted: a session writes a fresh Python guard instead of a Rego rule. Case 2 is the quieter version: nobody adds a file, somebody just grows an existing one. Case 3 is the reversion the line ceiling cannot see: the file did not grow, it grew three more refusals. Case 4 is a Python file under policy/, which is where the last one actually lived. Case 5 is the wiring that landed without its file: a hook pointed at a script that is on a branch and not in the tree, which makes python3 exit 2 on every matching call, reads included.",
+  "_comment": "Two violations the policy must refuse. Case 1 is the reversion the founder predicted: a session writes a fresh Python guard instead of a Rego rule. Case 2 (canonical-root-guard, since scope-guard moved to Rego in crew#603 CP5) is the quieter version: nobody adds a file, somebody just grows an existing one. Case 3 is the reversion the line ceiling cannot see: the file did not grow, it grew three more refusals. Case 4 is a Python file under policy/, which is where the last one actually lived. Case 5 is the wiring that landed without its file: a hook pointed at a script that is on a branch and not in the tree, which makes python3 exit 2 on every matching call, reads included.",
   "guards": [
     {
       "path": "urgent-fix-guard.py",
@@ -7,7 +7,7 @@
       "rules": 0
     },
     {
-      "path": "scope-guard.py",
+      "path": "canonical-root-guard.py",
       "lines": 400,
       "rules": 0
     },
@@ -20,13 +20,13 @@
   ],
   "wired": [
     "urgent-fix-guard.py",
-    "scope-guard.py"
+    "canonical-root-guard.py"
   ],
   "policy_dir_py": [
     "policy/differential.py"
   ],
   "hooks_wired": [
-    "scope-guard.py",
+    "canonical-root-guard.py",
     "opa-hook.py"
   ],
   "tracked_py": [
