@@ -199,3 +199,39 @@ test_wiring_an_archived_guard_into_settings_is_refused if {
 test_a_settings_edit_that_names_no_archive_is_allowed if {
 	count(hooks.deny) == 0 with input as {"tool_name": "Edit", "tool_input": {"file_path": "/Users/x/.claude/scripts/settings/settings.json", "old_string": "\"timeout\": 30", "new_string": "\"timeout\": 45"}}
 }
+
+# scope-guard, moved from scope-guard.py (crew#603 CP5). The fifteen selftest cases, verbatim.
+scope_hits(tool, ti) := count({m | some m in hooks.deny with input as {"tool_name": tool, "tool_input": ti}; contains(m, "into ~/.claude/CLAUDE.md")})
+
+test_scope_bash_heredoc_with_project_token_refused if {
+	scope_hits("Bash", {"command": "cat > ~/.claude/CLAUDE.md <<'EOF'\n# graphify\nrun prospector\nEOF"}) == 1
+}
+
+test_scope_bash_append_absolute_and_home_refused if {
+	scope_hits("Bash", {"command": "echo '# graphify' >> /Users/anyone/.claude/CLAUDE.md"}) == 1
+	scope_hits("Bash", {"command": "echo '# graphify' >> $HOME/.claude/CLAUDE.md"}) == 1
+}
+
+test_scope_bash_rules_only_read_other_repo_and_escape_pass if {
+	scope_hits("Bash", {"command": "cat > ~/.claude/CLAUDE.md <<'EOF'\n# LAW 0\nrules only\nEOF"}) == 0
+	scope_hits("Bash", {"command": "cat ~/.claude/CLAUDE.md | rg prospector"}) == 0
+	scope_hits("Bash", {"command": "echo prospector >> ~/Documents/code/prospector/CLAUDE.md"}) == 0
+	scope_hits("Bash", {"command": "cat > ~/.claude/CLAUDE.md <<'EOF'\nprospector\nEOF\n# SCOPE-LEAK-OK"}) == 0
+}
+
+test_scope_write_global_with_token_refused_and_names_it if {
+	msgs := {m | some m in hooks.deny with input as {"tool_name": "Write", "tool_input": {"file_path": "/Users/anyone/.claude/CLAUDE.md", "content": "# graphify\nprospector"}}}
+	count(msgs) == 1
+	some m in msgs
+	contains(m, "graphify, prospector")
+	scope_hits("Write", {"file_path": "~/.claude/CLAUDE.md", "content": "hermes"}) == 1
+	scope_hits("Edit", {"file_path": "$HOME/.claude/CLAUDE.md", "new_string": "see docs/COST_PROGRAM.md"}) == 1
+}
+
+test_scope_write_rules_only_escape_project_file_and_read_pass if {
+	scope_hits("Write", {"file_path": "/Users/anyone/.claude/CLAUDE.md", "content": "# LAW 0\nrules only"}) == 0
+	scope_hits("Write", {"file_path": "/Users/anyone/.claude/CLAUDE.md", "content": "prospector SCOPE-LEAK-OK"}) == 0
+	scope_hits("Write", {"file_path": "/Users/anyone/Documents/code/prospector/CLAUDE.md", "content": "prospector runs here"}) == 0
+	scope_hits("Edit", {"file_path": "/Users/anyone/.claude/CLAUDE.md", "new_string": "measure before building"}) == 0
+	scope_hits("Read", {"file_path": "/Users/anyone/.claude/CLAUDE.md"}) == 0
+}

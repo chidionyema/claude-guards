@@ -149,7 +149,7 @@ def test_the_pre_tool_use_list_names_the_eight_guards_settings_used_to_name():
     out = subprocess.run(["opa", "eval", "--format", "json", "--data", str(HERE / "policy" / "adapters.rego"),
                           "data.adapters.pre_tool_use"], capture_output=True, text=True, timeout=30)
     rows = json.loads(out.stdout)["result"][0]["expressions"][0]["value"]
-    assert [r["run"][0] for r in rows] == ["goal-guard.py", "scope-guard.py", "config-syntax-guard.py",
+    assert [r["run"][0] for r in rows] == ["goal-guard.py", "config-syntax-guard.py",
                                            "dupe-work-fence.py", "pr-cap-guard.py", "rule-guard.py",
                                            "ticket-gate.py", "credential-guard.py"]
     for r in rows:

@@ -25,8 +25,9 @@ test_user_prompt_submit_names_five_adapters if {
 	count(adapters.user_prompt_submit) == 5
 }
 
-test_pre_tool_use_names_eight_guards_each_with_a_tools_list if {
-	count(adapters.pre_tool_use) == 8
+test_pre_tool_use_names_seven_guards_each_with_a_tools_list if {
+	# seven since scope-guard moved into hooks.rego (crew#603 CP5)
+	count(adapters.pre_tool_use) == 7
 	every r in adapters.pre_tool_use {
 		is_array(r.tools)
 		endswith(r.run[0], ".py")

@@ -42,7 +42,6 @@ user_prompt_submit := [
 # rules into rego one guard at a time and archives the Python.
 pre_tool_use := [
 	{"run": ["goal-guard.py"], "tools": []},
-	{"run": ["scope-guard.py"], "tools": ["Write", "Edit"]},
 	{"run": ["config-syntax-guard.py"], "tools": ["Write", "Edit"]},
 	{"run": ["dupe-work-fence.py"], "tools": ["Bash"]},
 	{"run": ["pr-cap-guard.py"], "tools": ["Bash"]},

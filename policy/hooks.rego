@@ -246,3 +246,48 @@ deny contains msg if {
 	contains(body, archive_path)
 	msg := archive_reason(path)
 }
+
+# crew#603 CP5, batch 1: scope-guard.py, moved here verbatim in rule (2026-08-28). Founder,
+# 2026-08-19: "why do we have 2 claude mds, split brain, only one, only critical and useful and
+# relevant info." ~/.claude/CLAUDE.md is HOW to work in any repo and is resident in every
+# session; a fact about one project written there is billed to all of them. A write that names a
+# project token is refused unless the text says SCOPE-LEAK-OK. Reading the file is free.
+scope_tokens := `(?i)prospector|hermes|graphify|mumchimp|store_platform|popdd|COST_PROGRAM|PLATFORM_MANIFESTO|WAYS_OF_WORKING|SITE_SPEC_PROGRAM|PACK_NARRATIVE|LAUNCH_OPS|Documents/code/`
+
+scope_escape := "SCOPE-LEAK-OK"
+
+global_rules_path := `^(?:~|\$HOME|/Users/[^/]+)/\.claude/CLAUDE\.md$`
+
+writes_global_rules := `(?:>>?|tee\b[^|;]*|sed\s+-i[^|;]*|cp\b[^|;]*|mv\b[^|;]*)\s*['"]?(?:~|\$HOME|/Users/[^/\s]+)/\.claude/CLAUDE\.md`
+
+scope_body := concat("", [object.get(input.tool_input, "content", ""), object.get(input.tool_input, "new_string", "")])
+
+scope_reason(hits) := sprintf(
+	concat("", [
+		"REFUSED: this writes %s into ~/.claude/CLAUDE.md.\n",
+		"That file is HOW to work, in ANY repo. It is resident in every session in every repo, ",
+		"so a fact about one project is billed to all of them and useful to none.\n",
+		"Put it in that project's own CLAUDE.md instead, or in a memory file.\n",
+		"If the content genuinely belongs in the global rules, add SCOPE-LEAK-OK to say so out loud.",
+	]),
+	[concat(", ", sort({lower(h) | some h in hits}))],
+)
+
+deny contains msg if {
+	input.tool_name in {"Write", "Edit", "NotebookEdit"}
+	regex.match(global_rules_path, trim_space(input.tool_input.file_path))
+	not contains(scope_body, scope_escape)
+	hits := regex.find_n(scope_tokens, scope_body, -1)
+	count(hits) > 0
+	msg := scope_reason(hits)
+}
+
+deny contains msg if {
+	input.tool_name == "Bash"
+	cmd := input.tool_input.command
+	not contains(cmd, scope_escape)
+	regex.match(writes_global_rules, cmd)
+	hits := regex.find_n(scope_tokens, cmd, -1)
+	count(hits) > 0
+	msg := scope_reason(hits)
+}

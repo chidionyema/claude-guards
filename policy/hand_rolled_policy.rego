@@ -98,7 +98,6 @@ legacy := {
 	"repeat-guard.py": 283,
 	"jargon-guard.py": 269,
 	"config-syntax-guard.py": 201,
-	"scope-guard.py": 146,
 	"laws-link-guard.py": 145,
 	"canonical-root-guard.py": 133,
 	# 192 -> 202 on 2026-08-26 (crew#281 CP2, claude-guards#65): STAGED: is a fifth reply word and
@@ -177,6 +176,7 @@ deny contains msg if {
 	some g in input.guards
 	not legacy[g.path]
 	not g.symlink
+	not archived(g.path)
 	msg := sprintf(
 		"%s is new hand-rolled policy (%d lines). Policy goes in policy/*.rego, which OPA already evaluates. If this genuinely cannot be Rego, say why in the PR and add it to `legacy` in policy/hand_rolled_policy.rego.",
 		[g.path, g.lines],
@@ -299,3 +299,27 @@ adapter_wired(path) if {
 	some row in data.adapters.stop
 	row[0] == path
 }
+
+# crew#603 CP5: a guard whose rule moved into policy/*.rego is kept under scripts/archive/
+# as the record of what was ported. It is not wired (adapters.rego never names it, and
+# hooks.rego refuses running it), so it is not hand-rolled policy any more: it is history.
+archived(path) if startswith(path, "scripts/archive/")
+
+deny contains msg if {
+	some g in input.guards
+	archived(g.path)
+	some rows in [data.adapters.session_start, data.adapters.user_prompt_submit, data.adapters.stop]
+	some row in rows
+	row[0] == basename(g.path)
+	msg := sprintf("%s is archived (its rule is Rego now) but adapters.rego still runs it.", [g.path])
+}
+
+deny contains msg if {
+	some g in input.guards
+	archived(g.path)
+	some obj in data.adapters.pre_tool_use
+	obj.run[0] == basename(g.path)
+	msg := sprintf("%s is archived (its rule is Rego now) but adapters.rego still runs it.", [g.path])
+}
+
+basename(path) := parts[count(parts) - 1] if parts := split(path, "/")
