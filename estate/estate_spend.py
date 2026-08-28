@@ -88,6 +88,30 @@ def split_cost(model: str, u: dict) -> dict:
     }
 
 
+def token_counts(u: dict) -> dict:
+    """Raw token counts by driver, the same split as split_cost but before the rate card."""
+    cc = u.get("cache_creation") or {}
+    write = cc.get("ephemeral_5m_input_tokens", 0) + cc.get("ephemeral_1h_input_tokens", 0)
+    if not write:
+        write = u.get("cache_creation_input_tokens", 0)
+    return {
+        "raw_input": u.get("input_tokens", 0) or 0,
+        "cache_read": u.get("cache_read_input_tokens", 0) or 0,
+        "cache_write": write or 0,
+        "output": u.get("output_tokens", 0) or 0,
+    }
+
+
+def reread_pct(tokens: dict) -> float | None:
+    """Share of every token sent to the model that was a cache read: context re-sent
+    unchanged. None when nothing was sent, never 0.0 -- an empty day is not a perfect one."""
+    sent = (tokens.get("raw_input", 0) + tokens.get("cache_read", 0)
+            + tokens.get("cache_write", 0))
+    if not sent:
+        return None
+    return round(100.0 * tokens.get("cache_read", 0) / sent, 1)
+
+
 def bucket(slug: str) -> str:
     """Collapse a project slug into an accountable owner.
 
@@ -129,6 +153,11 @@ def scan(day: str | None, full: bool = False) -> dict:
     # Per-model REQUEST counts for the same reason as per-owner: $/call per model is the
     # figure a routing decision rests on (crew#371 act/model_routing).
     reqs_model: dict[str, int] = defaultdict(int)
+    # Token COUNTS per driver, beside the dollars in by_driver. cache_read is the prefix the
+    # model re-read unchanged on that call: context re-sent, not context produced. Kept as
+    # tokens because the re-read share is a rate question and dollars mix in the rate card
+    # (crew#372 act/context_waste).
+    tokens: dict[str, int] = defaultdict(int)
     by_driver: dict[str, float] = defaultdict(float)
     reqs = 0
     files = 0
@@ -136,7 +165,7 @@ def scan(day: str | None, full: bool = False) -> dict:
     if not os.path.isdir(PROJECTS):
         return {"day": day, "total": 0.0, "requests": 0, "files": 0,
                 "by_owner": {}, "by_model": {}, "by_driver": {},
-                "reqs_by_owner": {}, "reqs_by_model": {}}
+                "reqs_by_owner": {}, "reqs_by_model": {}, "tokens": {}}
 
     with os.scandir(PROJECTS) as projects:
         for entry in projects:
@@ -187,6 +216,8 @@ def scan(day: str | None, full: bool = False) -> dict:
                             reqs_owner[owner] += 1
                             by_model[norm_model(msg.get("model", ""))] += c
                             reqs_model[norm_model(msg.get("model", ""))] += 1
+                            for k, v in token_counts(usage).items():
+                                tokens[k] += v
                             for k, v in parts.items():
                                 by_driver[k] += v
                             reqs += 1
@@ -196,7 +227,7 @@ def scan(day: str | None, full: bool = False) -> dict:
     return {"day": day, "total": round(total, 4), "requests": reqs, "files": files,
             "by_owner": dict(by_owner), "by_model": dict(by_model),
             "by_driver": dict(by_driver), "reqs_by_owner": dict(reqs_owner),
-            "reqs_by_model": dict(reqs_model)}
+            "reqs_by_model": dict(reqs_model), "tokens": dict(tokens)}
 
 
 def _local_day(ts: str | None) -> str | None:
