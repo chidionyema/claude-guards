@@ -127,6 +127,7 @@ def test_the_row_crew533_named_is_the_one_that_was_refused():
     "python3 science/datamap.py --row $(whoami)",
     "python3 science/datamap.py --row a b",
     "python3 science/datamap.py --row a\nrm -rf /",
+    "python3 science/datamap.py --row mac/data\n",  # `$` would accept this; `\Z` does not
 ])
 def test_a_shell_metacharacter_or_a_parent_directory_is_still_refused(cmd):
     assert not ALLOWED_CLOSES_WHEN.match(cmd), cmd

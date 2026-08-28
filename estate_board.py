@@ -293,7 +293,10 @@ CLOSER_LOG = os.environ.get("ESTATE_CLOSER_LOG", "")
 # The command runs through shlex.split with no shell, so `*` and `~` reach datamap.py literally.
 _ROW_ATOM = r"[A-Za-z0-9_*~-]+"
 _ROW_SEG = rf"\.?{_ROW_ATOM}(?:\.{_ROW_ATOM})*"
-ALLOWED_CLOSES_WHEN = re.compile(rf"^python3 science/datamap\.py --row {_ROW_SEG}(?:/{_ROW_SEG})*$")
+# `\Z`, not `$`: `$` also matches before a trailing newline, so `--row mac/data\n` would have
+# been accepted (d5ae1960 on cg#188). Harmless with no shell, but the comment above claims a
+# newline is refused and the pattern has to be what the comment says.
+ALLOWED_CLOSES_WHEN = re.compile(rf"^python3 science/datamap\.py --row {_ROW_SEG}(?:/{_ROW_SEG})*\Z")
 MAX_CLOSES_WHEN = 200  # a body is anyone's text; a row key is never this long
 
 
