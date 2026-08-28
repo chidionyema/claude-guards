@@ -164,6 +164,12 @@ def write_bind(sid: str, data: dict) -> None:
 
 
 
+#: aiden/tick.py loads this file by path (spec_from_file_location), so this file's own
+#: directory is not on sys.path there and `issue_dod` raised ModuleNotFoundError on every
+#: ai.aiden.watch tick from 2026-08-27 (crew#527 CP4 landed) until the breaker opened.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+if _HERE not in sys.path:
+    sys.path.insert(0, _HERE)
 from issue_dod import issue_body, lane_for  # noqa: E402  crew#527 CP4
 
 
