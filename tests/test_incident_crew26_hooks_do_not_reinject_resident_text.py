@@ -51,3 +51,24 @@ def test_incident_crew26_compactions_are_a_strong_signal(tmp_path):
     assert fires and strong and any("compactions" in s for s in signals)
     _, strong, fires = cg.assess(0, 0, 0, 0, cg.COMPACT_WARN - 1)
     assert not fires and not strong
+
+
+def test_incident_crew584_meaning_lines_ride_only_the_newest_rulings():
+    """crew#584: 44 rulings rendered 15,993 of the 16,000 cap; the 45th turned CI red.
+    Every verbatim stays; the => line is carried for the newest MEANING_ROWS only."""
+    import json, os, tempfile
+    fr = _load("friction-relay")
+    rows = [{"id": "R%d-x" % i, "date": "2026-08-28", "verbatim": "v%d" % i, "meaning": "m%d." % i}
+            for i in range(1, 41)]
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+        json.dump({"rulings": rows}, fh)
+    saved = fr.RULINGS
+    try:
+        fr.RULINGS = fh.name
+        block = fr.render_rulings()
+    finally:
+        fr.RULINGS = saved
+        os.unlink(fh.name)
+    assert all(r["verbatim"] in block for r in rows)
+    assert block.count("      => ") == fr.MEANING_ROWS
+    assert "=> m40." in block and "=> m1." not in block

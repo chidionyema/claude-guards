@@ -289,10 +289,10 @@ def render_rulings() -> str:
     if problems:
         lines[2:2] = ["  RULINGS FILE IS UNSOUND -- fix rulings.json before trusting this block:"]
         lines[3:3] = ["    - " + p for p in problems] + [""]
-    for r in rows:
+    for i, r in enumerate(rows):
         lines.append('  %s (%s): "%s"' % (r.get("id", "?"), r.get("date", "?"),
                                           r.get("verbatim", "")))
-        if r.get("meaning"):
+        if r.get("meaning") and i >= len(rows) - MEANING_ROWS:
             lines.append("      => %s" % _first_sentence(r["meaning"]))
     return "\n".join(lines)
 
@@ -302,6 +302,11 @@ def render_rulings() -> str:
 #: The verbatim quote is the ruling and is kept whole; the meaning is cut to its first sentence,
 #: and rulings.json beside this script holds the rest.
 MEANING_CAP = 160
+#: crew#584, measured 2026-08-28: 44 rulings with a meaning line each rendered 15,993 of the
+#: 16,000 cap, so the 45th ruling (R47) turned claude-guards CI red. Every verbatim quote stays
+#: (11.5 KB for 45); the => meaning line is carried for the newest MEANING_ROWS only (13.2 KB),
+#: the older ones are read from rulings.json.
+MEANING_ROWS = 15
 
 
 def _first_sentence(text: str) -> str:
