@@ -97,8 +97,9 @@ jobs:
             | jq -R -s 'split("\n") | map(select(length > 0))' > hooks_wired.json
           git ls-files '*.py' | sed 's|.*/||' | sort -u \
             | jq -R -s 'split("\n") | map(select(length > 0))' > tracked_py.json
-          jq -s '{guards: .[0].guards, wired: .[1], policy_dir_py: .[2], hooks_wired: .[3], tracked_py: .[4]}' \
-            guards.json wired.json policy_py.json hooks_wired.json tracked_py.json > inventory.json
+          cat policy/*_test.rego | grep -cE 'count\([^)]*\)\s*==\s*[0-9]+' | jq -R 'tonumber' > literal_counts.json
+          jq -s '{guards: .[0].guards, wired: .[1], policy_dir_py: .[2], hooks_wired: .[3], tracked_py: .[4], literal_counts: .[5]}' \
+            guards.json wired.json policy_py.json hooks_wired.json tracked_py.json literal_counts.json > inventory.json
           echo "guards found: $(jq '.guards | length' inventory.json)"
 
       # Every rule in policy/*.rego is a unit test away from silently permitting

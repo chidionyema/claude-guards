@@ -25,5 +25,6 @@
     "laws-link-guard.py",
     "rule-guard.py",
     "opa-hook.py"
-  ]
+  ],
+  "literal_counts": 115
 }

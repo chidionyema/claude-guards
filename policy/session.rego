@@ -62,3 +62,10 @@ context contains sprintf(
 	input.event == "SessionStart"
 	cwd_verdict == "outside"
 }
+
+# Founder, 2026-08-28: work slowed because new asks landed inside the running one. LAW 18: every
+# founder request is a tracked item; the running one keeps its lane.
+context contains concat("", [
+	"[one-active-item] If this prompt is a NEW ask while one item is open: put it on the board with an ETA ",
+	"in machine-hours and say so in one line (LAW 18); it does not pre-empt the open item unless the founder says now.",
+]) if input.event == "UserPromptSubmit"

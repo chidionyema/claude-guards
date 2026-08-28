@@ -291,3 +291,27 @@ deny contains msg if {
 	count(hits) > 0
 	msg := scope_reason(hits)
 }
+
+# Founder, 2026-08-28: "why is it taking so long". crew#603 CP5 was 29 guards and ~11k lines claimed
+# as one checkpoint, so it had no end a founder could see. LAW 33: define done before you start.
+# A comment that claims a checkpoint carries `Batches: N` and `Budget: N machine-hours`, or it
+# is not a claim. The body read here is the command text (a `--body` string or a heredoc);
+# a `--body-file` claim is read by credential-guard's path today and by the door's facts layer
+# once CP5 batch 3 lands.
+claim_comment := `(?is)\bgh\s+issue\s+comment\b.*\bclaim(?:ing|ed)?\b[^\n]{0,120}\bCP-?\d`
+
+deny contains msg if {
+	input.tool_name == "Bash"
+	cmd := input.tool_input.command
+	regex.match(claim_comment, cmd)
+	missing := [k | some k in ["Batches:", "Budget:"]; not regex.match(sprintf(`(?m)^\s*%s\s*\d+`, [k]), cmd)]
+	count(missing) > 0
+	msg := sprintf(
+		concat("", [
+			"REFUSED: this claims a checkpoint without %s (LAW 33; founder 2026-08-28: a 29-guard checkpoint claimed as one ",
+			"piece had no end he could see). Write `Batches: N` (how many PRs) and `Budget: N machine-hours` in the claim, ",
+			"or split the checkpoint first.",
+		]),
+		[concat(" and ", missing)],
+	)
+}

@@ -322,3 +322,17 @@ deny contains msg if {
 }
 
 basename(path) := parts[count(parts) - 1] if parts := split(path, "/")
+
+# Founder, 2026-08-28: "how do we prevent doing this same shit again". Two adapter rows removed
+# broke four tests that asserted `count(x) == 8`; each is a test of a number, not of a rule, and
+# each breaks on the next honest change. Ratchet: the number of literal count assertions in
+# policy/*_test.rego may only fall. A test names what is in the list, or reads the list.
+literal_counts_ceiling := 115
+
+deny contains msg if {
+	input.literal_counts > literal_counts_ceiling
+	msg := sprintf(
+		"policy/*_test.rego has %d `count(...) == N` assertions, up from %d. A literal count breaks on every honest add or remove (four did on 2026-08-28). Assert the members, or read the list, and lower literal_counts_ceiling when you remove one.",
+		[input.literal_counts, literal_counts_ceiling],
+	)
+}

@@ -166,6 +166,35 @@ def checkpoint_age_s(transcript_path):
         return None
 
 
+def guard_tax(session_id: str, window_s: float = 3600.0) -> dict:
+    """Refusals per hook for this session in the last hour, from hook-run.py's ledger.
+    Founder, 2026-08-28 ("why is it taking so long"): four fences refused this session's pushes and
+    PR creates for paperwork; a guard that refuses correct work is an outage (LAW 38) and the
+    reply must say so. reply.rego reads this as input.guard_tax."""
+    import datetime as _dt
+    path = os.environ.get("HOOK_OUTCOMES") or os.path.expanduser("~/.claude/state/hook-outcomes.jsonl")
+    out: dict = {}
+    try:
+        now = _dt.datetime.now(_dt.timezone.utc)
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if not row.get("refused") or row.get("session") != session_id:
+                    continue
+                try:
+                    at = _dt.datetime.fromisoformat(str(row.get("at", "")).replace("Z", "+00:00"))
+                except ValueError:
+                    continue
+                if (now - at).total_seconds() <= window_s:
+                    out[str(row.get("hook"))] = out.get(str(row.get("hook")), 0) + 1
+    except OSError:
+        pass
+    return out
+
+
 def standing_focus() -> str:
     """The founder's standing FOCUS: line (goal_focus.py writes it), or '' when none is set.
     crew#395 / crew#398: policy/reply.rego holds a BLOCKED: reply to it; the file read is here
@@ -295,6 +324,7 @@ def decide(payload: dict, event: str) -> int:
             reply = last_reply_above_fold(str(payload.get("transcript_path", "")))
             payload_in = {"event": "Stop", "reply": reply, "focus": standing_focus()}
             payload_in["turn_edits"], payload_in["turn_files"] = last_turn_edits(str(payload.get("transcript_path", "")))
+            payload_in["guard_tax"] = guard_tax(str(payload.get("session_id", "")))
             age = checkpoint_age_s(str(payload.get("transcript_path", "")))
             if age is not None:
                 payload_in["checkpoint_age_s"] = age

@@ -153,3 +153,18 @@ test_one_pass_batched_line_passes if {
 test_one_pass_iterating_one_file_passes if {
 	count({m | some m in data.reply.deny; contains(m, "[one-pass]")}) == 0 with input as {"event": "Stop", "reply": "INVENTORY: x", "turn_edits": 9, "turn_files": 1}
 }
+
+# Guard tax (founder 2026-08-28, LAW 38).
+test_three_refusals_by_one_hook_need_a_guard_tax_line if {
+	msgs := data.reply.deny with input as {"event": "Stop", "reply": "INVENTORY: pushed.", "guard_tax": {"dupe-work-fence.py": 3, "rule-guard.py": 1}}
+	count({m | some m in msgs; contains(m, "Guard-tax:")}) == 1
+	some m in msgs
+	contains(m, "dupe-work-fence.py refused")
+	not contains(m, "rule-guard.py")
+}
+
+test_a_guard_tax_line_or_fewer_refusals_passes if {
+	count({m | some m in data.reply.deny with input as {"event": "Stop", "reply": "INVENTORY: pushed.\nGuard-tax: dupe-work-fence.py 3 — guard wrong: No-Issue must start the line, said nowhere", "guard_tax": {"dupe-work-fence.py": 3}}; contains(m, "Guard-tax:")}) == 0
+	count({m | some m in data.reply.deny with input as {"event": "Stop", "reply": "INVENTORY: pushed.", "guard_tax": {"dupe-work-fence.py": 2}}; contains(m, "Guard-tax:")}) == 0
+	count({m | some m in data.reply.deny with input as {"event": "Stop", "reply": "INVENTORY: pushed."}; contains(m, "Guard-tax:")}) == 0
+}

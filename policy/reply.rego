@@ -219,3 +219,27 @@ deny contains msg if {
 		[input.turn_edits, input.turn_files],
 	)
 }
+
+# Founder, 2026-08-28: "why is it taking so long" / "how do we prevent doing this same shit again".
+# Measured that session: the same fences refused pushes and PR creates four times for paperwork
+# (a body-file path, a No-Issue anchor, an evidence image). LAW 38: a guard that refuses correct
+# work is an outage. When one hook has refused this session three times in an hour, the reply
+# carries a `Guard-tax:` line naming the hook and whether the guard or the work was wrong, so it
+# reaches the founder and the science snapshot (hook_outcomes) instead of being absorbed.
+guard_tax_threshold := 3
+
+taxed_hooks := {h | some h, n in input.guard_tax; n >= guard_tax_threshold}
+
+deny contains msg if {
+	input.event == "Stop"
+	count(taxed_hooks) > 0
+	not regex.match(`(?m)^\s*Guard-tax:\s*\S`, input.reply)
+	msg := sprintf(
+		concat("", [
+			"BLOCKED by reply.rego (LAW 38, founder 2026-08-28): %s refused this session %d+ times in the last hour. ",
+			"A guard that refuses correct work is an outage, and one that is right three times is a worker who is not reading it. ",
+			"Add one line: `Guard-tax: <hook> <n> — guard wrong: <why> | work wrong: <why>`. It reaches the founder and hook_outcomes.",
+		]),
+		[concat(", ", sort(taxed_hooks)), guard_tax_threshold],
+	)
+}

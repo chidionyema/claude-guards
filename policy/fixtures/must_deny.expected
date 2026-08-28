@@ -5,3 +5,4 @@ grew from 145 to 400 lines
 implements 9 command refusals in Python, up from 7
 is Python under policy/
 wires a hook to opa-hook.py, which is not a tracked file
+`count(...) == N` assertions, up from

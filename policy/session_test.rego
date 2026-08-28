@@ -44,3 +44,8 @@ test_one_pass_question_is_asked_at_start_and_prompt_not_at_stop if {
 	q in session.context with input as {"event": "UserPromptSubmit", "cwd": "/Users/x/dev/code", "home": "/Users/x"}
 	not q in session.context with input as {"event": "Stop", "cwd": "/Users/x/dev/code", "home": "/Users/x"}
 }
+
+test_one_active_item_reminder_at_prompt_not_at_start if {
+	count({m | some m in session.context with input as {"event": "UserPromptSubmit", "cwd": "/Users/x/dev/code", "home": "/Users/x"}; startswith(m, "[one-active-item]")}) == 1
+	count({m | some m in session.context with input as {"event": "SessionStart", "cwd": "/Users/x/dev/code", "home": "/Users/x"}; startswith(m, "[one-active-item]")}) == 0
+}

@@ -235,3 +235,16 @@ test_scope_write_rules_only_escape_project_file_and_read_pass if {
 	scope_hits("Edit", {"file_path": "/Users/anyone/.claude/CLAUDE.md", "new_string": "measure before building"}) == 0
 	scope_hits("Read", {"file_path": "/Users/anyone/.claude/CLAUDE.md"}) == 0
 }
+
+# A checkpoint claim names its batches and budget (founder 2026-08-28, LAW 33).
+test_a_claim_without_batches_and_budget_is_refused if {
+	msgs := {m | some m in hooks.deny with input as {"tool_name": "Bash", "tool_input": {"command": "gh issue comment 603 --repo chidionyema/crew --body 'Claiming CP5: ports all guards to rego'"}}; contains(m, "claims a checkpoint")}
+	count(msgs) == 1
+	some m in msgs
+	contains(m, "Batches: and Budget:")
+}
+
+test_a_claim_with_batches_and_budget_passes_and_a_plain_comment_is_not_a_claim if {
+	count({m | some m in hooks.deny with input as {"tool_name": "Bash", "tool_input": {"command": "gh issue comment 603 --repo chidionyema/crew --body \"claim CP5 batch 3\nBatches: 2\nBudget: 3 machine-hours\""}}; contains(m, "claims a checkpoint")}) == 0
+	count({m | some m in hooks.deny with input as {"tool_name": "Bash", "tool_input": {"command": "gh issue comment 603 --repo chidionyema/crew --body 'CP5 batch 1 landed as cg#210'"}}; contains(m, "claims a checkpoint")}) == 0
+}
