@@ -128,6 +128,11 @@ legacy := {
 	# makes it mandatory. conftest has no parser for markdown or free text, so this rule
 	# cannot be Rego; recorded at its landing size. Only ever falls.
 	"vendor-lock-guard.py": 196,
+	# cg#183: shells out to git (merge-base, diff --stat, rev-list, symbolic-ref) to measure a
+	# merge target's distance before the merge runs; conftest has no git, so the measurement
+	# cannot be Rego. Tracked for the first time at its landing size (it ran untracked from
+	# 2026-08-27 13:00). Only ever falls.
+	"merge-target-divergence-guard.py": 159,
 }
 
 # How many command refusals each guard still implements in Python. Same direction
