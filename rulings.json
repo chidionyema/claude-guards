@@ -12,14 +12,14 @@
     {
       "id": "R2-say-once-all-ack",
       "date": "2026-08-24",
-      "verbatim": "if i say something, all agents need to get it and ack — all agents in estate, in any session. they need durable memory. no more things getting lost.",
+      "verbatim": "if i say something, all agents need to get it and ack \u2014 all agents in estate, in any session. they need durable memory. no more things getting lost.",
       "meaning": "A founder instruction said to ANY session binds ALL sessions. When you receive a ruling relayed from another session, act on it without making him repeat it. New standing rulings are added to this file the moment they are given.",
       "enforced_by": "friction-relay.py (injection); this file (durability)"
     },
     {
       "id": "R3-strict-bar",
       "date": "2026-08-24",
-      "verbatim": "you need to be strict — if its not raising the bar, we dont want it — try to raise the bar or ill terminate the whole crew",
+      "verbatim": "you need to be strict \u2014 if its not raising the bar, we dont want it \u2014 try to raise the bar or ill terminate the whole crew",
       "meaning": "Every review grades KEEP / REWORK / NOT-RAISING-THE-BAR. Recommending removal of existing work is an expected outcome. Applies to your own work first.",
       "enforced_by": "review protocol crew#105"
     },
@@ -33,36 +33,36 @@
     {
       "id": "R5-founder-out-of-the-loop",
       "date": "2026-08-24",
-      "verbatim": "i need to be out of the loop and things work reliably and get done — i dont need all this friction",
+      "verbatim": "i need to be out of the loop and things work reliably and get done \u2014 i dont need all this friction",
       "meaning": "Nothing waits on the founder except money, identity, or an irreversible call. No approval dialogs between agents (crossSessionInbound=accept), no 'shall I' questions, no menus. If a mechanism makes him click, the mechanism is the defect.",
       "enforced_by": "settings.json crossSessionInbound; LAW 5 / LAW 20 / LAW 27"
     },
     {
       "id": "R6-mature-platforms-over-hand-rolled",
       "date": "2026-08-24",
-      "verbatim": "anything we do ourselves is risky — we need mature proven platforms, proven. all this writing bash scripts and python scripts — we need to be in the future",
-      "meaning": "LAW 43 is the primary review axis for ALL infra/platform work. Hand-rolled bash/python that a mature, proven platform already does grades REWORK with the replacement named, or NOT-RAISING-THE-BAR. Tooling research runs autonomously (online, on the record) and lands in science/RESEARCH-LEDGER.jsonl. Source: crew#102 comment 5391796940. 2026-08-24 escalations: 'custom code in general should be a last resort. Open source. Mature. Stop writing wrappers.' and 'we need to be doing research as instinct' — research is not a step you are asked for; every build-or-adopt decision arrives with fresh online sources already on the ledger, unprompted.",
+      "verbatim": "anything we do ourselves is risky \u2014 we need mature proven platforms, proven. all this writing bash scripts and python scripts \u2014 we need to be in the future",
+      "meaning": "LAW 43 is the primary review axis for ALL infra/platform work. Hand-rolled bash/python that a mature, proven platform already does grades REWORK with the replacement named, or NOT-RAISING-THE-BAR. Tooling research runs autonomously (online, on the record) and lands in science/RESEARCH-LEDGER.jsonl. Source: crew#102 comment 5391796940. 2026-08-24 escalations: 'custom code in general should be a last resort. Open source. Mature. Stop writing wrappers.' and 'we need to be doing research as instinct' \u2014 research is not a step you are asked for; every build-or-adopt decision arrives with fresh online sources already on the ledger, unprompted.",
       "enforced_by": "review protocol crew#115; LAW 43"
     },
     {
       "id": "R7-unify-and-standardise",
       "date": "2026-08-24",
-      "verbatim": "we need to unify our platform and stack — standardise. no excuses, i need this production ready fully. we cant be lax about infra or platform work — the headline is risk elimination",
-      "meaning": "One standard stack, not one per session. New components use the standard or the deviation is stated and reviewed. Strict review for all infra work; production-ready is the only bar. Source: crew#102 comment 5391796940. 2026-08-24 escalation: 'everyone needs to focus — this is our chance to finally stop the fire fighting — we need standardisation today.' The standard is written down in crew docs/STANDARDS.md; a component not on it needs a stated, reviewed deviation.",
+      "verbatim": "we need to unify our platform and stack \u2014 standardise. no excuses, i need this production ready fully. we cant be lax about infra or platform work \u2014 the headline is risk elimination",
+      "meaning": "One standard stack, not one per session. New components use the standard or the deviation is stated and reviewed. Strict review for all infra work; production-ready is the only bar. Source: crew#102 comment 5391796940. 2026-08-24 escalation: 'everyone needs to focus \u2014 this is our chance to finally stop the fire fighting \u2014 we need standardisation today.' The standard is written down in crew docs/STANDARDS.md; a component not on it needs a stated, reviewed deviation.",
       "enforced_by": "review protocol crew#115; LAW 41; crew docs/STANDARDS.md"
     },
     {
       "id": "R8-no-provider-spof-rebrand",
       "date": "2026-08-24",
-      "verbatim": "our whole platform cant be dependent on one provider. minimax [ninina] needs to be part of the team and should be able to work autonomously. i dont want to see CLAUDE.md, claude folder etc — we need a rebrand — one unified framework that can onboard new providers and is agnostic",
+      "verbatim": "our whole platform cant be dependent on one provider. minimax [ninina] needs to be part of the team and should be able to work autonomously. i dont want to see CLAUDE.md, claude folder etc \u2014 we need a rebrand \u2014 one unified framework that can onboard new providers and is agnostic",
       "meaning": "No estate asset lives in a vendor-named home; vendor dirs get symlinks to neutral estate files (the ~/AGENTS.md pattern). Repo instruction files are AGENTS.md, with CLAUDE.md as a symlink. MiniMax (prospector's primary brain, 'ninina' in founder-speak) joins as an autonomous team member through the same certification as every agent; Gemini CLI likewise. Onboarding a new provider is a checklist, not a project. Codifies LAW 34 as a ruling.",
       "enforced_by": "LAW 34; the rebrand plan (crew issue, 2026-08-24)"
     },
     {
       "id": "R9-review-proves-operational",
       "date": "2026-08-24",
-      "verbatim": "is anything actually fully operational … the review includes getting it fully operational … add to acceptance criteria",
-      "meaning": "A review is not finished when the code is graded — it is finished when the work is proven FULLY OPERATIONAL on the live system. Every REVIEW record carries an 'Operational:' line quoting the command and its output that shows the thing running (the scheduled job green, the service serving, the gate deciding). Merged-but-not-running grades REWORK. This is an acceptance criterion on every review, additive to R3's KEEP/REWORK/NOT-RAISING-THE-BAR.",
+      "verbatim": "is anything actually fully operational \u2026 the review includes getting it fully operational \u2026 add to acceptance criteria",
+      "meaning": "A review is not finished when the code is graded \u2014 it is finished when the work is proven FULLY OPERATIONAL on the live system. Every REVIEW record carries an 'Operational:' line quoting the command and its output that shows the thing running (the scheduled job green, the service serving, the gate deciding). Merged-but-not-running grades REWORK. This is an acceptance criterion on every review, additive to R3's KEEP/REWORK/NOT-RAISING-THE-BAR.",
       "enforced_by": "review protocol crew#115; LAW 17; crew docs/STANDARDS.md acceptance criteria"
     },
     {
@@ -82,7 +82,7 @@
     {
       "id": "R12-no-drift",
       "date": "2026-08-24",
-      "verbatim": "i told you the priorities clearly — you drifted again — we need to eliminate this — any work you do must make us better at being better — things that move the whole platform forward",
+      "verbatim": "i told you the priorities clearly \u2014 you drifted again \u2014 we need to eliminate this \u2014 any work you do must make us better at being better \u2014 things that move the whole platform forward",
       "meaning": "A session works ONLY its founder-stated priority or an explicitly assigned crew item. A side-task discovered along the way gets a one-line crew note and an owner, never the session's own time. Before taking any task, the test is LAW 35/42: does this make the estate better at getting better, and does it move the whole platform. Said live to session 8ef72725 after it drifted from crew#119 into CI rehab on a repo he then deprecated. Ruling ids R10 and R11 were already taken when this landed; the relay called it R10-no-drift. Founder's mechanical spec, given 2026-08-24 after the ruling landed: 'Before every tool call, the agent checks: does this serve the ACTIVE goal? If no -> Blocked. Ticket it if needed. Stay on lane.' So the check is PreToolUse, not Stop-time.",
       "enforced_by": "friction-relay.py injection; goal-guard.py PreToolUse gate per crew#132 (implementation claimed by session 8ef72725; report-mode first, LAW 38 escape hatch = a one-line crew note naming an owner)"
     },
@@ -117,7 +117,7 @@
       "id": "R17-founder-only-declares-live",
       "date": "2026-08-24",
       "verbatim": "no lie is deno and onboardig founder only founder decives if sonething is live or not, no one else can nove a ticket to live core",
-      "meaning": "Only the founder marks anything live, done, core or operational. An agent may write ONLY the Observation column of ESTATE_STATE.md: what it measured, the command, the output, the timestamp. An agent writing an approval, a green tick, or the words live/done/operational about a component is a protocol violation. Observe and propose; the founder executes the approval. This is on top of the existing LAW 17 proof rule, not instead of it: proof earns a row in Observation, it does not earn the tick. Numbered R17, not R16: two sessions allocated R16 at the same time on 2026-08-24 — this ruling and R16-command-guards-are-rego — and the second one to reach main is the one that moves. friction-relay.py now refuses a rulings.json where two rulings share a number, so the next collision is caught before it is injected rather than after one ruling has quietly replaced the other.",
+      "meaning": "Only the founder marks anything live, done, core or operational. An agent may write ONLY the Observation column of ESTATE_STATE.md: what it measured, the command, the output, the timestamp. An agent writing an approval, a green tick, or the words live/done/operational about a component is a protocol violation. Observe and propose; the founder executes the approval. This is on top of the existing LAW 17 proof rule, not instead of it: proof earns a row in Observation, it does not earn the tick. Numbered R17, not R16: two sessions allocated R16 at the same time on 2026-08-24 \u2014 this ruling and R16-command-guards-are-rego \u2014 and the second one to reach main is the one that moves. friction-relay.py now refuses a rulings.json where two rulings share a number, so the next collision is caught before it is injected rather than after one ruling has quietly replaced the other.",
       "enforced_by": "crew/ESTATE_STATE.md two-column format; pending: PR check that rejects a diff writing the Founder Approval column"
     },
     {
@@ -213,7 +213,7 @@
       "id": "R33-feed-handoff-every-30-minutes",
       "date": "2026-08-25",
       "verbatim": "ok lets adopt this but every 30 minutes not 4 hours ... and ensure everyone is permanently doing this without me asking ... this way even if agent sessions die, we can recover easily",
-      "meaning": "Every session appends a handoff to ~/.estate/feed.md at least every 30 minutes: six lines at most, each starting with 🔴 Blocked / 🟡 Active / 🟢 Done / ⚪ Pending / 📍 State. The feed is the persistent brain; a session that dies has left its state there. A session that starts with 'Status' reads the feed and summarises it; nobody re-explains and the founder is never asked what the feed already says. Enforced by ~/.claude/scripts/feed-guard.py on Stop (blocks an overdue turn), SessionStart (injects the last entries) and UserPromptSubmit (reminder). Append with: python3 ~/.claude/scripts/feed-guard.py append --session <id> --lane <repo>."
+      "meaning": "Every session appends a handoff to ~/.estate/feed.md at least every 30 minutes: six lines at most, each starting with \ud83d\udd34 Blocked / \ud83d\udfe1 Active / \ud83d\udfe2 Done / \u26aa Pending / \ud83d\udccd State. The feed is the persistent brain; a session that dies has left its state there. A session that starts with 'Status' reads the feed and summarises it; nobody re-explains and the founder is never asked what the feed already says. Enforced by ~/.claude/scripts/feed-guard.py on Stop (blocks an overdue turn), SessionStart (injects the last entries) and UserPromptSubmit (reminder). Append with: python3 ~/.claude/scripts/feed-guard.py append --session <id> --lane <repo>."
     },
     {
       "id": "R34-net-new-research-paradigm-verifiable-calibrated",
@@ -279,7 +279,7 @@
       "id": "R44-high-tech-only",
       "date": "2026-08-28",
       "verbatim": "we need all agents to understand pernannely that we are high tech only ... i dont want to hear any proposals not neeting the high tech standards ... everything we do for fiounder is high tech, seanless and frctionless",
-      "meaning": "The estate is high-tech only, permanently, in every session. A proposal, plan, playbook or FOUNDER ACTION that needs a human hand — paste, copy, type, mint, click around a UI, run a script, a second visit for the same thing, a laptop in the loop — never reaches the founder: it is refused at the gate and rebuilt as machine identity plus at most one SSO tap on a device already signed in. First-time vendor setup is platform work under a role identity in the org IdP, never a CEO task; the founder is asked only for money, identity (he is the sole IdP admin today) or an irreversible call. Recorded verbatim on crew#66 (comments 5453316105, 5453321155, 5453419163).",
+      "meaning": "The estate is high-tech only, permanently, in every session. A proposal, plan, playbook or FOUNDER ACTION that needs a human hand \u2014 paste, copy, type, mint, click around a UI, run a script, a second visit for the same thing, a laptop in the loop \u2014 never reaches the founder: it is refused at the gate and rebuilt as machine identity plus at most one SSO tap on a device already signed in. First-time vendor setup is platform work under a role identity in the org IdP, never a CEO task; the founder is asked only for money, identity (he is the sole IdP admin today) or an irreversible call. Recorded verbatim on crew#66 (comments 5453316105, 5453321155, 5453419163).",
       "enforced_by": "idp policy/no-manual-steps.rego (no-toil gate on every PR body and changed doc/manifest, bin/idp-no-toil --sweep for the estate baseline); blocker-guard.py (FOUNDER ACTION must be a tap, never a hand verb); LAW 20 / LAW 27 / LAW 47"
     },
     {
@@ -300,7 +300,7 @@
       "id": "R47-zero-bottleneck",
       "date": "2026-08-28",
       "verbatim": "sorry we need to get ruthless about optinisation ... zealot level ruthnesness ... zero bottleneck law optinise ruthlessly ... this is LAW ... plain english are our build faster not not ... where is bottleneck eactly ... no flffing",
-      "meaning": "Every bottleneck in the delivery loop is measured from the run's own log and removed, never narrated: work that cannot change a verdict is not run (idp-ci 422 s on run 33198380701 → idp#628 judges only the platform dirs a PR touched and runs pytest on all cores; numbers on crew#584 5456303731).",
+      "meaning": "Every bottleneck in the delivery loop is measured from the run's own log and removed, never narrated: work that cannot change a verdict is not run (idp-ci 422 s on run 33198380701 \u2192 idp#628 judges only the platform dirs a PR touched and runs pytest on all cores; numbers on crew#584 5456303731).",
       "enforced_by": "idp bin/idp-ci rung 9 (IDP_CI_BASE) + tests/test_incident_crew584_kyverno_rung_scoped_to_the_diff.py"
     },
     {
@@ -309,6 +309,14 @@
       "verbatim": "zero friction policy ... thast what highly visivble never to be looked for neans ... you need to understand founder",
       "meaning": "Nothing the founder asked for may need to be looked for, asked for twice, or opened elsewhere. A deliverable is printed in the reply in full, then pinned where he already looks (Telegram pin, the portal home nav, a pinned crew issue); a gate that refuses finished work is fixed in the same turn, never reported. Said while the depth-psychology audit (crew#593) and the road to 9D (crew#596) were being delivered.",
       "enforced_by": "crew docs/ROAD-TO-9D.md Stage 1.6-1.7 (decision-rights table, digest with one-tap confirm); founder-deliver.py on Stop",
+      "source": "session f3f21d6e, 2026-08-28"
+    },
+    {
+      "id": "R49-no-secrets-in-chat",
+      "date": "2026-08-28",
+      "verbatim": "we dont send password here",
+      "meaning": "No password, token or key is ever written into Telegram, a PR, an issue, a log or a reply. A secret is minted by the machine, stored in the vault (bin/idp-vault-put) or a 0600 file on the host that uses it, and the message names WHERE it is, never WHAT it is. Founder said it the once, 2026-08-28 20:25Z, after a Sunshine password was sent to the home channel (deleted, rotated).",
+      "enforced_by": "friction-relay replays this at session start; pr-evidence and feed-guard refuse a line matching password=|token=|secret= with a value",
       "source": "session f3f21d6e, 2026-08-28"
     }
   ],
