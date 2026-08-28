@@ -34,5 +34,12 @@ test_pre_tool_use_names_eight_guards_each_with_a_tools_list if {
 }
 
 test_stop_names_fourteen_adapters if {
-	count(adapters.stop) == 14
+	count(adapters.stop) == 15
+}
+
+test_one_pass_guard_asks_before_and_measures_after if {
+	adapters.session_start[0][0] == "one-pass-guard.py"
+	adapters.user_prompt_submit[0][0] == "one-pass-guard.py"
+	some r in adapters.stop
+	r[0] == "one-pass-guard.py"
 }

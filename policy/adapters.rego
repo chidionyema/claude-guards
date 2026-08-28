@@ -15,6 +15,7 @@ package adapters
 import rego.v1
 
 session_start := [
+	["one-pass-guard.py"],
 	["laws-link-guard.py"],
 	["peer-loop-fence.py"],
 	["goal-guard.py"],
@@ -27,6 +28,7 @@ session_start := [
 # UserPromptSubmit, in order. Same batch rule: five adapters, none a refusal (the one refusal
 # in context-guard-hook.py is its PreToolUse half, which settings never wired).
 user_prompt_submit := [
+	["one-pass-guard.py"],
 	["directive-capture.py"],
 	["context-guard-hook.py"],
 	["goal-guard.py"],
@@ -60,6 +62,7 @@ stop := [
 	["vendor-lock-guard.py"],
 	["dod-guard.py"],
 	["prompt-ledger.py"],
+	["one-pass-guard.py"],
 	["repeat-guard.py"],
 	["close-guard.py"],
 	["founder-deliver.py"],
