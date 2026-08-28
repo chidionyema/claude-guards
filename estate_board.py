@@ -26,6 +26,9 @@ import sys
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from issue_dod import LEGACY_FOUNDER_BOX  # noqa: E402  (one copy of the line, never two)
+
 # launchd jobs start with PATH=/usr/bin:/bin, where gh is not. Standard install
 # dirs, not machine names (LAW 46). Incident: crew#306 --scan printed BLIND every 5 min.
 _GH_DIRS = ("/usr/local/bin", "/opt/homebrew/bin")
@@ -124,6 +127,21 @@ def claimed(issue: dict) -> bool:
 def boxes(issue: dict) -> tuple[int, int]:
     b = issue.get("body") or ""
     return len(re.findall(r"- \[x\]", b, re.IGNORECASE)), len(re.findall(r"- \[ \]", b))
+
+
+def awaiting_receipt(issue: dict) -> bool:
+    """True when every unticked box is the legacy founder-receipt line and nothing else.
+
+    Founder, 2026-08-28: "should be waiting on [me] unless its physical action [machines] cannot
+    do" (R5). issue_dod.py stamped "Founder used it and confirmed" on every auto-opened issue, so
+    a finished item and an untouched one both landed in `no_rule` and the nightly line could not
+    tell them apart. On 2026-08-28 that hid three built-and-proved issues, one of them a P0.
+    Matched against the exact literal imported from issue_dod, not against the words "founder" or
+    "receipt": an English-word match would also catch crew#527's "after 7 days" receipt and
+    crew#345's "zero founder interaction", both of which are ours to prove, and both of which a
+    fuzzy filter did in fact misfile before this function existed."""
+    un = re.findall(r"^\s*[-*] \[ \] (.*)$", issue.get("body") or "", re.M)
+    return bool(un) and all(LEGACY_FOUNDER_BOX in u for u in un)
 
 
 def blocked_on(issue: dict) -> set[int]:
@@ -338,8 +356,10 @@ def close_pass(issues: list[dict], now: float, seen: dict[int, tuple[int, float]
     - an issue with an allow-listed Closes-when line closes when that command exits 0;
     - a Closes-when line outside ALLOWED_CLOSES_WHEN is refused: counted, logged, never run;
     - an issue with every box ticked closes once the board has seen that count for stale_hours;
+    - an issue whose only unticked box is the legacy founder receipt is counted
+      separately (awaiting_receipt), because it is finished work, not unstarted work;
     - anything else is held, counted, never touched."""
-    out = {"closed": [], "ran": 0, "held": 0, "no_rule": 0, "refused": 0}
+    out = {"closed": [], "ran": 0, "held": 0, "no_rule": 0, "refused": 0, "awaiting_receipt": 0}
     for i in issues:
         n = i["number"]
         cmd = closes_when(i)
@@ -370,6 +390,9 @@ def close_pass(issues: list[dict], now: float, seen: dict[int, tuple[int, float]
                 continue
             out["held"] += 1
             continue
+        if awaiting_receipt(i):
+            out["awaiting_receipt"] += 1
+            continue
         out["no_rule"] += 1
     return out
 
@@ -380,6 +403,7 @@ def log_close_pass(r: dict, open_count: int, path: str = CLOSER_LOG) -> None:
         return
     row = {"ts": utc(), "open": open_count, "closed": len(r["closed"]), "ran": r["ran"],
            "held": r["held"], "no_rule": r["no_rule"], "refused": r.get("refused", 0),
+           "awaiting_receipt": r.get("awaiting_receipt", 0),
            "by_rule": {k: sum(1 for _, w in r["closed"] if w == k) for k in ("closes-when", "all-ticked")}}
     try:
         Path(path).parent.mkdir(parents=True, exist_ok=True)
@@ -571,7 +595,8 @@ if __name__ == "__main__":
         print(f"board close ({'dry-run' if a.dry_run else 'posted'}) {utc()}: {len(issues)} open; "
               f"closed {', '.join(f'#{n} ({w})' for n, w in r['closed']) or '-'}; "
               f"ran {r['ran']} Closes-when line(s); refused {r['refused']}; held {r['held']}; "
-              f"no rule {r['no_rule']}")
+              f"no rule {r['no_rule']} " +
+              f"awaiting founder receipt {r.get('awaiting_receipt', 0)}")
         sys.exit(0)
     if a.cmd == "assign":
         issues = open_issues()
