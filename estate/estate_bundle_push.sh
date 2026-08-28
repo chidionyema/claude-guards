@@ -314,15 +314,18 @@ while read -r d; do
   #: objects". Measured 2026-08-27 by the recovery drill (idp run 33100565959, crew#300):
   #: Documents/code/hermes-v2.ARCHIVED.20260822/hermes-agent-self-evolution, depth 1 of
   #: NousResearch's repo, was the one broken bundle of 47. Its history lives on its remote;
-  #: what this disk holds cannot be restored from, so it is not escrowed, and a latest.bundle
-  #: it left in R2 is removed (the dated copies under bundles/<repo>/<day>/ stay).
+  #: what this disk holds cannot be restored from, so it is not escrowed, and the whole
+  #: prefix it left in R2 is withdrawn. Run df9d7e69 (2026-08-28 01:05Z) removed only
+  #: latest.bundle; the recover drill (idp run 33131027676) then still found full-latest.bundle
+  #: and the dated copies -- the same unrestorable bytes under other names. A dated copy of a
+  #: shallow bundle is no more a backup than the latest one.
   if [ "$(gplan "$d" rev-parse --is-shallow-repository 2>/dev/null)" = true ]; then
     sslug=$(printf %s "${d#$HOME/}" | tr '/' '-' | tr -cd 'A-Za-z0-9._-')
     log "shallow: $(basename "$d") is a depth-limited clone of ${remote:-no remote}; a bundle of it cannot be cloned back, so it is not escrowed"
-    if [ "${DRY:-0}" != 1 ] && rclone lsf ":s3:$R2_BUCKET/bundles/$sslug/latest.bundle" 2>/dev/null | grep -q .; then
-      rclone deletefile ":s3:$R2_BUCKET/bundles/$sslug/latest.bundle" 2>/dev/null \
-        && log "removed bundles/$sslug/latest.bundle: an unrestorable bundle is not a backup" \
-        || log "could not remove bundles/$sslug/latest.bundle"
+    if [ "${DRY:-0}" != 1 ] && [ -n "$sslug" ] && rclone lsf ":s3:$R2_BUCKET/bundles/$sslug/" 2>/dev/null | grep -q .; then
+      rclone purge ":s3:$R2_BUCKET/bundles/$sslug" 2>/dev/null \
+        && log "withdrew bundles/$sslug/: an unrestorable bundle is not a backup, under any name" \
+        || log "could not withdraw bundles/$sslug/"
     fi
     SHALLOW_N=$((${SHALLOW_N:-0}+1)); continue
   fi

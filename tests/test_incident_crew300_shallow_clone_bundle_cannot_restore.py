@@ -57,6 +57,12 @@ def test_the_pusher_skips_a_shallow_repo_before_counting_its_commits():
     count = s.find('n=$(gplan "$d" rev-list --count --all --not --remotes')
     assert 0 < guard < count, "the shallow check must run before any commit count plans a bundle"
     block = s[guard:count]
-    assert "continue" in block and "rclone deletefile" in block and "latest.bundle" in block
+    assert "continue" in block
+    # idp run 33131027676: removing latest.bundle alone left full-latest.bundle and the dated copies of the
+    # same shallow bytes, and the drill still found them. The whole prefix goes, and never an empty one
+    # (`purge bundles/` would be every escrow).
+    assert 'rclone purge ":s3:$R2_BUCKET/bundles/$sslug"' in block and "rclone deletefile" not in block
+    assert '[ -n "$sslug" ]' in block, "an empty slug must never purge the bucket root"
+    assert re.search(r'^\s*#:.*33131027676', s, re.M), "the run that found the leftovers is named"
     assert re.search(r'^\s*#:.*33100565959', s, re.M), "the measurement that found it is named"
     assert subprocess.run(["bash", "-n", PUSHER], capture_output=True).returncode == 0
