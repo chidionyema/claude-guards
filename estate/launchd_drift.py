@@ -156,9 +156,26 @@ def parked(label, paths, workdir=""):
                             capture_output=True, text=True).stdout.strip()
         if not want:
             hits.append((repo, on or "?", ""))
+        elif on == "HEAD" and _at_published_tip(repo, want):
+            # A detached HEAD sitting exactly on origin/<want> is the estate's
+            # pinned shape (the shared idp and crew checkouts are moved with
+            # `git checkout --detach origin/main` so a peer's branch never hides
+            # merged rows). It is not parked; only a detached HEAD that has
+            # drifted from that tip is. Reported 2026-08-28 as 38 holes.
+            continue
         elif on != want:
             hits.append((repo, on, want))
     return hits
+
+
+def _at_published_tip(repo, want):
+    """True when HEAD is the same commit as refs/remotes/origin/<want>."""
+    head = subprocess.run(["git", "-C", repo, "rev-parse", "HEAD"],
+                          capture_output=True, text=True).stdout.strip()
+    tip = subprocess.run(["git", "-C", repo, "rev-parse", "--verify", "-q",
+                          "refs/remotes/origin/" + want],
+                         capture_output=True, text=True).stdout.strip()
+    return bool(head) and head == tip
 
 
 def selftest():
@@ -206,6 +223,20 @@ def selftest():
                 if len(both) != 1 or both[0][1] != branch:
                     fails.append(f"expected the parked repo reported alongside "
                                  f"the pinned one, got {both!r}")
+        # detached exactly at origin/main is pinned, not parked; one commit
+        # past it is parked again (2026-08-28: 38 holes were this shape)
+        det = os.path.join(tmp, "detached")
+        subprocess.run(["git", "clone", "-q", origin, det], check=True)
+        gd = ["git", "-C", det]
+        subprocess.run(gd + ["config", "user.email", "t@t"], check=True)
+        subprocess.run(gd + ["config", "user.name", "t"], check=True)
+        subprocess.run(gd + ["checkout", "-q", "--detach", "origin/main"], check=True)
+        if parked("test.job", [os.path.join(det, "job.py")]):
+            fails.append("a detached HEAD at origin/main was flagged as parked")
+        subprocess.run(gd + ["commit", "-q", "--allow-empty", "-m", "drift"], check=True)
+        drifted = parked("test.job", [os.path.join(det, "job.py")])
+        if not drifted or drifted[0][1] != "HEAD":
+            fails.append(f"a detached HEAD past origin/main was not flagged: {drifted!r}")
         # a listed job is exempt, and only a listed one
         if parked("ai.estate.tracked-guard", [script]):
             fails.append("allowlisted label was still graded")
