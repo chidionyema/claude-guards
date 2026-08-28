@@ -253,6 +253,11 @@
           {
             "type": "command",
             "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/config-syntax-guard.py"
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/opa-hook.py",
+            "timeout": 15
           }
         ]
       },
@@ -281,6 +286,11 @@
             "type": "command",
             "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/credential-guard.py",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/opa-hook.py",
+            "timeout": 15
           }
         ]
       },
