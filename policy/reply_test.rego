@@ -141,3 +141,15 @@ test_dropping_a_worktree_is_not_a_parked_thread if {
 test_parking_a_named_lane_without_path_still_refused if {
 	count(deny) == 1 with input as stop_aged("Parking the drift lane for now, switching away from it.", 7200)
 }
+
+test_one_pass_six_edits_three_files_no_batched_line_refused if {
+	count(data.reply.deny) > 0 with input as {"event": "Stop", "reply": "INVENTORY: x", "turn_edits": 6, "turn_files": 3}
+}
+
+test_one_pass_batched_line_passes if {
+	count({m | some m in data.reply.deny; contains(m, "[one-pass]")}) == 0 with input as {"event": "Stop", "reply": "INVENTORY: x\nBatched: one ruff --fix pass over 22 files", "turn_edits": 9, "turn_files": 9}
+}
+
+test_one_pass_iterating_one_file_passes if {
+	count({m | some m in data.reply.deny; contains(m, "[one-pass]")}) == 0 with input as {"event": "Stop", "reply": "INVENTORY: x", "turn_edits": 9, "turn_files": 1}
+}

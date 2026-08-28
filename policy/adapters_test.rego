@@ -4,8 +4,8 @@ import rego.v1
 
 import data.adapters
 
-test_session_start_names_eight_adapters if {
-	count(adapters.session_start) == 8
+test_session_start_names_seven_adapters if {
+	count(adapters.session_start) == 7
 }
 
 test_no_session_start_adapter_lives_in_the_archive if {
@@ -21,8 +21,8 @@ test_every_adapter_is_a_bare_python_file_name if {
 	}
 }
 
-test_user_prompt_submit_names_six_adapters if {
-	count(adapters.user_prompt_submit) == 6
+test_user_prompt_submit_names_five_adapters if {
+	count(adapters.user_prompt_submit) == 5
 }
 
 test_pre_tool_use_names_eight_guards_each_with_a_tools_list if {
@@ -34,12 +34,5 @@ test_pre_tool_use_names_eight_guards_each_with_a_tools_list if {
 }
 
 test_stop_names_fourteen_adapters if {
-	count(adapters.stop) == 15
-}
-
-test_one_pass_guard_asks_before_and_measures_after if {
-	adapters.session_start[0][0] == "one-pass-guard.py"
-	adapters.user_prompt_submit[0][0] == "one-pass-guard.py"
-	some r in adapters.stop
-	r[0] == "one-pass-guard.py"
+	count(adapters.stop) == 14
 }

@@ -72,4 +72,3 @@ test_refuses_secret_value if {
 test_permits_secret_name if {
 	count(feed.deny) == 0 with input as {"lines": ["🔧 TOUCHES: x", "🔀 OVERLAP: none", "📍 State: token=TELEGRAM_BOT_TOKEN in the vault"]}
 }
-

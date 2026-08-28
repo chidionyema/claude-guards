@@ -192,3 +192,30 @@ deny contains msg if {
 		[trim_space(line), input.checkpoint_age_s],
 	)
 }
+
+# AGENTS.md hard rule 5 (founder, 2026-08-28: "making excuses you could have fixed in one
+# scripted pass without me telling you"). Measured, not graded from prose: opa-hook.py counts
+# the turn's edit tool calls (Edit/Write/NotebookEdit, sed -i, python3 - <<, cat >) and the
+# distinct files they touched. Six or more edits over three or more files is one-at-a-time
+# work by construction; the reply then owes a `Batched:` line naming the pass, or why none.
+one_pass_min_edits := 6
+
+one_pass_min_files := 3
+
+one_pass_question := concat("", [
+	"[one-pass] AGENTS.md hard rule 5, ONE PASS. Before the first edit ask: can this be batched? ",
+	"If several similar fixes are coming (the same lint over N files, the same rename, the same rung ",
+	"red in three PRs), write ONE script and run it once; name the pass in one line first. A turn ",
+	"that edits 6+ times across 3+ files is refused at Stop unless the reply carries a `Batched:` line.",
+])
+
+deny contains msg if {
+	input.event == "Stop"
+	input.turn_edits >= one_pass_min_edits
+	input.turn_files >= one_pass_min_files
+	not regex.match(`(?m)^\s*Batched:\s*\S`, input.reply)
+	msg := sprintf(
+		"[one-pass] this turn made %d separate edits across %d files and the reply has no `Batched:` line. AGENTS.md hard rule 5: similar fixes go in ONE scripted pass. Add `Batched: <the pass you ran, or why these could not be one pass>` and reply again.",
+		[input.turn_edits, input.turn_files],
+	)
+}

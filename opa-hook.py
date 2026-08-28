@@ -78,6 +78,44 @@ def denials(payload: dict, query: str = QUERY) -> list[str]:
         raise NoVerdict(f"opa answered in a shape this adapter cannot read: {e}") from e
 
 
+BASH_EDIT = re.compile(r"\bsed -i\b|\bpython3? - <<|(?:^|[|;&\s])(?:cat|tee)\s*>")
+
+
+def last_turn_edits(transcript_path: str) -> tuple[int, int]:
+    """Edit tool calls since the last human message, and the distinct files they touched (reply.rego one-pass)."""
+    count, files = 0, set()
+    try:
+        fh = open(transcript_path, encoding="utf-8", errors="replace")
+    except OSError:
+        return 0, 0
+    with fh:
+        for line in fh:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            if row.get("type") == "user":
+                content = (row.get("message") or {}).get("content")
+                human = isinstance(content, str) or (isinstance(content, list) and content and not any(
+                    isinstance(b, dict) and b.get("type") == "tool_result" for b in content))
+                if human:
+                    count, files = 0, set()
+                continue
+            if row.get("type") != "assistant":
+                continue
+            for block in (row.get("message") or {}).get("content") or []:
+                if not isinstance(block, dict) or block.get("type") != "tool_use":
+                    continue
+                inp = block.get("input") or {}
+                if block.get("name") in ("Edit", "Write", "NotebookEdit"):
+                    count += 1
+                    files.add(str(inp.get("file_path") or inp.get("notebook_path") or "?"))
+                elif block.get("name") == "Bash" and BASH_EDIT.search(str(inp.get("command", ""))):
+                    count += 1
+                    files.add("bash:" + str(inp.get("command", ""))[:40])
+    return count, len(files)
+
+
 def last_reply_above_fold(transcript_path: str) -> str:
     """Text of the last assistant message, cut at the first --- line, code fences blanked."""
     text = ""
@@ -230,6 +268,12 @@ def run_adapters(payload: dict, event: str) -> int:
         if ctx:
             parts.append(ctx)
     out: dict = {}
+    if event in ("SessionStart", "UserPromptSubmit"):
+        try:
+            q = denials({}, "data.reply.one_pass_question")
+            parts.insert(0, "".join(q) if isinstance(q, list) else str(q))
+        except NoVerdict:
+            pass
     if parts:
         out["hookSpecificOutput"] = {"hookEventName": event, "additionalContext": "\n\n".join(parts)}
     if system:
@@ -246,6 +290,7 @@ def decide(payload: dict, event: str) -> int:
         if not payload.get("stop_hook_active"):
             reply = last_reply_above_fold(str(payload.get("transcript_path", "")))
             payload_in = {"event": "Stop", "reply": reply, "focus": standing_focus()}
+            payload_in["turn_edits"], payload_in["turn_files"] = last_turn_edits(str(payload.get("transcript_path", "")))
             age = checkpoint_age_s(str(payload.get("transcript_path", "")))
             if age is not None:
                 payload_in["checkpoint_age_s"] = age

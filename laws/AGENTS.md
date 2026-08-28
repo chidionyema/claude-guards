@@ -148,12 +148,9 @@ commit search must run first to ensure the code doesn't already exist.
 GUARD collisions or force turns to end prematurely. Execute next tasks that have zero dependency
 on that background run, with zero narrative bloat.
 
-**5. One pass.** If several similar fixes can be made in one scripted pass, they are. Never
-one by one. Before the first edit ask "can this be batched?"; if yes, name the pass in one
-line, then run it. Founder, 2026-08-28: "making excuses you could have fixed in one scripted
-pass without me telling you". `one-pass-guard.py` asks the question at SessionStart and
-UserPromptSubmit, and at Stop refuses a reply whose turn edited files one at a time with no
-`Batched:` line saying why.
+**5. One pass.** Similar fixes go in ONE scripted pass, never one by one. Before the first
+edit ask "can this be batched?"; if yes, name the pass in a line and run it. Founder,
+2026-08-28. reply.rego refuses a turn that edited 6+ times over 3+ files with no `Batched:` line.
 
 # How to work
 
