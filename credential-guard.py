@@ -31,11 +31,21 @@ import estate_alert  # noqa: E402
 WRITES = re.compile(r"\bgh\s+(?:issue|pr)\s+(?:comment|create|edit)\b|\bgh\s+api\b[^\n]*\bcomments\b")
 
 
-def _last_assistant_text(path: str) -> str:
-    spec = importlib.util.spec_from_file_location("jargon_guard", HERE / "jargon-guard.py")
+def _transcript_reader():
+    # last_assistant_text lives in the archived jargon-guard (its rule is policy/reply.rego now).
+    # Loaded outside main()'s try: a missing helper must crash this guard so the door refuses
+    # (crew#603: a crashed guard refuses), never return 0 as an OSError did on 2026-08-29.
+    spec = importlib.util.spec_from_file_location("jargon_guard", HERE / "scripts" / "archive" / "jargon-guard.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return mod.last_assistant_text(pathlib.Path(path))
+    return mod.last_assistant_text
+
+
+_LAST_ASSISTANT_TEXT = _transcript_reader()
+
+
+def _last_assistant_text(path: str) -> str:
+    return _LAST_ASSISTANT_TEXT(pathlib.Path(path))
 
 
 def body_files(cmd: str, cwd: str) -> list[pathlib.Path]:

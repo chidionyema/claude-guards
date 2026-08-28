@@ -46,7 +46,7 @@ def test_founder_blocker_refuses_a_console_step_and_permits_a_device_step():
 
 
 def test_blocker_guard_grades_the_ledger_row_kind():
-    bg = _load("blocker_guard", "blocker-guard.py")
+    bg = _load("blocker_guard", "scripts/archive/blocker-guard.py")
     now = time.time()
     staged = [{"source": "founder-blocker", "outcome": "staged", "key": "staged:60:x", "msg_id": 7, "ts": now}]
     physical = [{"source": "founder-blocker", "outcome": "sent", "key": "physical:x", "msg_id": 8, "ts": now}]
@@ -61,7 +61,7 @@ def test_blocker_guard_grades_the_ledger_row_kind():
 
 
 def test_dod_guard_accepts_the_staged_shape_and_refuses_a_loose_one():
-    dod = _load("dod_guard", "dod-guard.py")
+    dod = _load("dod_guard", "scripts/archive/dod-guard.py")
     good = ("STAGED: platform/access apply (idp#150) is ready. Reply 'go' to execute immediately, "
             "'hold' to review. Auto-activating in 60 minutes.\n")
     assert dod.offences(good) == []
