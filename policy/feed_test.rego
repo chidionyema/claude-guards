@@ -64,3 +64,12 @@ test_permits_free_lane if {
 	count(feed.deny) == 0 with input as {"lines": good, "session": "bbbb", "lane": "idp", "holders": []}
 }
 
+# R49: a value after password= is refused; an env NAME is not a value
+test_refuses_secret_value if {
+	count(feed.deny) > 0 with input as {"lines": ["🔧 TOUCHES: x", "🔀 OVERLAP: none", concat("", ["📍 State: password=", "hunter", "2222", "wxyz"])]}
+}
+
+test_permits_secret_name if {
+	count(feed.deny) == 0 with input as {"lines": ["🔧 TOUCHES: x", "🔀 OVERLAP: none", "📍 State: token=TELEGRAM_BOT_TOKEN in the vault"]}
+}
+
