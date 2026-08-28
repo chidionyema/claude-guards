@@ -68,7 +68,7 @@ legacy := {
 	# command while checkpoints/LATEST.md is more than 30 min old). The lines are the state Rego
 	# cannot gather: checkpoint_age_s() stats LATEST.md next to the transcript, walks up from a
 	# subagents/ transcript, and hands None (BLIND) when there is no file. Adapter gathers, Rego decides.
-	"rule-guard.py": 1310,
+	"rule-guard.py": 1353,
 	# crew#407 (claude-guards#118): the credential shapes use lookarounds ((?!...), (?<!...)) that
 	# RE2, and so OPA, cannot run, and the one definition is estate_alert.credential_shape, shared
 	# with the Telegram senders (#113). The hook is the adapter for two events (Stop reply text,
@@ -137,8 +137,10 @@ legacy := {
 # can add a tenth rule function and delete a comment block to stay under it, and
 # the diff reads as a shrink. This counts the thing itself. The six left in
 # rule-guard.py are the ones that shell out to git or gh to ask about the live
-# tree, which Rego cannot do.
-rule_ceiling := {"rule-guard.py": 6}
+# tree, which Rego cannot do. The seventh (rule_self_symlink, 2026-08-28) asks the
+# filesystem whether `ln -s` target and link resolve to the same path, or whether -f
+# would unlink a regular file: a stat, not a regex.
+rule_ceiling := {"rule-guard.py": 7}
 
 deny contains msg if {
 	some g in input.guards

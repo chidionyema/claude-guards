@@ -223,6 +223,44 @@ def rule_two_dot_diff(cmd: str) -> str | None:
     return None
 
 
+_LN_RE = re.compile(r"(?:^|&&|;|\|\|)\s*(?:cd\s+(\S+)\s*&&\s*)?ln\s+(-\S+\s+)*(\S+)\s+(\S+)\s*(?=$|&&|;|\|\||#)")
+
+
+def rule_self_symlink(cmd: str) -> str | None:
+    """`ln -sf X X` does not fail: it unlinks the real file X and leaves a symlink to itself.
+
+    2026-08-28 00:57Z, session 09cd04a6: `ln -sf ~/dev/code/crew/science/warehouse.db
+    science/warehouse.db` from inside that checkout deleted the 97 MB warehouse and left a
+    link pointing at its own path; every reader got "unable to open database file". The
+    file was a derived rebuild, so it came back in one collect run — the next one may not
+    be. Refused: a link whose target resolves to the link's own path, and `-f` over an
+    existing regular file (the -f is what turns "already exists" into a silent delete)."""
+    if "symlink-intended" in cmd:
+        return None
+    for cwd, flags, target, link in _LN_RE.findall(cmd):
+        if "s" not in flags.replace("-", ""):
+            continue
+        base = os.path.expanduser(cwd) if cwd else os.getcwd()
+        def _abs(p: str) -> str:
+            p = os.path.expanduser(p.strip("'\""))
+            return os.path.normpath(p if os.path.isabs(p) else os.path.join(base, p))
+        t, l = _abs(target), _abs(link)
+        if os.path.isdir(l) and not os.path.islink(l):
+            l = os.path.join(l, os.path.basename(t))
+        if t == l:
+            return (f"BLOCKED by rule-guard: `ln -s` whose target IS the link: {l}\n"
+                    "This does not fail; it replaces the real file with a symlink to its own "
+                    "path (warehouse.db, 2026-08-28). Point the link at the other checkout's "
+                    "path, or drop the link and read the file where it is."
+                    + _escape("symlink-intended"))
+        if "f" in flags.replace("-", "") and os.path.isfile(l) and not os.path.islink(l):
+            return (f"BLOCKED by rule-guard: `ln -sf` over an existing regular file: {l}\n"
+                    "The -f deletes it first and nothing says so. Move or remove the file "
+                    "yourself if that is the intent."
+                    + _escape("symlink-intended"))
+    return None
+
+
 #: A PR bigger than this is not the small fix its title claims. #247 was 198 files.
 PR_FILE_CEILING = 40
 
@@ -762,7 +800,7 @@ def foreign_changes(cmd: str) -> dict | None:
 
 RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
          rule_commit_in_shared_checkout, rule_merge_red_pr,
-         rule_restart_kills_a_live_build)
+         rule_restart_kills_a_live_build, rule_self_symlink)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
@@ -980,6 +1018,11 @@ def selftest() -> int:
         ("flyctl logs -a prospector-engine", None),
         ("flyctl apps destroy prospector-engine --yes", None),
         ("flyctl scale count 0 -a x  # fly-revival-intended", None),
+        ("ln -sf ~/dev/code/crew/science/warehouse.db ~/dev/code/crew/science/warehouse.db", "rule_self_symlink"),
+        ("cd ~/dev/code/crew && ln -sf ~/dev/code/crew/science/warehouse.db science/warehouse.db", "rule_self_symlink"),
+        ("ln -s ~/dev/code/crew/science/warehouse.db /nonexistent-dir-xyz/warehouse.db", None),
+        ("ln -sf /a/w.db /a/w.db  # symlink-intended", None),
+        ("ln /a/w.db /a/w.db", None),
     ]
     bad = 0
     for cmd, want in cases:
