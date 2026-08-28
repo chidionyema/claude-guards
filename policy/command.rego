@@ -136,6 +136,29 @@ rules := [
 		]),
 	},
 	{
+		"id": "bare_kubectl",
+		# 2026-08-28, crew#66, founder: "Laptop kubeconfig points at a local k3d that isn't
+		# running -- well it shouldn't, don't repeat mistakes ... solve once and forever." A
+		# session ran bare kubectl on the laptop, hit the dead k3d-estate context (connection
+		# refused on 127.0.0.1:6445) and graded the estate BLIND while the cluster was fine.
+		# The estate has one path to its cluster: bin/idp-kube (idp), which builds the
+		# kubeconfig through bin/idp-cloud exactly as CI does. A kubectl that starts a command
+		# segment with no KUBECONFIG= in front of it is reading ~/.kube/config, and that is the
+		# mistake. Local-only subcommands (kustomize, config, version, explain, api-resources,
+		# help) never open a socket and pass.
+		"re": `(?:^|[;&|(]\s*)kubectl\s+(?:-[-\w]+(?:[=\s]+[-\w./,:]+)?\s+)*(?:get|describe|logs|apply|delete|exec|rollout|top|patch|scale|port-forward|wait|cp|create|edit|label|annotate|drain|cordon|uncordon|taint|debug|events|diff|replace|run|attach|auth|certificate|cluster-info|expose|set)\b`,
+		"marker": "kubectl-local-intended",
+		"must_match": "kubectl get pods -n observability",
+		"must_not_match": "bin/idp-kube get pods -n observability",
+		"msg": concat("", [
+			"BLOCKED by rule-guard: bare kubectl reads ~/.kube/config, and on this laptop that is a dead k3d context.\n",
+			"Founder, 2026-08-28 (crew#66): solve once and forever. The estate has one path to its cluster, ",
+			"the same one CI uses:  bin/idp-kube get pods -n observability   (bin/idp-kube --refresh ... rebuilds the kubeconfig; ",
+			"a BLIND line names bin/idp-oci-login when the session is the gap). ",
+			"A kubeconfig you built yourself is passed explicitly:  KUBECONFIG=/path kubectl ...",
+		]),
+	},
+	{
 		"id": "no_verify",
 		# `[^|;&]*` also crosses NEWLINES, so in a multi-line script it scanned
 		# past the end of the commit and matched a `-n` on any later line --
@@ -597,8 +620,11 @@ permitted_commands := [
 	"k3d cluster delete prospector-rehearsal",
 	"kind create cluster --name prospector",
 	"minikube start --driver=docker",
-	"kubectl create namespace prospector",
-	"kubectl apply -k deploy/k8s/overlays/staging",
+	# crew#66: bare kubectl is the mistake bare_kubectl exists to refuse, so these two
+	# are no longer permitted as bare kubectl -- they are permitted through the one path,
+	# bin/idp-kube, which builds the kubeconfig the same way CI does.
+	"bin/idp-kube create namespace prospector",
+	"bin/idp-kube apply -k deploy/k8s/overlays/staging",
 	"docker run --rm --user 10001:10001 --read-only prospector-store-api:local",
 	# R14 names Oracle Always Free as permitted, and no command line distinguishes
 	# a free ARM shape from a billable one -- so the oci CLI is deliberately not
