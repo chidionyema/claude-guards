@@ -57,7 +57,7 @@ def test_the_user_prompt_submit_list_names_the_five_adapters_settings_used_to_na
     out = subprocess.run(["opa", "eval", "--format", "json", "--data", str(HERE / "policy" / "adapters.rego"),
                           "data.adapters.user_prompt_submit"], capture_output=True, text=True, timeout=30)
     rows = json.loads(out.stdout)["result"][0]["expressions"][0]["value"]
-    assert [r[0] for r in rows] == ["directive-capture.py", "context-guard-hook.py", "goal-guard.py",
+    assert [r[0] for r in rows] == ["sync-guard.py", "directive-capture.py", "context-guard-hook.py", "goal-guard.py",
                                     "board-deliver.py", "feed-guard.py"]
     for r in rows:
         assert (HERE / r[0]).is_file(), f"{r[0]} is listed but not in the tree"

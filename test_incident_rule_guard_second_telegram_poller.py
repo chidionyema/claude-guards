@@ -29,6 +29,13 @@ def test_incident_starting_a_gateway_on_this_mac_is_refused_and_names_the_cluste
         "launchctl load -w ~/Library/LaunchAgents/ai.architect.gateway.plist",
         "launchctl start ai.architect.gateway",
         "cd ~/dev/code/hermes-v2 && .venv/bin/python -m hermes_cli.main gateway run --replace",
+        # The shape hermes-v2 actually hands you. Its installer prints it, its README prints it
+        # twice, `bin/teardown` prints it, and `bin/verify` row 10 printed it as the remediation
+        # on an IDLE row -- and the first version of this rule matched none of them.
+        "./bin/hermes gateway install",
+        "cd ~/dev/code/hermes-v2 && ./bin/hermes gateway install",
+        "bin/hermes gateway restart",
+        "hermes gateway start",
     ):
         v = _verdict(cmd)
         assert v is not None, cmd
@@ -44,6 +51,12 @@ def test_incident_stopping_one_and_looking_at_the_real_one_are_never_refused():
         "launchctl print gui/501/ai.architect.gateway",
         "bin/idp-kube -n hermes-agent logs deploy/hermes-agent-gateway",
         "bin/idp-kube -n hermes-agent rollout restart deploy/hermes-agent-gateway",
+        "bin/idp-kube -n hermes-agent get deploy hermes-agent-gateway -o yaml",
+        "cd ~/dev/code/hermes-v2 && ./bin/hermes cron status",
+        "grep -rn 'gateway install' ~/dev/code/hermes-v2/README.md",
+        # `hermes` has to be the program, not a word in a path. Refusing a grep is an outage.
+        'cd ~/dev/code/hermes-v2 && grep -n "gateway install" README.md',
+        "cd ~/dev/code/hermes-v2 && sed -n '295,305p' install",
         "launchctl bootstrap gui/501 ~/Library/LaunchAgents/ai.estate.scheduler.plist",
         "launchctl bootstrap gui/501 ~/Library/LaunchAgents/ai.architect.gateway.plist  # second-poller-intended",
     ):

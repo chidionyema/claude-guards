@@ -175,7 +175,18 @@ rules := [
 		# all ... next session will fuck it up again".
 		#
 		# `launchctl bootout` is deliberately not matched: stopping one is always allowed.
-		"re": `(?:launchctl\s+(?:bootstrap|load|start)\b[^|;&\n\r]*gateway)|(?:hermes_cli[^|;&\n\r]*\bgateway\s+run\b)`,
+		#
+		# 2026-08-28, second pass. The first regex only knew the two shapes that had already
+		# fired -- `launchctl bootstrap ... gateway` and `hermes_cli ... gateway run`. It did not
+		# know `./bin/hermes gateway install`, which is the shape hermes-v2 actually prints: in
+		# its installer, twice in its README, in `bin/teardown`, and (until now) in `bin/verify`
+		# row 10 as the remediation on an IDLE row. A guard that misses the shape every document
+		# on the machine hands you is not a guard. Every verb that STARTS one is matched now.
+		# The second alternative matches an INVOCATION, not the words: `hermes` must be the program
+		# token and `gateway <verb>` its arguments. A loose `hermes.*gateway\s+install` would have
+		# refused `cd ~/dev/code/hermes-v2 && grep -n "gateway install" README.md`, and a guard that
+		# refuses reading a file is an outage (LAW 38).
+		"re": `(?:launchctl\s+(?:bootstrap|load|start)\b[^|;&\n\r]*gateway)|(?:(?:^|[\s;&|(])(?:[\w./-]*/)?hermes(?:_cli(?:\.main)?)?(?:\s+-{1,2}[\w-]+(?:=\S+)?)*\s+gateway\s+(?:run|install|start|restart)\b)`,
 		"marker": "second-poller-intended",
 		"must_match": "launchctl bootstrap gui/501 ~/Library/LaunchAgents/ai.architect.gateway.plist",
 		"must_not_match": "launchctl bootout gui/501/ai.architect.gateway",

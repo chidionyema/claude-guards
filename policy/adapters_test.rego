@@ -4,8 +4,8 @@ import rego.v1
 
 import data.adapters
 
-test_session_start_names_seven_adapters if {
-	count(adapters.session_start) == 7
+test_session_start_names_eight_adapters if {
+	count(adapters.session_start) == 8
 }
 
 test_no_session_start_adapter_lives_in_the_archive if {
@@ -35,4 +35,8 @@ test_pre_tool_use_names_eight_guards_each_with_a_tools_list if {
 
 test_stop_names_fourteen_adapters if {
 	count(adapters.stop) == 14
+}
+
+test_sync_guard_is_the_first_thing_a_session_runs if {
+	adapters.session_start[0][0] == "sync-guard.py"
 }

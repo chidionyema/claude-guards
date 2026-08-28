@@ -15,6 +15,7 @@ package adapters
 import rego.v1
 
 session_start := [
+	["sync-guard.py"],
 	["laws-link-guard.py"],
 	["peer-loop-fence.py"],
 	["goal-guard.py"],
