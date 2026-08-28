@@ -159,6 +159,36 @@ rules := [
 		]),
 	},
 	{
+		"id": "second_telegram_poller",
+		# 2026-08-28, crew#516. The Architect answered the founder on Telegram for the last time
+		# at 2026-08-27 23:30 and went silent for 8h45m. One bot token admits exactly one poller:
+		# whoever is polling holds it and the other side gets 409 "terminated by other getUpdates
+		# request" forever. The gateway had moved to the cluster (idp platform/hermes-agent), a
+		# poller was still running on the laptop under launchd, and the laptop won -- so every
+		# message went to a process running an image that could not answer it.
+		#
+		# Parking the plist did not hold. A peer session rewrote it within minutes, because
+		# hermes-v2 `bin/verify` FAILED when the plist was missing and its onboarding doc printed
+		# the bootstrap command: the session was told the machine was broken and repaired it. Both
+		# are fixed (hermes-v2 crew#516), and this is the half that does not depend on reading a
+		# document first. Founder, 2026-08-28: "we leaving traps again, why not solve once and for
+		# all ... next session will fuck it up again".
+		#
+		# `launchctl bootout` is deliberately not matched: stopping one is always allowed.
+		"re": `(?:launchctl\s+(?:bootstrap|load|start)\b[^|;&\n\r]*gateway)|(?:hermes_cli[^|;&\n\r]*\bgateway\s+run\b)`,
+		"marker": "second-poller-intended",
+		"must_match": "launchctl bootstrap gui/501 ~/Library/LaunchAgents/ai.architect.gateway.plist",
+		"must_not_match": "launchctl bootout gui/501/ai.architect.gateway",
+		"msg": concat("", [
+			"BLOCKED by rule-guard: that starts a second Telegram poller and takes the founder's bot away from the cluster.\n",
+			"The gateway runs as Deployment hermes-agent-gateway in namespace hermes-agent (idp platform/hermes-agent), ",
+			"delivered by Flux. One token admits one poller, so a gateway started on this Mac does not join it -- it wins, ",
+			"and the pod that can actually answer goes deaf while looking healthy (crew#516, 8h45m of silence). ",
+			"To change what the gateway runs, commit to idp/platform/hermes-agent and let Flux apply it. ",
+			"To look at it:  bin/idp-kube -n hermes-agent logs deploy/hermes-agent-gateway",
+		]),
+	},
+	{
 		"id": "no_verify",
 		# `[^|;&]*` also crosses NEWLINES, so in a multi-line script it scanned
 		# past the end of the commit and matched a `-n` on any later line --
