@@ -34,9 +34,11 @@ import subprocess
 import sys
 import time
 
-POLICY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "policy")
+HERE = os.path.dirname(os.path.abspath(__file__))
+POLICY = os.environ.get("OPA_HOOK_POLICY") or os.path.join(HERE, "policy")
 QUERY = "data.hooks.deny"
 REPLY_QUERY = "data.reply.deny"
+ADAPTERS_QUERY = "data.adapters.session_start"
 
 # policy/fixtures holds JSON test data for other policies. Loading it as --data
 # collides with itself ("merge error") and OPA then reports that as an empty
@@ -161,7 +163,48 @@ def main() -> int:
         return refuse(event, str(e))
 
 
+def session_start(payload: dict) -> int:
+    """crew#603 CP4: SessionStart is one door. The list of adapters that run, and their order,
+    is policy (policy/adapters.rego); each runs through hook-run.py so a crash, a missing file
+    or a timeout refuses the start instead of passing in silence. Their context is joined into
+    one additionalContext, the shape Claude Code reads (code.claude.com/docs/en/hooks)."""
+    rows = denials({"event": "SessionStart"}, ADAPTERS_QUERY)
+    stdin = json.dumps(payload).encode()
+    runner = os.path.join(HERE, "hook-run.py")
+    parts: list[str] = []
+    for row in rows:
+        if not isinstance(row, list) or not row or not isinstance(row[0], str):
+            raise NoVerdict(f"adapters.session_start row is not [name, args...]: {row!r}")
+        if "archive/" in row[0]:
+            raise NoVerdict(f"{row[0]} is archived and cannot run")
+        argv = [sys.executable, runner, os.path.join(HERE, row[0]), *map(str, row[1:])]
+        try:
+            proc = subprocess.run(argv, input=stdin, capture_output=True, timeout=150)
+        except (OSError, subprocess.SubprocessError) as e:
+            raise NoVerdict(f"{row[0]} did not run: {e}") from e
+        text = proc.stdout.decode("utf-8", "replace")
+        if proc.returncode != 0:
+            tail = (proc.stderr.decode("utf-8", "replace").strip() or text.strip()).splitlines()
+            raise NoVerdict(f"{row[0]} exit {proc.returncode}: {tail[-1] if tail else 'no output'}")
+        ctx = text.strip()
+        try:
+            out = json.loads(text)
+            hso = out.get("hookSpecificOutput") if isinstance(out, dict) else None
+            if isinstance(hso, dict):
+                ctx = str(hso.get("additionalContext") or "").strip()
+        except ValueError:
+            pass
+        if ctx:
+            parts.append(ctx)
+    if parts:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
+                                                 "additionalContext": "\n\n".join(parts)}}))
+    return 0
+
+
 def decide(payload: dict, event: str) -> int:
+    if event == "SessionStart":
+        return session_start(payload)
     if event == "Stop":
         if payload.get("stop_hook_active"):
             return 0

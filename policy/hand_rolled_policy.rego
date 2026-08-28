@@ -209,6 +209,7 @@ warn contains msg if {
 	some g in input.guards
 	legacy[g.path]
 	not g.path in input.wired
+	not adapter_wired(g.path) # crew#603 CP4: SessionStart names live in policy/adapters.rego
 	msg := sprintf(
 		"%s is wired to nothing -- no hook in settings/settings.json, no job in jobs/jobs.json. A guard that never runs is not a guard. Delete it, or wire it up.",
 		[g.path],
@@ -270,4 +271,11 @@ deny contains msg if {
 		"settings/settings.json wires a hook to %s, which is not a tracked file in this repository. ~/.claude/scripts IS this checkout, so python3 exits 2 on every matching tool call -- the hook refuses reads as well as writes. Commit the file in the same change as the wiring, or revert the wiring (LAW 38).",
 		[name],
 	)
+}
+
+# crew#603 CP4: a script named in data.adapters.session_start is wired -- opa-hook.py runs
+# it at every SessionStart -- even though settings/settings.json no longer names it.
+adapter_wired(path) if {
+	some row in data.adapters.session_start
+	row[0] == path
 }

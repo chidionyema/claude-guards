@@ -64,18 +64,21 @@ deny contains msg if {
 	input.tool_name == "Artifact"
 	not action in read_only
 	not contains(haystack, vendor_override)
-	msg := sprintf(concat("", [
-		"BLOCKED: this publishes a founder-facing page to claude.ai.\n\n",
-		"  He already has a board that does not need you alive to be read:\n",
-		"      %s\n",
-		"  Built by   ~/.claude/scripts/founder_board.py  (launchd: com.founder.board)\n",
-		"  Served by  ~/.claude/scripts/board_serve.py    (launchd: com.founder.boardserve)\n\n",
-		"  Add a collector to founder_board.py so the content persists in our own\n",
-		"  platform. LAW 34 / R8: no provider single point of failure, Claude included.\n",
-		"  LAW 39: the local board already existed.\n\n",
-		"  If it genuinely must go outside the estate -- a buyer, an advisor, a\n",
-		"  customer -- put  # %s  in the description or title and say why.",
-	]), [local_board, vendor_override])
+	msg := sprintf(
+		concat("", [
+			"BLOCKED: this publishes a founder-facing page to claude.ai.\n\n",
+			"  He already has a board that does not need you alive to be read:\n",
+			"      %s\n",
+			"  Built by   ~/.claude/scripts/founder_board.py  (launchd: com.founder.board)\n",
+			"  Served by  ~/.claude/scripts/board_serve.py    (launchd: com.founder.boardserve)\n\n",
+			"  Add a collector to founder_board.py so the content persists in our own\n",
+			"  platform. LAW 34 / R8: no provider single point of failure, Claude included.\n",
+			"  LAW 39: the local board already existed.\n\n",
+			"  If it genuinely must go outside the estate -- a buyer, an advisor, a\n",
+			"  customer -- put  # %s  in the description or title and say why.",
+		]),
+		[local_board, vendor_override],
+	)
 }
 
 # ---------------------------------------------------------------------------
@@ -169,18 +172,21 @@ rogue_doc(path) if {
 	not docs_allowed(path)
 }
 
-docs_reason(path) := sprintf(concat("", [
-	"BLOCKED: %s is a markdown file outside the documentation structure (ADR 0002, Diátaxis).\n\n",
-	"  Put it where a reader will find it and TechDocs will render it:\n",
-	"      docs/tutorials/     a lesson, step by step\n",
-	"      docs/how-to/        a task, for someone who knows the ground\n",
-	"      docs/reference/     facts, tables, data, generated output\n",
-	"      docs/explanation/   concepts, research, why it is this way\n",
-	"      docs/decisions/     an ADR (MADR shape, ## Sources with two URLs)\n",
-	"  and add it to mkdocs.yml nav. Root governance files (README, CLAUDE, AGENTS,\n",
-	"  FOUNDER) and a `*-body.md` in a temp dir for `gh --body-file` are allowed.\n\n",
-	"  If this file genuinely is not documentation, put  # %s  in it and say why.",
-]), [path, docs_override])
+docs_reason(path) := sprintf(
+	concat("", [
+		"BLOCKED: %s is a markdown file outside the documentation structure (ADR 0002, Diátaxis).\n\n",
+		"  Put it where a reader will find it and TechDocs will render it:\n",
+		"      docs/tutorials/     a lesson, step by step\n",
+		"      docs/how-to/        a task, for someone who knows the ground\n",
+		"      docs/reference/     facts, tables, data, generated output\n",
+		"      docs/explanation/   concepts, research, why it is this way\n",
+		"      docs/decisions/     an ADR (MADR shape, ## Sources with two URLs)\n",
+		"  and add it to mkdocs.yml nav. Root governance files (README, CLAUDE, AGENTS,\n",
+		"  FOUNDER) and a `*-body.md` in a temp dir for `gh --body-file` are allowed.\n\n",
+		"  If this file genuinely is not documentation, put  # %s  in it and say why.",
+	]),
+	[path, docs_override],
+)
 
 deny contains msg if {
 	input.tool_name in {"Write", "Edit", "MultiEdit"}
@@ -200,4 +206,43 @@ deny contains msg if {
 	some m in regex.find_all_string_submatch_n(redirect_targets, cmd, -1)
 	rogue_doc(m[1])
 	msg := docs_reason(m[1])
+}
+
+# ---------------------------------------------------------------------------
+# crew#603 CP4: an archived guard cannot be revived. Founder, 2026-08-28: "archive
+# instead of delete, ensure they cannot be reactivated". A guard whose rules moved
+# into this directory goes to scripts/archive/; nothing under that path may be run,
+# copied, linked, or written into settings.json again. The archive is for `git log`
+# and reading, so plain reads (cat, less, head, sed -n, grep, rg, git log/show, ls,
+# diff) are not refused.
+archive_path := "scripts/archive/"
+
+revive_verbs := `(^|[\s;&|(])(python3?|bash|sh|zsh|source|exec|cp|mv|ln|chmod|install|rsync)\s+[^\n;&|]*scripts/archive/`
+
+archive_reason(what) := sprintf(
+	concat("", [
+		"BLOCKED: %s names %s. Those guards were archived under crew#603; their rules live in ",
+		"policy/*.rego and opa-hook.py is the one door. Read the archive with cat/git log; ",
+		"nothing in it runs, copies, links or gets wired into settings.json again.",
+	]),
+	[what, archive_path],
+)
+
+deny contains msg if {
+	input.tool_name == "Bash"
+	cmd := object.get(input, ["tool_input", "command"], "")
+	regex.match(revive_verbs, cmd)
+	msg := archive_reason("this command")
+}
+
+deny contains msg if {
+	input.tool_name in {"Write", "Edit", "MultiEdit"}
+	path := object.get(input, ["tool_input", "file_path"], "")
+	endswith(path, "settings.json")
+	body := concat("", [
+		object.get(input, ["tool_input", "content"], ""),
+		object.get(input, ["tool_input", "new_string"], ""),
+	])
+	contains(body, archive_path)
+	msg := archive_reason(path)
 }

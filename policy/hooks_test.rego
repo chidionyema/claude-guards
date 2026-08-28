@@ -178,3 +178,24 @@ test_redirect_with_override_allowed if {
 test_write_with_override_allowed if {
 	count(hooks.deny) == 0 with input as {"tool_name": "Write", "tool_input": {"file_path": "/Users/x/dev/code/idp/NOTES.md", "content": "# docs-path-intended: fixture for a test\n"}}
 }
+
+# crew#603 CP4: the archive cannot be revived.
+test_running_an_archived_guard_is_refused if {
+	count(hooks.deny) > 0 with input as {"tool_name": "Bash", "tool_input": {"command": "python3 $HOME/.claude/scripts/archive/scope-guard.py < in.json"}}
+}
+
+test_copying_an_archived_guard_back_is_refused if {
+	count(hooks.deny) > 0 with input as {"tool_name": "Bash", "tool_input": {"command": "cd ~/.claude/scripts && cp scripts/archive/scope-guard.py ./scope-guard.py"}}
+}
+
+test_reading_the_archive_is_allowed if {
+	count(hooks.deny) == 0 with input as {"tool_name": "Bash", "tool_input": {"command": "cat ~/.claude/scripts/archive/scope-guard.py | head -40; git log --oneline -3 -- scripts/archive/"}}
+}
+
+test_wiring_an_archived_guard_into_settings_is_refused if {
+	count(hooks.deny) > 0 with input as {"tool_name": "Edit", "tool_input": {"file_path": "/Users/x/.claude/scripts/settings/settings.json", "old_string": "opa-hook.py", "new_string": "python3 $HOME/.claude/scripts/archive/scope-guard.py"}}
+}
+
+test_a_settings_edit_that_names_no_archive_is_allowed if {
+	count(hooks.deny) == 0 with input as {"tool_name": "Edit", "tool_input": {"file_path": "/Users/x/.claude/scripts/settings/settings.json", "old_string": "\"timeout\": 30", "new_string": "\"timeout\": 45"}}
+}

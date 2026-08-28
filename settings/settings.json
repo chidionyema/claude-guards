@@ -63,48 +63,11 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/laws-link-guard.py",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/peer-loop-fence.py",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/goal-guard.py",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/memory-loop.py",
-            "timeout": 15
-          },
-          {
-            "type": "command",
-            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/canonical-root-guard.py",
-            "timeout": 15
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/friction-relay.py"
-          }
-        ]
-      },
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/feed-guard.py SessionStart"
+            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/opa-hook.py",
+            "timeout": 180
           }
         ]
       }
