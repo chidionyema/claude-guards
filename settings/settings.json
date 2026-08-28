@@ -67,6 +67,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/sync-guard.py",
+            "timeout": 30
+          },
+          {
+            "type": "command",
             "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/laws-link-guard.py",
             "timeout": 10
           },
