@@ -172,7 +172,7 @@ permit := [
 	"k3d cluster create prospector-rehearsal --agents 0 --wait", # allowed: the EUR 0 substrate
 	"kind create cluster --name prospector", # allowed: the EUR 0 substrate
 	"minikube start --driver=docker", # allowed: the EUR 0 substrate
-	"kubectl create namespace prospector", # allowed: costs nothing
+	"bin/idp-kube create namespace prospector", # allowed: costs nothing; bare kubectl is the mistake (crew#66)
 	"hcloud server list", # allowed: reading costs nothing
 	"hcloud server delete 12345", # allowed: destroying saves money
 	"doctl kubernetes cluster list", # allowed: reading costs nothing
@@ -200,8 +200,8 @@ permit := [
 	"gh api repos/chidionyema/prospector/actions/runners", # allowed: not a settings store
 	"gh variable list --json name", # allowed: names, not values
 	"gh secret list", # allowed: gh never prints secret values
-	"kubectl describe secret prospector-engine-env", # allowed: names and byte counts
-	"kubectl get secrets", # allowed: names only
+	"bin/idp-kube describe secret prospector-engine-env", # allowed: names and byte counts; bare kubectl is the mistake (crew#66)
+	"bin/idp-kube get secrets", # allowed: names only; bare kubectl is the mistake (crew#66)
 	"printenv PROSPECTOR_STORE_DIR", # allowed: one name
 	"env PROSPECTOR_STORE_DIR=/data/store python3 run.py", # allowed: sets, does not print
 	"git diff --stat  # nothing to do with env", # allowed
