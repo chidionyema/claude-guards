@@ -222,3 +222,58 @@ def test_a_passing_guards_system_message_is_carried_not_rewrapped(tmp_path):
         assert out["systemMessage"] == "[zz] note to the model" and "hookSpecificOutput" not in out, out
     finally:
         (HERE / "zz-test-guard-sm.py").unlink(missing_ok=True)
+
+
+# --- Stop batch ---------------------------------------------------------------
+
+def test_settings_stop_is_exactly_one_command_and_it_is_opa_hook():
+    hooks = json.loads((HERE / "settings" / "settings.json").read_text())["hooks"]["Stop"]
+    cmds = [h["command"] for g in hooks for h in g["hooks"]]
+    assert len(cmds) == 1 and cmds[0].endswith("hook-run.py $HOME/.claude/scripts/opa-hook.py"), cmds
+
+
+def test_the_stop_list_names_the_fourteen_adapters_settings_used_to_name():
+    out = subprocess.run(["opa", "eval", "--format", "json", "--data", str(HERE / "policy" / "adapters.rego"),
+                          "data.adapters.stop"], capture_output=True, text=True, timeout=30)
+    rows = json.loads(out.stdout)["result"][0]["expressions"][0]["value"]
+    assert [r[0] for r in rows] == ["secret-scrub.py", "laws-link-guard.py", "jargon-guard.py", "vendor-lock-guard.py",
+                                    "dod-guard.py", "prompt-ledger.py", "repeat-guard.py", "close-guard.py",
+                                    "founder-deliver.py", "blocker-guard.py", "auto-objective.py", "idle-guard.py",
+                                    "credential-guard.py", "feed-guard.py"]
+    for r in rows:
+        assert (HERE / r[0]).is_file(), r
+
+
+def _stop(tmp_path, rows, payload):
+    pol = policy_with(tmp_path, rows, event="stop")
+    (pol / "reply.rego").write_text("package reply\nimport rego.v1\ndeny contains msg if { false; msg := \"\" }\n")
+    return run(pol, {"hook_event_name": "Stop", "session_id": "t8", "transcript_path": str(tmp_path / "none.jsonl"), **payload})
+
+
+def test_a_stop_guards_block_decision_passes_through_the_door(tmp_path):
+    adapter("zz-test-stop-block.py", """\
+        import json; print(json.dumps({"decision": "block", "reason": "[zz] reply line 1 is malformed"}))
+        """)
+    try:
+        p = _stop(tmp_path, [["zz-test-stop-block.py"]], {})
+        assert p.returncode == 0 and json.loads(p.stdout)["reason"] == "[zz] reply line 1 is malformed", (p.stdout, p.stderr)
+    finally:
+        (HERE / "zz-test-stop-block.py").unlink(missing_ok=True)
+
+
+def test_a_stop_guard_exit_2_passes_through_the_door(tmp_path):
+    adapter("zz-test-stop-two.py", "import sys; sys.stderr.write('[zz] stop refused\\n'); sys.exit(2)\n")
+    try:
+        p = _stop(tmp_path, [["zz-test-stop-two.py"]], {})
+        assert p.returncode == 2 and "[zz] stop refused" in p.stderr, (p.returncode, p.stderr)
+    finally:
+        (HERE / "zz-test-stop-two.py").unlink(missing_ok=True)
+
+
+def test_stop_adapters_still_run_when_stop_hook_is_active(tmp_path):
+    adapter("zz-test-stop-active.py", "import json,sys; d=json.load(sys.stdin); print(json.dumps({'decision':'block','reason':'active=%s' % d.get('stop_hook_active')}))\n")
+    try:
+        p = _stop(tmp_path, [["zz-test-stop-active.py"]], {"stop_hook_active": True})
+        assert p.returncode == 0 and json.loads(p.stdout)["reason"] == "active=True", (p.stdout, p.stderr)
+    finally:
+        (HERE / "zz-test-stop-active.py").unlink(missing_ok=True)

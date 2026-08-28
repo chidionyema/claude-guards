@@ -138,6 +138,6 @@ def test_opa_hook_refuses_a_rogue_markdown_and_allows_an_explanation_doc():
 def test_every_write_edit_and_bash_call_reaches_the_door():
     """The rule is data; it only bites if settings wires opa-hook onto the events it judges."""
     s = json.loads((HERE / "settings" / "settings.json").read_text())
-    wired = {g["matcher"] for g in s["hooks"]["PreToolUse"]
-             if any("opa-hook.py" in h["command"] for h in g["hooks"])}
-    assert {"Write|Edit", "Bash", "Artifact"} <= wired, wired
+    # crew#603 CP4: one group with no matcher = every tool, Write, Edit, Bash and Artifact included.
+    groups = [g for g in s["hooks"]["PreToolUse"] if any("opa-hook.py" in h["command"] for h in g["hooks"])]
+    assert groups and any("matcher" not in g for g in groups), s["hooks"]["PreToolUse"]

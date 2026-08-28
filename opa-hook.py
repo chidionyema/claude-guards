@@ -40,7 +40,8 @@ QUERY = "data.hooks.deny"
 REPLY_QUERY = "data.reply.deny"
 ADAPTER_EVENTS = {"SessionStart": "data.adapters.session_start",
                   "UserPromptSubmit": "data.adapters.user_prompt_submit",
-                  "PreToolUse": "data.adapters.pre_tool_use"}
+                  "PreToolUse": "data.adapters.pre_tool_use",
+                  "Stop": "data.adapters.stop"}
 
 # policy/fixtures holds JSON test data for other policies. Loading it as --data
 # collides with itself ("merge error") and OPA then reports that as an empty
@@ -206,7 +207,7 @@ def run_adapters(payload: dict, event: str) -> int:
         except (OSError, subprocess.SubprocessError) as e:
             raise NoVerdict(f"{row[0]} did not run: {e}") from e
         text = proc.stdout.decode("utf-8", "replace")
-        if event == "PreToolUse" and refuses(proc.returncode, text):
+        if event in ("PreToolUse", "Stop") and refuses(proc.returncode, text):
             # The adapter's refusal is the verdict; it passes through untouched so the
             # override marker and the one command it names reach the model as written.
             sys.stdout.write(text)
@@ -239,22 +240,24 @@ def run_adapters(payload: dict, event: str) -> int:
 
 
 def decide(payload: dict, event: str) -> int:
+    if event == "Stop":
+        # reply.rego first (the rules already in Rego), then the Stop adapters in policy order.
+        # Each adapter reads stop_hook_active for itself, as it did when settings ran it.
+        if not payload.get("stop_hook_active"):
+            reply = last_reply_above_fold(str(payload.get("transcript_path", "")))
+            payload_in = {"event": "Stop", "reply": reply, "focus": standing_focus()}
+            age = checkpoint_age_s(str(payload.get("transcript_path", "")))
+            if age is not None:
+                payload_in["checkpoint_age_s"] = age
+            msgs = denials(payload_in, REPLY_QUERY)
+            if msgs:
+                print(json.dumps({"decision": "block", "reason": "\n\n".join(sorted(msgs))}))
+                return 0
+        return run_adapters(payload, "Stop")
     if event in ADAPTER_EVENTS:
         rc = run_adapters(payload, event)
         if rc != 0 or event != "PreToolUse":
             return rc
-    if event == "Stop":
-        if payload.get("stop_hook_active"):
-            return 0
-        reply = last_reply_above_fold(str(payload.get("transcript_path", "")))
-        payload_in = {"event": "Stop", "reply": reply, "focus": standing_focus()}
-        age = checkpoint_age_s(str(payload.get("transcript_path", "")))
-        if age is not None:
-            payload_in["checkpoint_age_s"] = age
-        msgs = denials(payload_in, REPLY_QUERY)
-        if msgs:
-            print(json.dumps({"decision": "block", "reason": "\n\n".join(sorted(msgs))}))
-        return 0
     msgs = denials(payload)
     if not msgs:
         return 0
