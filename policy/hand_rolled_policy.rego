@@ -133,6 +133,11 @@ legacy := {
 	# cannot be Rego. Tracked for the first time at its landing size (it ran untracked from
 	# 2026-08-27 13:00). Only ever falls.
 	"merge-target-divergence-guard.py": 159,
+	# cg#208 (crew#603 CP2): not a refusal but an action -- git fetch, merge --ff-only or
+	# checkout --detach at SessionStart, and the collision set (incoming ∩ dirty) that stops
+	# it comes from git diff/status. conftest has no git and Rego cannot move a checkout.
+	# Tracked at its landing size. Only ever falls.
+	"sync-guard.py": 98,
 }
 
 # How many command refusals each guard still implements in Python. Same direction
