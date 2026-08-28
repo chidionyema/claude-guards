@@ -162,6 +162,10 @@ def record(res: dict) -> None:
                 # answer "calls per model" from history.
                 "by_model": {k: round(v, 2) for k, v in res.get("by_model", {}).items()},
                 "reqs_by_model": res.get("reqs_by_model", {}),
+                # Token counts by driver and the re-read share (crew#372 act/context_waste):
+                # cache_read is context sent to the model unchanged from the previous call.
+                "tokens": res.get("tokens", {}),
+                "reread_pct": estate_spend.reread_pct(res.get("tokens", {})),
             }) + "\n")
     except OSError:
         try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 129))
