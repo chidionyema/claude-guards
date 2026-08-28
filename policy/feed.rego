@@ -65,3 +65,16 @@ present(r) if {
 	startswith(l, r)
 	trim_space(substring(l, count(r), -1)) != ""
 }
+
+# R49-no-secrets-in-chat (founder 2026-08-28: "we dont send password here"): a handoff names WHERE a
+# secret is, never WHAT it is. A key word followed by a value is refused; an env NAME in caps is not a value.
+secret_line(line) if {
+	regex.match(`\b(?i:password|passwd|pass|token|secret|api[_-]?key|private[_-]?key)\b\s*[:=]\s*["']?[^\s"']{8,}`, line)
+	not regex.match(`\b(?i:password|passwd|pass|token|secret|api[_-]?key|private[_-]?key)\b\s*[:=]\s*["']?[A-Z][A-Z0-9_]{7,}["']?(\s|$)`, line)
+}
+
+deny contains msg if {
+	some line in input.lines
+	secret_line(line)
+	msg := "R49: a handoff never carries a secret value; name where it lives (vault entry, 0600 path), not what it is"
+}
