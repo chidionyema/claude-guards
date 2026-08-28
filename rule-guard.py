@@ -49,12 +49,16 @@ import subprocess
 import sys
 import time
 
-#: One Mac's absolute path. Off that Mac the directory is simply not there, `_git`
-#: answers "cannot tell" to every question, and every rule that asks git something
-#: abstains IN SILENCE -- a guard that cannot see its subject permits and prints what
-#: a clean run prints. CI found it: two rule_two_dot_diff cases got None. So fall back
-#: to the tree this process is standing in, which on a runner is the checkout.
-_HOME_REPO = "/Users/chidionyema/Documents/code/prospector"
+#: LAW 46: no literal machine path. Off the machine the env var was set for (or
+#: without it set at all) the directory is simply not there, `_git` answers "cannot
+#: tell" to every question, and every rule that asks git something abstains IN
+#: SILENCE -- a guard that cannot see its subject permits and prints what a clean run
+#: prints. CI found it: two rule_two_dot_diff cases got None. So fall back to the tree
+#: this process is standing in, which on a runner is the checkout. Same convention as
+#: action_items.py's PROSPECTOR_REPO.
+_HOME_REPO = os.environ.get(
+    "PROSPECTOR_REPO", os.path.join(os.path.expanduser("~"), "Documents", "code", "prospector")
+)
 REPO = _HOME_REPO if os.path.isdir(_HOME_REPO) else os.getcwd()
 
 #: The tree the command being judged will actually run in. A hardcoded REPO graded the shared
@@ -1088,7 +1092,7 @@ def selftest() -> int:
         (REPO, "some/long-lived-branch", True),
         (REPO, "main", True),          # the shared tree is shared whatever the branch is called
         (REPO, "HEAD", False),         # detached: nothing accumulates
-        ("/Users/chidionyema/Documents/code/wt-recover", "fix/anything", False),
+        (os.path.join(os.path.expanduser("~"), "Documents", "code", "wt-recover"), "fix/anything", False),
     ]:
         note = _shared_checkout_refusal(repo, branch)
         noted = note is not None
