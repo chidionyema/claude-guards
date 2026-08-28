@@ -287,6 +287,20 @@ def run_adapters(payload: dict, event: str) -> int:
     return 0
 
 
+def telegram_rows(window_s: float) -> list[dict] | None:
+    """Rows founder-blocker.py wrote in the last window (blocker rules, LAW 47). None when the
+    ledger cannot be read or imported: the reply.rego blocker rules treat a missing key as BLIND."""
+    try:
+        sys.path.insert(0, str(HERE))
+        from estate import telegram_ledger  # noqa: PLC0415
+
+        now = time.time()
+        return [r for r in telegram_ledger.read(since_s=window_s)
+                if now - float(r.get("ts") or 0) <= window_s]
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def decide(payload: dict, event: str) -> int:
     if event == "Stop":
         # reply.rego first (the rules already in Rego), then the Stop adapters in policy order.
@@ -298,6 +312,9 @@ def decide(payload: dict, event: str) -> int:
             age = checkpoint_age_s(str(payload.get("transcript_path", "")))
             if age is not None:
                 payload_in["checkpoint_age_s"] = age
+            rows = telegram_rows(3600.0)
+            if rows is not None:
+                payload_in["telegram_ledger"] = rows  # absent = BLIND; blocker rules then permit
             msgs = denials(payload_in, REPLY_QUERY)
             if msgs:
                 print(json.dumps({"decision": "block", "reason": "\n\n".join(sorted(msgs))}))

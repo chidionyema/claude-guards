@@ -236,9 +236,8 @@ def test_the_stop_list_names_the_fourteen_adapters_settings_used_to_name():
     out = subprocess.run(["opa", "eval", "--format", "json", "--data", str(HERE / "policy" / "adapters.rego"),
                           "data.adapters.stop"], capture_output=True, text=True, timeout=30)
     rows = json.loads(out.stdout)["result"][0]["expressions"][0]["value"]
-    assert [r[0] for r in rows] == ["secret-scrub.py", "laws-link-guard.py", "jargon-guard.py", "vendor-lock-guard.py",
-                                    "dod-guard.py", "prompt-ledger.py", "repeat-guard.py", "close-guard.py",
-                                    "founder-deliver.py", "blocker-guard.py", "auto-objective.py", "idle-guard.py",
+    assert [r[0] for r in rows] == ["secret-scrub.py", "laws-link-guard.py", "prompt-ledger.py", "repeat-guard.py",
+                                    "close-guard.py", "founder-deliver.py", "auto-objective.py", "idle-guard.py",
                                     "credential-guard.py", "feed-guard.py"]
     for r in rows:
         assert (HERE / r[0]).is_file(), r

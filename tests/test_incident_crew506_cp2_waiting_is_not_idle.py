@@ -32,6 +32,7 @@ def test_waiting_that_names_no_live_run_is_still_idle() -> None:
 
 
 def test_dod_guard_leaves_a_waiting_reply_untouched() -> None:
-    spec = importlib.util.spec_from_file_location("dod_guard", HERE / "dod-guard.py")
-    d = importlib.util.module_from_spec(spec); spec.loader.exec_module(d)
+    spec = importlib.util.spec_from_file_location("dod_guard", HERE / "scripts" / "archive" / "dod-guard.py")
+    d = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(d)
     assert d.first_word("WAITING: run abc in flight") == "WAITING"

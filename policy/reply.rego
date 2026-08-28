@@ -219,3 +219,193 @@ deny contains msg if {
 		[input.turn_edits, input.turn_files],
 	)
 }
+
+# ---------------------------------------------------------------------------------------------
+# crew#603 CP5 batch 3: the Stop guards that read only the reply text, moved here from Python.
+# input.reply is the last assistant message above the first --- line with code fences blanked
+# (opa-hook.last_reply_above_fold). Below the fold is evidence and is never graded.
+# ---------------------------------------------------------------------------------------------
+
+# jargon-guard.py (founder 2026-08-20: "not sure wht y of thi neans"; "why dont we avoid jargon
+# as law"). Every entry is a word actually used on the founder. Inline code, URLs and paths are
+# names, not jargon, and are blanked first. Refuses every time (crew#603: no guard wears down).
+jargon := {
+	"no-op": "does nothing",
+	"idempotent": "safe to run twice",
+	"seam": "the place where X plugs in",
+	"wire format": "the shape of the data on the network",
+	"client-bundled": "code that ships to the browser",
+	"source scan": "a test that reads the source",
+	"drift test": "a test that fails if the two copies stop matching",
+	"path filter": "the rule that decides which tests CI runs",
+	"unrefed": "does not hold the process open",
+	"unref": "does not hold the process open",
+	"fan-out": "run several at once",
+	"backpressure": "slowing down when the far end is full",
+	"back-pressure": "slowing down when the far end is full",
+	"orthogonal": "unrelated",
+	"vacuous": "passes without checking anything",
+	"blast radius": "how much it breaks",
+	"footgun": "easy to get wrong",
+	"affordance": "the thing you can click",
+	"surface area": "how much of it is exposed",
+	"hydrate": "fill in on the browser side",
+	"rehydrate": "fill in on the browser side",
+	"monotonic": "only ever goes up",
+	"hermetic": "runs the same everywhere",
+	"memoize": "remember the answer",
+	"thunk": "a function you call later",
+}
+
+# The shapes the founder corrected by hand (2026-08-2x): opening with what a thing is not,
+# giving software a mind, stacking dashes in one line.
+jargon_shapes := [
+	[`(?i)^\s*(?:DONE|WORKING|BLOCKED)\s*:\s*(?:it'?s|they'?re|that'?s|this is|there'?s|there is)\s+not\b`, "opens by saying what the thing is not", "open with what it is: \"run_v2.py is an ungrounded prototype\""],
+	[`(?i)\bthe\s+(?:engine|system|code|pipeline|suite|script|tool|test)\s+(?:exists to|wants|thinks|knows|believes|decides|likes|hates|feels|remembers)\b`, "gives software a mind", "say who did what: \"we built the engine to ...\""],
+	[`[^\n]*?(?:\s-{1,2}\s|\s—\s)[^\n]*?(?:\s-{1,2}\s|\s—\s)`, "stacks dashes in one line", "two short sentences instead"],
+]
+
+# prose = the reply with inline code, URLs and paths blanked (fences are already gone).
+prose := regex.replace(regex.replace(regex.replace(input.reply, "`[^`]*`", " "), `https?://\S+`, " "), `\S*/\S*`, " ")
+
+jargon_hits contains [word, plain] if {
+	some word, plain in jargon
+	regex.match(sprintf(`(?i)(?:^|[^\w-])%s(?:$|[^\w-])`, [regex_escape(word)]), prose)
+}
+
+jargon_hits contains [name, plain] if {
+	some [pat, name, plain] in jargon_shapes
+	regex.match(pat, prose)
+}
+
+regex_escape(s) := regex.replace(s, `([.*+?^${}()|\[\]\\-])`, `\$1`)
+
+deny contains msg if {
+	input.event == "Stop"
+	count(jargon_hits) > 0
+	rows := [sprintf("  \"%s\"  ->  say \"%s\"", [w, p]) | some [w, p] in sort(jargon_hits)]
+	msg := concat("\n", array.concat(
+		["PLAIN ENGLISH BROKEN IN A REPLY TO THE FOUNDER. He should not have to decode it."],
+		array.concat(rows, [
+			"",
+			"Law: ~/.claude/CLAUDE.md, \"Plain English - say it straight\". His words were \"you sound drunk\" and \"not sure wht y of thi neans\".",
+			"Rewrite the text above the --- line and stop again. Below the fold is evidence and is not checked, and anything in backticks is a name, not jargon.",
+		]),
+	))
+}
+
+# dod-guard.py (founder 2026-08-25, Definition of Done v2.1: merged, green and passing are
+# inventory, not done). Shape of the claim above the fold; the founder is the oracle for truth.
+# The Python's two STAGED sentence checks ("Reply 'go'...", "Auto-activating in N minutes") are
+# not ported: R40 (founder 2026-08-27, idp#356) removed the countdown and the approval words.
+dod_kind := m[0][1] if {
+	first := trim_space(split(trim_space(input.reply), "\n")[0])
+	m := regex.find_all_string_submatch_n(`^\s*\**\s*(DONE|INVENTORY|WORKING|WAITING|BLOCKED|STAGED):`, first, 1)
+	count(m) > 0
+} else := ""
+
+has_line(label) if regex.match(sprintf(`(?im)^\s*(?:[-*\d.]+\s*)?\**\s*%s`, [regex_escape(label)]), input.reply)
+
+checkable := concat("", [`https?://\S+|\b[0-9a-f]{7,40}\b|`, "`[^`]+`", `|(?:~|/)[\w./-]+`])
+
+evidence_is_checkable if {
+	some line in split(input.reply, "\n")
+	regex.match(`(?i)^\s*(?:[-*\d.]+\s*)?\**\s*Evidence:`, line)
+	rest := substring(line, indexof(line, ":") + 1, -1)
+	regex.match(checkable, rest)
+}
+
+dod_offences contains "DONE: needs a `Founder receipt:` line. If the founder has not used it and confirmed it, the word is INVENTORY:, not DONE:." if {
+	dod_kind == "DONE"
+	not has_line("Founder receipt:")
+}
+
+dod_offences contains "DONE: needs an `Evidence:` line." if {
+	dod_kind == "DONE"
+	not has_line("Evidence:")
+}
+
+dod_offences contains msg if {
+	dod_kind == "INVENTORY"
+	missing := [h | some h in ["Built:", "Use:", "Expect:", "Not done:", "Evidence:"]; not has_line(h)]
+	count(missing) > 0
+	msg := sprintf("INVENTORY: needs all five handoff lines; missing %s", [concat(", ", [sprintf("`%s`", [m]) | some m in missing])])
+}
+
+dod_offences contains "`Evidence:` must contain a URL, a commit hash, a file path or a `command`." if {
+	dod_kind in {"DONE", "INVENTORY"}
+	has_line("Evidence:")
+	not evidence_is_checkable
+}
+
+deny contains msg if {
+	input.event == "Stop"
+	count(dod_offences) > 0
+	msg := concat("\n", array.concat(
+		["BLOCKED by dod-guard (Definition of Done v2.1, founder 2026-08-25):"],
+		array.concat([sprintf("  - %s", [f]) | some f in sort(dod_offences)], ["  Shape: line 1 DONE:/INVENTORY:/WORKING:/WAITING:/BLOCKED:/STAGED:. INVENTORY carries Built:, Use:, Expect:, Not done:, Evidence:. DONE additionally carries Founder receipt:."]),
+	))
+}
+
+# vendor-lock-guard.py, Stop face (founder 2026-08-26, crew#182: "the spec is model agnostic";
+# LAW 34). A line that names a vendor-only channel AND a word that makes it required, without
+# a negation in the same line, commits the founder to one vendor. The --files CI face stays in
+# the Python (crew's crew-qa.yml calls it); only the hook moved.
+vendor := `(?i)remote[ -]control|claude\s+app|claude\.ai|anthropic\s+(?:app|console|relay)|openai\s+assistants?|chatgpt(?:\s+app)?|gemini\s+live|gemini\s+app|copilot\s+workspace|github\s+copilot\s+chat|cursor\s+(?:app|cloud)|codex\s+(?:app|cloud)|(?:^|[^\w./-])/config\b`
+
+mandate := `(?i)\b(?:turn(?:ed)?\s+on|enable[sd]?|switch(?:ed)?\s+on|activate[sd]?|must|required?|mandatory|only\s+(?:path|way|route)|the\s+path\s+is|step\s+\d|cp\s?\d|done\s+when|you\s+do\s+one\s+thing|only\s+you\s+can)\b`
+
+negated := `(?i)\b(?:off|not|never|no|withdrawn|withdraw|refused|rejected|struck|cancelled|banned|forbidden|cannot|can't|instead\s+of|rather\s+than|why\s+not|versus|vs\.?)\b`
+
+vendor_lock_lines contains [n, trim_space(line)] if {
+	some n, line in split(input.reply, "\n")
+	regex.match(vendor, line)
+	regex.match(mandate, line)
+	not regex.match(negated, line)
+}
+
+deny contains msg if {
+	input.event == "Stop"
+	count(vendor_lock_lines) > 0
+	msg := concat("\n", array.concat(
+		["VENDOR LOCK-IN IN the reply. LAW 34: provider agnostic from day 0, Claude included."],
+		array.concat([sprintf("  line %d: %s", [n + 1, substring(l, 0, 160)]) | some [n, l] in sort(vendor_lock_lines)], ["A founder-facing step may not require a channel only one vendor ships. Route it through the estate's own front door (the gateway on Telegram, any runtime over ACP) or mark the vendor feature as off/withdrawn in the same sentence. Founder, 2026-08-26, crew#182."]),
+	))
+}
+
+# blocker-guard.py (LAW 47 / R30; crew#281). A reply that says FOUNDER ACTION: or STAGED: must
+# have reached the founder's Telegram through founder-blocker.py in the last hour. The door
+# supplies input.telegram_ledger (rows newer than an hour, source/outcome/key/msg_id) and
+# input.ledger_blind when the ledger could not be read (then nothing is checked, and the
+# adapter used to say so on stderr; here BLIND permits).
+blocker_row(outcome, key_prefix) if {
+	some r in input.telegram_ledger
+	r.source == "founder-blocker"
+	r.outcome == outcome
+	startswith(object.get(r, "key", ""), key_prefix)
+	to_number(object.get(r, "msg_id", 0)) > 0
+}
+
+deny contains msg if {
+	input.event == "Stop"
+	is_array(input.telegram_ledger) # the door supplies it; BLIND (unreadable ledger) permits
+	contains(input.reply, "FOUNDER ACTION:")
+	not blocker_row("sent", "physical:")
+	msg := concat("\n", [
+		"BLOCKED by blocker-guard: the reply says FOUNDER ACTION: but no physical founder-blocker Telegram message landed in the last 60 minutes (LAW 47 / R30; crew#281: FOUNDER ACTION: is for a device in his hand, everything else is STAGED).",
+		"  physical  python3 ~/.claude/scripts/founder-blocker.py \"<the device step>\" <url-or-word> --physical",
+		"  else      python3 ~/.claude/scripts/founder-blocker.py \"<action>\" --staged [N]  and write STAGED:",
+	])
+}
+
+deny contains msg if {
+	input.event == "Stop"
+	is_array(input.telegram_ledger) # the door supplies it; BLIND (unreadable ledger) permits
+	contains(input.reply, "STAGED:")
+	not blocker_row("staged", "")
+	msg := concat("\n", [
+		"BLOCKED by blocker-guard: the reply says STAGED: but no staged founder-blocker Telegram message landed in the last 60 minutes (crew#281: a staged action he cannot see cannot be held).",
+		"  run   python3 ~/.claude/scripts/founder-blocker.py \"<action>\" --staged [N]",
+		"  then  reissue the reply with the STAGED: line it prints",
+	])
+}

@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
 RUN = HERE / "hook-run.py"
-JARGON = HERE / "jargon-guard.py"
+JARGON = HERE / "scripts" / "archive" / "jargon-guard.py"  # rule is policy/reply.rego since CP5 batch 3
 VENDOR = HERE / "vendor-lock-guard.py"
 
 CRASH = "import sys; sys.stdin.read(); raise RuntimeError('the ledger is on fire')"

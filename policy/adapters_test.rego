@@ -35,8 +35,8 @@ test_pre_tool_use_names_seven_guards_each_with_a_tools_list if {
 	}
 }
 
-test_stop_names_fourteen_adapters if {
-	count(adapters.stop) == 14
+test_stop_names_ten_adapters if {
+	count(adapters.stop) == 10
 }
 
 test_sync_guard_is_the_first_thing_a_session_runs if {

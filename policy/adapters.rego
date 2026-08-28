@@ -49,20 +49,17 @@ pre_tool_use := [
 	{"run": ["credential-guard.py"], "tools": ["Bash"]},
 ]
 
-# Stop, in order, after reply.rego. Thirteen adapters; nine refuse (exit 2, or a JSON
+# Stop, in order, after reply.rego. Ten adapters; six refuse (exit 2, or a JSON
 # decision=block), four only write (secret-scrub, laws-link-guard, prompt-ledger,
-# founder-deliver). The first refusal is the verdict and passes through untouched.
+# founder-deliver). jargon, vendor-lock (Stop face), dod and blocker are reply.rego rules
+# since crew#603 CP5 batch 3. The first refusal is the verdict and passes through untouched.
 stop := [
 	["secret-scrub.py"],
 	["laws-link-guard.py"],
-	["jargon-guard.py"],
-	["vendor-lock-guard.py"],
-	["dod-guard.py"],
 	["prompt-ledger.py"],
 	["repeat-guard.py"],
 	["close-guard.py"],
 	["founder-deliver.py"],
-	["blocker-guard.py"],
 	["auto-objective.py"],
 	["idle-guard.py"],
 	["credential-guard.py"],

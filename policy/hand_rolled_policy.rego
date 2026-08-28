@@ -96,19 +96,8 @@ legacy := {
 	"pr-cap-guard.py": 143,
 	"peer-loop-fence.py": 285,
 	"repeat-guard.py": 283,
-	"jargon-guard.py": 269,
 	"config-syntax-guard.py": 201,
 	"laws-link-guard.py": 145,
-	# 192 -> 202 on 2026-08-26 (crew#281 CP2, claude-guards#65): STAGED: is a fifth reply word and
-	# must carry the founder's go/hold sentence and a minute count. It is a Stop-hook rule over
-	# the reply text; opa-hook.py runs only on PreToolUse (Artifact) and no Stop runner feeds a
-	# transcript to OPA yet, so the rule cannot be Rego today. Follow-up on crew#281: a Stop
-	# runner, then dod-guard and blocker-guard move to policy/reply.rego and leave this list.
-	"dod-guard.py": 202,
-	# Added 2026-08-26 at 94 lines, the first time it is committed: settings.json has run it
-	# untracked since 2026-08-25 (LAW 24). Same reason as dod-guard: a Stop rule over the reply
-	# and the Telegram ledger, no OPA Stop runner exists. Same follow-up, same exit.
-	"blocker-guard.py": 94,
 	# 176 -> 212 on 2026-08-26 (crew#331, #99). The rule itself (a handoff on a lane another
 	# live session holds is refused unless the holder is named on the OVERLAP line) went into
 	# policy/feed.rego with three tests. The 36 Python lines are the data OPA cannot read for
@@ -125,6 +114,8 @@ legacy := {
 	# the last assistant message -- for a vendor name in the same sentence as a word that
 	# makes it mandatory. conftest has no parser for markdown or free text, so this rule
 	# cannot be Rego; recorded at its landing size. Only ever falls.
+	# Stop face moved to policy/reply.rego on 2026-08-29 (crew#603 CP5 batch 3); the file stays
+	# for the --files face crew .github/workflows/crew-qa.yml calls.
 	"vendor-lock-guard.py": 196,
 	# cg#183: shells out to git (merge-base, diff --stat, rev-list, symbolic-ref) to measure a
 	# merge target's distance before the merge runs; conftest has no git, so the measurement
@@ -209,11 +200,16 @@ deny contains msg if {
 #
 # It becomes `deny` when the names it prints are down to zero. That promotion is
 # a one-word diff in this file and should be made by whoever clears the last one.
+# Run by another repository's CI, not by a hook here: crew .github/workflows/crew-qa.yml calls
+# vendor-lock-guard.py --files over its prose (crew#273). Its Stop face is policy/reply.rego.
+ci_wired := {"vendor-lock-guard.py"}
+
 warn contains msg if {
 	some g in input.guards
 	legacy[g.path]
 	not g.path in input.wired
 	not adapter_wired(g.path) # crew#603 CP4: SessionStart names live in policy/adapters.rego
+	not ci_wired[g.path]
 	msg := sprintf(
 		"%s is wired to nothing -- no hook in settings/settings.json, no job in jobs/jobs.json. A guard that never runs is not a guard. Delete it, or wire it up.",
 		[g.path],
