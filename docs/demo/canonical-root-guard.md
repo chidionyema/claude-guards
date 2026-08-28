@@ -1,5 +1,12 @@
 # canonical-root-guard — demo
 
+> **Moved to Rego, 2026-08-28 (crew#603 CP5).** The rule is `cwd_verdict` in
+> `policy/session.rego`, its eleven cases are `policy/session_test.rego`, and the door
+> (`opa-hook.py`) asks `data.session.context` at SessionStart. The Python below is archived at
+> `scripts/archive/canonical-root-guard.py` and cannot be run. To see it work today:
+> `echo '{"event":"SessionStart","cwd":"'$HOME'/Documents/code","home":"'$HOME'"}' | opa eval --format pretty -d policy/session.rego -d policy/reply.rego -I data.session.context`
+
+
 Every line of output below came from a real run on 2026-08-23. Nothing here is illustrative.
 
 ## What the estate looked like before it existed

@@ -99,7 +99,6 @@ legacy := {
 	"jargon-guard.py": 269,
 	"config-syntax-guard.py": 201,
 	"laws-link-guard.py": 145,
-	"canonical-root-guard.py": 133,
 	# 192 -> 202 on 2026-08-26 (crew#281 CP2, claude-guards#65): STAGED: is a fifth reply word and
 	# must carry the founder's go/hold sentence and a minute count. It is a Stop-hook rule over
 	# the reply text; opa-hook.py runs only on PreToolUse (Artifact) and no Stop runner feeds a

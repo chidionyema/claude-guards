@@ -1,7 +1,7 @@
 # One substring per rule that policy/fixtures/must_deny.json must trigger.
 # `something failed` is not proof that YOUR rule failed it.
 is new hand-rolled policy
-grew from 133 to 400 lines
+grew from 145 to 400 lines
 implements 9 command refusals in Python, up from 7
 is Python under policy/
 wires a hook to opa-hook.py, which is not a tracked file

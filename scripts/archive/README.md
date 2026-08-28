@@ -8,3 +8,4 @@ are in Rego; the Python is the record of what was ported.
 | Archived | Rule now in | Since |
 |---|---|---|
 | `scope-guard.py` | `policy/hooks.rego` (`scope_*`, two `deny` rules) | 2026-08-28 |
+| `canonical-root-guard.py` | `policy/session.rego` (`cwd_verdict`, one `context` rule) | 2026-08-28 |

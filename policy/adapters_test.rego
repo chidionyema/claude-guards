@@ -4,8 +4,9 @@ import rego.v1
 
 import data.adapters
 
-test_session_start_names_eight_adapters if {
-	count(adapters.session_start) == 8
+test_session_start_names_seven_adapters if {
+	# seven since canonical-root-guard moved into session.rego (crew#603 CP5)
+	count(adapters.session_start) == 7
 }
 
 test_no_session_start_adapter_lives_in_the_archive if {

@@ -269,11 +269,15 @@ def run_adapters(payload: dict, event: str) -> int:
             parts.append(ctx)
     out: dict = {}
     if event in ("SessionStart", "UserPromptSubmit"):
+        # policy/session.rego decides what a session is told at its start (the one-pass
+        # question, the canonical-root notice); the door only supplies the facts it needs.
+        facts = {"event": event, "cwd": os.environ.get("CLAUDE_PROJECT_DIR") or str(payload.get("cwd") or os.getcwd()),
+                 "home": os.path.expanduser("~")}
         try:
-            q = denials({}, "data.reply.one_pass_question")
-            parts.insert(0, "".join(q) if isinstance(q, list) else str(q))
+            told = denials(facts, "data.session.context")
         except NoVerdict:
-            pass
+            told = []  # a policy dir with no session.rego (the tests' minimal dirs) tells nothing
+        parts[:0] = [str(t) for t in sorted(told, key=lambda t: not str(t).startswith("[canonical-root]"))]
     if parts:
         out["hookSpecificOutput"] = {"hookEventName": event, "additionalContext": "\n\n".join(parts)}
     if system:

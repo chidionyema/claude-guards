@@ -20,7 +20,6 @@ session_start := [
 	["peer-loop-fence.py"],
 	["goal-guard.py"],
 	["memory-loop.py"],
-	["canonical-root-guard.py"],
 	["friction-relay.py"],
 	["feed-guard.py", "SessionStart"],
 ]
