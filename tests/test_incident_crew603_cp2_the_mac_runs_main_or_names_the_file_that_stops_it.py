@@ -83,8 +83,7 @@ def test_dead_remote_is_blind_never_a_crash(tmp_path):
 
 
 def test_wired_first_at_session_start_and_hook_run_passes_it():
-    import json
-import re
+    import re
     # crew#603 CP4: settings names one door (opa-hook.py); the order lives in policy/adapters.rego.
     rows = re.search(r"session_start := \[(.*?)\]\n", (HERE / "policy" / "adapters.rego").read_text(), re.S).group(1)
     starts = re.findall(r'\["([^"]+)"', rows)
