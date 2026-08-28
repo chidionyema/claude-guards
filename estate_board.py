@@ -283,7 +283,18 @@ CLOSES_WHEN = re.compile(r"^Closes-when:\s*`?([^`\n]+?)`?\s*$", re.M)
 CLOSER_LOG = os.environ.get("ESTATE_CLOSER_LOG", "")
 # LAW 21 (code-99 on cg#169): an issue body is anyone's text. The board runs exactly one shape of
 # command, the datamap row probe; every other Closes-when line is refused, counted, never executed.
-ALLOWED_CLOSES_WHEN = re.compile(r"^python3 science/datamap\.py --row [A-Za-z0-9_.-]+$")
+# crew#526 (09cd04a6, 2026-08-28): the first grammar was `--row [A-Za-z0-9_.-]+`, and no live row
+# key can be spelled in it. Every key in science/verdicts.json carries `/` and most carry `*`
+# (`mac/*state/pi-bridge-runs*`), so 0 of 60 rows were runnable, `by_rule["closes-when"]` was 0 on
+# every turn, and crew#533 was refused for naming its own row. A key is dot-joined atoms joined by
+# `/`: that accepts every real key (two of them carry `~`, and hidden segments like `.estate` are
+# ordinary) and still cannot spell `..`, a space or a shell metacharacter -- a segment may open
+# with one dot, never two, because the dot must be followed by an atom.
+# The command runs through shlex.split with no shell, so `*` and `~` reach datamap.py literally.
+_ROW_ATOM = r"[A-Za-z0-9_*~-]+"
+_ROW_SEG = rf"\.?{_ROW_ATOM}(?:\.{_ROW_ATOM})*"
+ALLOWED_CLOSES_WHEN = re.compile(rf"^python3 science/datamap\.py --row {_ROW_SEG}(?:/{_ROW_SEG})*$")
+MAX_CLOSES_WHEN = 200  # a body is anyone's text; a row key is never this long
 
 
 def closes_when(issue: dict) -> str | None:
@@ -329,7 +340,7 @@ def close_pass(issues: list[dict], now: float, seen: dict[int, tuple[int, float]
     for i in issues:
         n = i["number"]
         cmd = closes_when(i)
-        if cmd and not ALLOWED_CLOSES_WHEN.match(cmd):
+        if cmd and (len(cmd) > MAX_CLOSES_WHEN or not ALLOWED_CLOSES_WHEN.match(cmd)):
             out["refused"] += 1
             ledger({"guard": "board", "event": "refused", "item": n, "rule": "closes-when", "cmd": cmd[:120]})
             continue
