@@ -186,9 +186,15 @@ def check_repos(d, _mm):
         # A shared checkout parked on a stray branch is how one session's
         # `git add -A` strands another session's files where main cannot see them.
         # It happened three times in one afternoon before anything looked for it.
+        # A checkout detached exactly at origin/<branch> is pinned, not parked
+        # (the shared idp/crew checkouts are moved that way on purpose so a
+        # session's branch never hides merged rows from the scheduler).
         want = e.get("branch")
         cur = sh(["git", "-C", p, "rev-parse", "--abbrev-ref", "HEAD"])[1]
-        if want and cur != want:
+        pinned = (cur == "HEAD" and want and
+                  sh(["git", "-C", p, "rev-parse", "HEAD"])[1] ==
+                  sh(["git", "-C", p, "rev-parse", f"refs/remotes/origin/{want}"])[1])
+        if want and cur != want and not pinned:
             holes.append(f"{e['path']}: checked out on '{cur}', not '{want}'; "
                          f"work committed here does not reach {want}")
         dirty = sh(["git", "-C", p, "status", "--porcelain"])[1].splitlines()
