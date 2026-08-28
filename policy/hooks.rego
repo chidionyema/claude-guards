@@ -110,3 +110,94 @@ deny contains msg if {
 		[r.path, r.source_urls, min_sources],
 	)
 }
+
+# ---------------------------------------------------------------------------
+# A markdown file written outside the documentation structure.
+#
+# Founder, 2026-08-28: "when you ask an agent to do 'research' or 'automate'
+# something, they often treat it as a one-off script output rather than
+# 'documentation as code.' They dump the results wherever is easiest because
+# there is no physical wall stopping them ... If it isn't in the Diátaxis
+# structure, the code literally will not commit."
+#
+# ADR 0002 (idp docs/decisions/0002): documentation is code, Diátaxis is the
+# shape, TechDocs renders it. This is the wall. A .md may be written only:
+#   - under docs/<tutorials|how-to|reference|explanation|decisions|evidence>/,
+#     or as docs/index.md (the mkdocs home);
+#   - as one of the root governance files (README, CLAUDE, AGENTS, FOUNDER, ...);
+#   - under .github/ (pull request and issue templates are forms, not docs);
+#   - under a .claude/ tree (harness memory, checkpoints, laws: not a repo's docs);
+#   - in a temp directory when its name ends -body.md (a pull request or issue
+#     body handed to `gh --body-file`; that is a message, not a document).
+# Everything else is refused, with the folder it belongs in. The same wall
+# stands in front of a shell redirect (`> notes.md`, `tee out.md`), because a
+# heredoc is how a session dumps a report when Write says no.
+# Override: `# docs-path-intended` in the content or the command, with the why.
+docs_override := "docs-path-intended"
+
+docs_dirs := `(^|/)docs/(tutorials|how-to|reference|explanation|decisions|evidence)/`
+
+root_docs := {
+	"README.md", "CLAUDE.md", "AGENTS.md", "AGENTS-FULL.md", "FOUNDER.md",
+	"CONTRIBUTING.md", "SECURITY.md", "CHANGELOG.md", "LICENSE.md",
+	"CODE_OF_CONDUCT.md", "SUPPORT.md", "GOVERNANCE.md", "CODEOWNERS.md",
+}
+
+basename(path) := p[count(p) - 1] if {
+	p := split(path, "/")
+}
+
+is_markdown(path) if endswith(lower(path), ".md")
+
+docs_allowed(path) if regex.match(docs_dirs, path)
+
+docs_allowed(path) if regex.match(`(^|/)docs/index.md$`, path)
+
+docs_allowed(path) if basename(path) in root_docs
+
+docs_allowed(path) if contains(path, "/.github/")
+
+docs_allowed(path) if contains(path, "/.claude/")
+
+docs_allowed(path) if {
+	regex.match(`^(/private)?/(tmp|var/folders)/`, path)
+	endswith(path, "-body.md")
+}
+
+rogue_doc(path) if {
+	is_markdown(path)
+	not docs_allowed(path)
+}
+
+docs_reason(path) := sprintf(concat("", [
+	"BLOCKED: %s is a markdown file outside the documentation structure (ADR 0002, Diátaxis).\n\n",
+	"  Put it where a reader will find it and TechDocs will render it:\n",
+	"      docs/tutorials/     a lesson, step by step\n",
+	"      docs/how-to/        a task, for someone who knows the ground\n",
+	"      docs/reference/     facts, tables, data, generated output\n",
+	"      docs/explanation/   concepts, research, why it is this way\n",
+	"      docs/decisions/     an ADR (MADR shape, ## Sources with two URLs)\n",
+	"  and add it to mkdocs.yml nav. Root governance files (README, CLAUDE, AGENTS,\n",
+	"  FOUNDER) and a `*-body.md` in a temp dir for `gh --body-file` are allowed.\n\n",
+	"  If this file genuinely is not documentation, put  # %s  in it and say why.",
+]), [path, docs_override])
+
+deny contains msg if {
+	input.tool_name in {"Write", "Edit", "MultiEdit"}
+	path := object.get(input, ["tool_input", "file_path"], "")
+	rogue_doc(path)
+	not contains(object.get(input, ["tool_input", "content"], ""), docs_override)
+	not contains(object.get(input, ["tool_input", "new_string"], ""), docs_override)
+	msg := docs_reason(path)
+}
+
+redirect_targets := `(?:>>?|\btee\b(?:\s+-a)?)\s*['"]?([^\s'"|;&<>]+\.md)\b`
+
+deny contains msg if {
+	input.tool_name == "Bash"
+	cmd := object.get(input, ["tool_input", "command"], "")
+	not contains(cmd, docs_override)
+	some m in regex.find_all_string_submatch_n(redirect_targets, cmd, -1)
+	rogue_doc(m[1])
+	msg := docs_reason(m[1])
+}

@@ -19,22 +19,19 @@ WHY THE WORD LIST IS SHORT. Every entry is a word I actually used on the founder
 same kind. A long list invents offences, gets false positives, and an unsatisfiable guard gets
 uninstalled. Add to it when a real reply earns it, not from a thesaurus.
 
-WHY IT CANNOT LOOP. It blocks at most three times per session, and never twice for the same
-text. Rewriting is the way past it; repeating yourself is not blocked forever.
+WHY IT REFUSES EVERY TIME. Until crew#603 (2026-08-28) it stopped after three blocks a session
+and passed a repeated text; a guard that can be worn down is an honor system. Rewrite to pass.
 
   python3 jargon-guard.py --selftest    # proves it blocks the real reply and passes the rewrite
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
 import sys
 from pathlib import Path
 
-STATE = Path.home() / ".claude" / "state" / "jargon-guard.json"
-MAX_BLOCKS_PER_SESSION = 3
 
 #: word -> what to say instead. The right-hand side is printed, so it has to be usable as-is.
 JARGON = {
@@ -143,21 +140,6 @@ def last_assistant_text(transcript: Path) -> str:
     return text
 
 
-def load_state() -> dict:
-    try:
-        return json.loads(STATE.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001 - a missing or corrupt state file means no history
-        return {}
-
-
-def save_state(state: dict) -> None:
-    try:
-        STATE.parent.mkdir(parents=True, exist_ok=True)
-        STATE.write_text(json.dumps(state), encoding="utf-8")
-    except Exception:  # noqa: BLE001 - failing to record must not fail the turn
-        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 157))
-        except Exception: pass
-
 
 def report(found: list[tuple[str, str]]) -> str:
     lines = ["PLAIN ENGLISH BROKEN IN A REPLY TO THE FOUNDER. He should not have to decode it."]
@@ -248,19 +230,8 @@ def main() -> int:
     if not found:
         return 0
 
-    session = str(payload.get("session_id") or "unknown")
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
-    state = load_state()
-    mine = state.get(session) or {"count": 0, "seen": []}
-    # Never block the same text twice, and never more than three times in one session. An
-    # unsatisfiable guard gets uninstalled, and a Stop hook that always blocks is a wedge.
-    if digest in mine["seen"] or mine["count"] >= MAX_BLOCKS_PER_SESSION:
-        return 0
-    mine["count"] += 1
-    mine["seen"] = (mine["seen"] + [digest])[-20:]
-    state[session] = mine
-    save_state(state)
-
+    # crew#603 (founder 2026-08-28): the three-blocks-a-session cap and the pass-on-repeat are
+    # gone. A guard that can be worn down is an honor system; the fourth refusal is the first.
     print(report(found), file=sys.stderr)
     return 2
 

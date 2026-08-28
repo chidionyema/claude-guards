@@ -170,24 +170,9 @@ def main(argv: list[str]) -> int:
     found = offences(text)
     if not found:
         return 0
-    # Never block the same text twice, and never more than three times in one session: a Stop
-    # hook that always blocks is a wedge, and a wedge gets uninstalled (jargon-guard.py rule).
-    state_file = Path.home() / ".claude" / "state" / "vendor-lock-guard.json"
-    try:
-        state = json.loads(state_file.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001 - missing or corrupt state means no history
-        state = {}
-    sid = str(payload.get("session_id", ""))
-    key = str(hash(text))
-    blocked = state.get(sid, [])
-    if key in blocked or len(blocked) >= 3:
-        return 0
-    state[sid] = blocked + [key]
-    try:
-        state_file.parent.mkdir(parents=True, exist_ok=True)
-        state_file.write_text(json.dumps(state), encoding="utf-8")
-    except OSError:
-        pass
+    # crew#603 (founder 2026-08-28): this guard used to switch itself off after three refusals
+    # in a session and pass a repeated text on the second try. A guard that can be worn down
+    # is an honor system; the fourth refusal is the same as the first.
     print(json.dumps({"decision": "block", "reason": report(found, "A REPLY TO THE FOUNDER")}))
     return 0
 

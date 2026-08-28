@@ -11,8 +11,10 @@ file decides something", and this one does not -- it reads stdin, hands it to th
 engine, and prints what comes back. If a rule ever appears below this docstring,
 the migration has gone backwards.
 
-Fails OPEN on every error, deliberately. A broken adapter must not become an
-outage on every tool call in every session (LAW 38).
+Fails CLOSED on every error since crew#603 (founder 2026-08-28: "If a guard crashes, the
+answer is 'no'"). No OPA binary, an eval error, a payload it cannot read: each is a refusal
+that names itself, never a silent pass. Until then it failed open, and a missing `opa` on
+one Mac meant every rule in this directory was off with nobody told.
 
     echo '{"tool_name":"Artifact","tool_input":{"file_path":"/tmp/x.html"}}' \
       | python3 opa-hook.py
@@ -43,24 +45,32 @@ REPLY_QUERY = "data.reply.deny"
 IGNORE = ("fixtures", "*.json")
 
 
+class NoVerdict(Exception):
+    """OPA could not be asked or did not answer. crew#603: that is a refusal, not a pass."""
+
+
+def closed(why: str) -> str:
+    return f"opa-hook could not reach a verdict, so the answer is no (fail-closed, crew#603): {why}"
+
+
 def denials(payload: dict, query: str = QUERY) -> list[str]:
     opa = shutil.which("opa")
     if not opa:
-        return []
+        raise NoVerdict("no `opa` on PATH")
     try:
         out = subprocess.run(
             [opa, "eval", "--strict-builtin-errors", "--format", "json",
              *sum(((["--ignore", p]) for p in IGNORE), []),
              "--data", POLICY, "--stdin-input", query],
             input=json.dumps(payload), capture_output=True, text=True, timeout=10)
-    except (OSError, subprocess.SubprocessError):
-        return []
+    except (OSError, subprocess.SubprocessError) as e:
+        raise NoVerdict(f"opa eval did not run: {e}") from e
     if out.returncode != 0:
-        return []
+        raise NoVerdict(f"opa eval exit {out.returncode}: {out.stderr.strip()[:300]}")
     try:
         return list(json.loads(out.stdout)["result"][0]["expressions"][0]["value"])
-    except (ValueError, KeyError, IndexError, TypeError):
-        return []
+    except (ValueError, KeyError, IndexError, TypeError) as e:
+        raise NoVerdict(f"opa answered in a shape this adapter cannot read: {e}") from e
 
 
 def last_reply_above_fold(transcript_path: str) -> str:
@@ -125,12 +135,34 @@ def standing_focus() -> str:
         return ""
 
 
+def refuse(event: str, why: str) -> int:
+    reason = closed(why)
+    if event == "Stop":
+        print(json.dumps({"decision": "block", "reason": reason}))
+        return 0
+    print(json.dumps({"decision": "block", "reason": reason,
+                      "hookSpecificOutput": {"permissionDecision": "deny",
+                                             "permissionDecisionReason": reason}}))
+    sys.stderr.write(reason + "\n")
+    return 2
+
+
 def main() -> int:
     try:
         payload = json.load(sys.stdin)
-    except (ValueError, OSError):
-        return 0
-    if payload.get("hook_event_name") == "Stop":
+    except (ValueError, OSError) as e:
+        return refuse("unknown", f"payload is not JSON: {e}")
+    if not isinstance(payload, dict):
+        return refuse("unknown", "payload is not an object")
+    event = str(payload.get("hook_event_name") or "unknown")
+    try:
+        return decide(payload, event)
+    except NoVerdict as e:
+        return refuse(event, str(e))
+
+
+def decide(payload: dict, event: str) -> int:
+    if event == "Stop":
         if payload.get("stop_hook_active"):
             return 0
         reply = last_reply_above_fold(str(payload.get("transcript_path", "")))
@@ -154,5 +186,5 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except SystemExit:
         raise
-    except Exception:
-        raise SystemExit(0)
+    except Exception as e:  # noqa: BLE001 - crew#603: a crashed adapter is a refusal
+        raise SystemExit(refuse("unknown", f"{type(e).__name__}: {e}"))

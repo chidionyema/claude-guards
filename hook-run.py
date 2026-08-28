@@ -57,6 +57,39 @@ def waived(payload: dict) -> str | None:
     return m.group(1) if m else None
 
 
+TIMEOUT = float(os.environ.get("HOOK_TIMEOUT") or 120)
+
+
+def refusal(hook: str, why: str) -> subprocess.CompletedProcess:
+    """crew#603 (founder 2026-08-28: "If a guard crashes, the answer is 'no'"). A guard that
+    raised, was missing, or ran out of time used to return its own exit code (1) and Claude
+    Code treated 1 as a warning: the action went ahead. Now every way a guard fails to reach a
+    verdict is a refusal, exit 2 with a block decision, and the reason names the guard."""
+    reason = f"{hook} could not reach a verdict, so the answer is no (fail-closed, crew#603): {why}"
+    out = json.dumps({"decision": "block", "reason": reason,
+                      "hookSpecificOutput": {"permissionDecision": "deny",
+                                             "permissionDecisionReason": reason}})
+    return subprocess.CompletedProcess(args=[hook], returncode=2, stdout=out.encode(),
+                                       stderr=(reason + "\n").encode())
+
+
+def run_closed(argv: list[str], stdin: bytes) -> subprocess.CompletedProcess:
+    hook = os.path.basename(argv[0])
+    if not os.path.isfile(argv[0]):
+        return refusal(hook, f"no such file {argv[0]}")
+    try:
+        proc = subprocess.run([sys.executable, *argv], input=stdin, capture_output=True,
+                              timeout=TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return refusal(hook, f"no verdict inside {TIMEOUT:g}s")
+    except OSError as e:
+        return refusal(hook, f"could not start: {e}")
+    if proc.returncode not in (0, 2):
+        tail = (proc.stderr or proc.stdout).decode("utf-8", "replace").strip().splitlines()
+        return refusal(hook, f"exit {proc.returncode}: {tail[-1] if tail else 'no output'}")
+    return proc
+
+
 def record(row: dict) -> None:
     try:
         os.makedirs(os.path.dirname(LEDGER), exist_ok=True)
@@ -78,7 +111,7 @@ def main(argv: list[str]) -> int:
     if not isinstance(payload, dict):
         payload = {}
     t0 = time.monotonic()
-    proc = subprocess.run([sys.executable, *argv], input=stdin, capture_output=True)
+    proc = run_closed(argv, stdin)
     ms = int((time.monotonic() - t0) * 1000)
     sys.stdout.buffer.write(proc.stdout)
     sys.stderr.buffer.write(proc.stderr)
