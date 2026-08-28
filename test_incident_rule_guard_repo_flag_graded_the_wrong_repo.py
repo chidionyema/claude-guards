@@ -57,4 +57,4 @@ def test_incident_rule_guard_repo_flag_graded_the_wrong_repo():
     # the query carries the name through to gh, rather than relying on the working directory
     import inspect
     src = inspect.getsource(rg._pr_check_states)
-    assert '"--repo", named.group("slug")' in src
+    assert "_merge_repo_slug(cmd)" in src and '"--repo", slug' in src  # a0d64ea4: slug parsed once, shared with the main-red probe

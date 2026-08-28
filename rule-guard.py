@@ -435,24 +435,20 @@ def _merge_refusal(pr: str, states: list[tuple[str, str]] | None) -> str | None:
     return None
 
 
-def _failed_jobs(run_id: str) -> list[str]:
+def _failed_jobs(run_id: str, slug: str | None = None) -> list[str]:
     """Names of the jobs in `run_id` that concluded FAILURE. Empty when none, or unreadable.
 
-    `ci-ok` is excluded because it is an aggregator, not a measurement. It reads its needs\'
-    results and fails when any of them is not `success` or `skipped`, so a CANCELLED job makes
-    it fail. Counting it here would re-create the exact false red this function exists to
-    remove: run 32109476818 was cancelled with zero lane failures, and ci-ok alone still
-    reported failure. A real breakage always shows up as a failed LANE job.
+    `ci-ok` is excluded: an aggregator, not a measurement -- it fails when any need is not
+    `success`/`skipped`, so a CANCELLED job fails it (run 32109476818: zero lane failures, ci-ok
+    alone red). A real breakage always shows up as a failed LANE job.
 
-    Read through the REST API deliberately. `gh run view` and `gh pr` go through GraphQL, which
-    this repo's token cannot use (`Resource not accessible by integration`, HTTP 403), while the
-    same token reads REST fine. Measured 2026-08-18 inside one run: eleven REST calls succeeded
-    and the single GraphQL call 403ed.
+    REST deliberately: `gh run view`/`gh pr` use GraphQL, which this repo's token cannot (HTTP 403
+    `Resource not accessible by integration`); measured 2026-08-18, 11 REST calls ok, 1 GraphQL 403.
     """
     try:
         p = subprocess.run(
             (_real_tool("gh"), "api",
-             f"repos/{{owner}}/{{repo}}/actions/runs/{run_id}/jobs?per_page=100",
+             f"repos/{slug or '{owner}/{repo}'}/actions/runs/{run_id}/jobs?per_page=100",
              "--jq", '.jobs[] | select(.conclusion == "failure") | select(.name != "ci-ok") | .name'),
             cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
             env=_clean_env())
@@ -463,9 +459,10 @@ def _failed_jobs(run_id: str) -> list[str]:
     return [ln.strip() for ln in p.stdout.splitlines() if ln.strip()]
 
 
-def _main_red_refusal() -> str | None:
+def _main_red_refusal(slug: str | None = None) -> str | None:
     """Is main's own last finished CI run red? Returns the refusal text, or None.
 
+    `slug` = the merge's `--repo`; else the SESSION repo (a0d64ea4: crew merge refused on idp's red 33191186332).
     Fails OPEN, unlike the PR check above. The PR's own verdict already fails closed, so a second
     closed fence on an unreadable answer would wedge every merge on a GitHub hiccup. This one only
     ever adds a refusal it can prove.
@@ -475,7 +472,7 @@ def _main_red_refusal() -> str | None:
             (_real_tool("gh"), "run", "list", "--branch", "main", "--workflow", "ci.yml",
              "--status", "completed", "--limit", "1",
              "--json", "conclusion,databaseId,headSha",
-             "--jq", '.[] | "\\(.conclusion)\\t\\(.databaseId)\\t\\(.headSha)"'),
+             "--jq", '.[] | "\\(.conclusion)\\t\\(.databaseId)\\t\\(.headSha)"') + (("--repo", slug) if slug else ()),
             cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
             env=_clean_env())
     except (OSError, subprocess.SubprocessError):
@@ -494,7 +491,7 @@ def _main_red_refusal() -> str | None:
     #
     # Grade the JOBS instead. A job that concluded `failure` is a measurement and still blocks,
     # even inside a cancelled run. A cancelled run with no failed job is an absence of evidence.
-    failed = _failed_jobs(run_id)
+    failed = _failed_jobs(run_id, slug)
     if not failed:
         return None
     conclusion = f"{conclusion.lower()}, with {', '.join(failed)} failed"
@@ -530,14 +527,18 @@ def _merge_verdict(pr: str, states: list[tuple[str, str]] | None,
     return None
 
 
+def _merge_repo_slug(cmd: str) -> str | None:  # `--repo owner/name` on the merge's own segment, else None
+    return next((m.group("slug") for s in re.split(r"\|\||&&|[;|\n]", cmd) if _GH_MERGE.search(s) and (m := _GH_REPO_FLAG.search(s))), None)
+
+
 def _pr_check_states(pr: str, cmd: str = "") -> list[tuple[str, str]] | None:
     """(name, state) for every check on `pr`, or None if the query itself failed."""
-    named = next((_GH_REPO_FLAG.search(s) for s in re.split(r"\|\||&&|[;|\n]", cmd) if _GH_MERGE.search(s)), None)  # the merge's own segment only
+    slug = _merge_repo_slug(cmd)
     try:
         p = subprocess.run(
             [_real_tool("gh"), "pr", "checks", pr, "--json", "name,state",
              "--jq", '.[] | "\\(.name)\\t\\(.state)"']
-            + (["--repo", named.group("slug")] if named else []),
+            + (["--repo", slug] if slug else []),
             cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
             env=_clean_env())
     except (OSError, subprocess.SubprocessError):
@@ -603,7 +604,7 @@ def rule_merge_red_pr(cmd: str) -> str | None:
         if not pr.isdigit():
             return _unresolved
     return _merge_verdict(pr, _pr_check_states(pr, cmd), escaped,
-                          _main_red_refusal(), "main-is-red" in cmd)
+                          _main_red_refusal(sl) if (sl := _merge_repo_slug(cmd)) else _main_red_refusal(), "main-is-red" in cmd)
 
 
 #: Rules that REFUSE the command. Each one matches on what the command does — a flag, a path — so
