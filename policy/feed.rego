@@ -13,7 +13,7 @@ package feed
 
 import rego.v1
 
-marks := {"🔴", "🟡", "🟢", "⚪", "📍", "🔧", "🔀"}
+marks := {"🔴", "🟡", "🟢", "⚪", "📍", "🔧", "🔀", "📎"}
 
 required := {"🔧 TOUCHES:", "🔀 OVERLAP:"}
 
@@ -34,7 +34,7 @@ deny contains msg if {
 deny contains msg if {
 	some l in input.lines
 	not marked(l)
-	msg := sprintf("every line starts with one of 🔴 🟡 🟢 ⚪ 📍 🔧 🔀; refused: %s", [substring(l, 0, 60)])
+	msg := sprintf("every line starts with one of 🔴 🟡 🟢 ⚪ 📍 🔧 🔀 📎; refused: %s", [substring(l, 0, 60)])
 }
 
 deny contains msg if {
