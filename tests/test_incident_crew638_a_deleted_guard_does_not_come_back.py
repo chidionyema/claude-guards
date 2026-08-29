@@ -16,6 +16,7 @@ This is the fence for that deletion, and it grades two things a comment cannot:
 Deliberately NOT graded: the words "goal-guard" or "jargon-guard" appearing in a docstring. Those
 are history, and a rule that matched them would be this estate's own recurring mistake -- grading
 the text that usually means the thing instead of the thing itself (crew#623)."""
+
 from __future__ import annotations
 
 import ast
@@ -27,15 +28,17 @@ import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
+# feed-guard.py was on this list; the founder brought it back on 2026-08-29 ("we need to bring the
+# feed and feed guard back"): the 30-minute handoff to ~/.estate/feed.md is data on disk, not a
+# judgement of prose, and 1,074 handoffs already lived there.
 DELETED = [
-    "goal-guard.py",          # judged whether the session was on its goal
-    "feed-guard.py",          # judged whether a handoff said enough
+    "goal-guard.py",  # judged whether the session was on its goal
     "context-guard-hook.py",  # judged whether context was being spent well
-    "jargon-guard.py",        # judged whether a reply was plain English
-    "repeat-guard.py",        # judged whether a turn repeated the last one
-    "auto-objective.py",      # judged which board item the session should claim
-    "idle-guard.py",          # judged whether a session was idle
-    "goal_focus.py",          # goal-guard's state library; nothing else read it
+    "jargon-guard.py",  # judged whether a reply was plain English
+    "repeat-guard.py",  # judged whether a turn repeated the last one
+    "auto-objective.py",  # judged which board item the session should claim
+    "idle-guard.py",  # judged whether a session was idle
+    "goal_focus.py",  # goal-guard's state library; nothing else read it
 ]
 
 
@@ -69,15 +72,22 @@ def test_no_surviving_script_imports_or_executes_a_deleted_guard() -> None:
         for node in ast.walk(tree):
             if isinstance(node, ast.Constant) and isinstance(node.value, str):
                 if node.value in DELETED or node.value in stems:
-                    offenders.append("%s:%d names %r" % (f.name, node.lineno, node.value))
+                    offenders.append(
+                        "%s:%d names %r" % (f.name, node.lineno, node.value)
+                    )
             elif isinstance(node, ast.Import):
                 for a in node.names:
                     if a.name in stems:
-                        offenders.append("%s:%d imports %s" % (f.name, node.lineno, a.name))
+                        offenders.append(
+                            "%s:%d imports %s" % (f.name, node.lineno, a.name)
+                        )
             elif isinstance(node, ast.ImportFrom) and (node.module or "") in stems:
-                offenders.append("%s:%d imports from %s" % (f.name, node.lineno, node.module))
+                offenders.append(
+                    "%s:%d imports from %s" % (f.name, node.lineno, node.module)
+                )
     assert offenders == [], (
-        "a live script still reaches for a deleted guard, so it raises at hook time: %s" % offenders
+        "a live script still reaches for a deleted guard, so it raises at hook time: %s"
+        % offenders
     )
 
 
