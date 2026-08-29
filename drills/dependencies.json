@@ -168,6 +168,10 @@
     "www.minimax.io": {
       "is": "a marketing page",
       "dismissed": "same"
+    },
+    "llm.mumchimp.com": {
+      "is": "the estate model router (platform/llm); consultd's keyed lanes and hermes bin/consult call it (crew#568)",
+      "dismissed": "the router down = consultd falls to the local ollama floor then the honest 503 (exit 3 is the documented normal state); the cluster's own availability gate drills the router (idp bin/idp-availability-gate)"
     }
   },
   "credentials": {
@@ -262,6 +266,10 @@
     "CONSOLE_PASSWORD": {
       "is": "a fixture string in tests/test_incident_crew407_*: the shape the Telegram guard must refuse",
       "dismissed": "not a credential the estate holds; it exists only so the guard is proved to refuse it"
+    },
+    "LITELLM_API_KEY": {
+      "is": "the laptop's one router virtual key, minted by idp vault-seed entry=laptop, delivered by estate-secrets (crew#568)",
+      "dismissed": "losing it costs the keyed lanes only; consultd falls to ollama, bin/consult exits 3; re-minted by one workflow dispatch, never pasted"
     }
   }
 }
