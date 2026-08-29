@@ -7,6 +7,14 @@ set -eu
 
 # Tranche 1: load-bearing un-versioned state (~50 MB measured 2026-08-24).
 # Transcripts (~/.claude/projects) stay with the old offsite job for now.
+#
+# restic exits 3 when it wrote the snapshot but could not read some source:
+# macOS refuses the xattrs on ~/Library/Containers/com.apple.Notes to a process
+# without Full Disk Access, so 3 is this job's ordinary exit. Under `set -e` that
+# 3 aborted the script before the age check below, so the row went red on every
+# run while the snapshot landed, and three of those reds opened its breaker. A
+# fatal restic error (1, 2, 10+) is still a failure; 3 is not.
+rc=0
 restic backup \
   "$HOME/.estate" \
   "$HOME/Library/Containers/com.apple.Notes/Data/Library/Notes" \
@@ -21,7 +29,8 @@ restic backup \
   "$HOME/.claude/LAWS-INCIDENTS.md" \
   "$HOME/.claude/LAWS.dynamic.md" \
   "$HOME/.claude/settings.json" \
-  --tag estate-tranche1 --quiet
+  --tag estate-tranche1 --quiet || rc=$?
+[ "$rc" -eq 0 ] || [ "$rc" -eq 3 ] || exit "$rc"
 
 # Retention: a day of hourlies, two weeks of dailies, two months of weeklies.
 restic forget --keep-hourly 24 --keep-daily 14 --keep-weekly 8 --prune --quiet
