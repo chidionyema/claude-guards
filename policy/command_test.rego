@@ -60,6 +60,9 @@ refuse := [
 	"git commit --no-verify -m x", # rule_no_verify
 	"git commit -n -m x", # rule_no_verify
 	"git add -- x\ngit commit -n -m x", # rule_no_verify
+	"git -c core.hooksPath=/dev/null push origin feat/x", # rule_hooks_bypass
+	"git -c core.hooksPath=/dev/null commit -q -m x", # rule_hooks_bypass
+	"git push --no-verify origin feat/x", # rule_hooks_bypass
 	"rm -f .git/index.lock", # rule_index_lock
 	"rm /Users/x/.git/worktrees/w/index.lock", # rule_index_lock
 	"echo git add -A is banned", # rule_add_all
@@ -124,6 +127,8 @@ permit := [
 	"oci session authenticate --no-browser  # oci-session-intended: bootstrap once, crew#345", # marker
 	"gh workflow enable 337731742  # autoscale-intended", # allowed
 	"gh workflow disable 337731742", # allowed
+	"git -c core.hooksPath=/dev/null log -1", # allowed: reading, no hook runs
+	"git -c core.hooksPath=/dev/null push origin b  # hooks-bypass-intended: pre-push ImportError temporalio", # marker
 	"bash deploy/runners.sh scale 12", # allowed
 	"fly machine stop abc -a prospector-engine", # allowed
 	"git push --force origin b  # force-push-intended", # allowed

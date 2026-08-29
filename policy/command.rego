@@ -217,6 +217,32 @@ rules := [
 		]),
 	},
 	{
+		"id": "hooks_bypass",
+		# 2026-08-29, session 2d8b3bd0: 18 pushes with `-c core.hooksPath=/dev/null` in one
+		# session. The estate pre-push hook (~/.estate/guards/hooks/pre-push) runs
+		# bin/idp-tests-for and the PR gates; skipping it sent idp#695 to CI with three reds
+		# the hook would have caught on the Mac (kyverno rollout rule, short image name, a
+		# filter on an SDK route). Founder: "when you make a mistake ensure other agents
+		# can't make the same mistake" / "mandate all agents use it" / "rules are pointless
+		# if they don't guide".
+		"re": `\bgit\b(?:[^|;&\n\r]*-c\s*core\.hooksPath=[^|;&\n\r]*\b(?:push|commit)\b|[^|;&\n\r]*\bpush\b[^|;&\n\r]*--no-verify\b)`,
+		"marker": "hooks-bypass-intended",
+		"must_match": "git -c core.hooksPath=/dev/null push origin b",
+		"must_not_match": "git -c core.hooksPath=/dev/null log -1",
+		"msg": concat("", [
+			"BLOCKED by rule-guard: this push or commit switches the estate git hooks off ",
+			"(`-c core.hooksPath=` / `--no-verify`).\n",
+			"  why              the pre-push hook is the local CI: bin/idp-tests-for picks every test ",
+			"whose source names a file you changed, then the PR gates. Skipped, the same reds land in ",
+			"CI a round trip later (idp#695, 2026-08-29: three reds, all catchable here).\n",
+			"  fix it now       1. drop the -c / --no-verify and run the same command again\n",
+			"                   2. if the hook refuses: read its output, fix every red in ONE pass, commit, push again\n",
+			"                   3. if the hook itself crashes (python3.14, missing venv): `bin/idp-tests-for` by hand,\n",
+			"                      then push with `# hooks-bypass-intended: <the crash line>` and file the crash on the board\n",
+			"  never            push green-by-skipping. A red the hook found is yours to fix before CI sees it.",
+		]),
+	},
+	{
 		"id": "index_lock",
 		"re": `\brm\b[^|;&]*index\.lock`,
 		"marker": "lock-removal-intended",
@@ -225,7 +251,12 @@ rules := [
 		"msg": concat("", [
 			"BLOCKED by rule-guard: removing .git/index.lock.\n",
 			"Sessions share one index here. That lock is another session's commit in ",
-			"progress; deleting it corrupts their commit. Queue and wait.",
+			"progress; deleting it corrupts their commit.\n",
+			"  fix it now       1. see whose it is:  ls -l .git/index.lock && ps -ax | grep '[g]it '\n",
+			"                   2. a live git process: wait for it and run your command again\n",
+			"                   3. no git process and the lock is older than a minute: it is orphaned -- ",
+			"append `# lock-removal-intended: <ls -l line>` and say so in the reply\n",
+			"  better           work in your own worktree (git worktree add <dir> <branch>); it has its own index.",
 		]),
 	},
 	{
