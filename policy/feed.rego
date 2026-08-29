@@ -13,11 +13,13 @@ package feed
 
 import rego.v1
 
-marks := {"🔴", "🟡", "🟢", "⚪", "📍", "🔧", "🔀"}
+marks := {"🔴", "🟡", "🟢", "⚪", "📍", "🔧", "🔀", "📎"}
 
 required := {"🔧 TOUCHES:", "🔀 OVERLAP:"}
 
-max_lines := 8
+# crew#629 CP4: a ninth line, 📎 FACTS:, points at the ticket's generated Infra facts block
+# (bin/idp-ticket-facts); it is expected, not yet required, so no session's handoff is refused today.
+max_lines := 9
 
 deny contains msg if {
 	count(input.lines) == 0
@@ -32,7 +34,7 @@ deny contains msg if {
 deny contains msg if {
 	some l in input.lines
 	not marked(l)
-	msg := sprintf("every line starts with one of 🔴 🟡 🟢 ⚪ 📍 🔧 🔀; refused: %s", [substring(l, 0, 60)])
+	msg := sprintf("every line starts with one of 🔴 🟡 🟢 ⚪ 📍 🔧 🔀 📎; refused: %s", [substring(l, 0, 60)])
 }
 
 deny contains msg if {
