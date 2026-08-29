@@ -68,7 +68,17 @@ legacy := {
 	# command while checkpoints/LATEST.md is more than 30 min old). The lines are the state Rego
 	# cannot gather: checkpoint_age_s() stats LATEST.md next to the transcript, walks up from a
 	# subagents/ transcript, and hands None (BLIND) when there is no file. Adapter gathers, Rego decides.
-	"rule-guard.py": 1353,
+	# 1353 -> 1452 on 2026-08-29 (session 14ed6c8b, crew#488). No refusal was added: rules_count is
+	# still 7 (`grep -c '^def rule_'` before and after), and the new dimension lives inside
+	# rule_merge_red_pr -- one of the four this file's header names as unable to move, because it
+	# asks gh a live question. It asks two more: `gh api {repo}/rulesets` for the required contexts,
+	# and the PR's own check names, because the decision is "is there a check GitHub will not wait
+	# for" and neither set is in the command. Rego cannot shell out; a pattern-only version would be
+	# a blanket ban on --auto, which is LAW 38 in a repository whose required set is complete.
+	# WHY: idp#675 was merged by --auto at 00:35:33Z with portability-drill run 33223840305 still
+	# going; it concluded FAILURE and main's gate was out ~30 min. Adapter gathers, Rego decides is
+	# the shape this becomes when a runner can hand OPA the check names and the required set.
+	"rule-guard.py": 1452,
 	# crew#407 (claude-guards#118): the credential shapes use lookarounds ((?!...), (?<!...)) that
 	# RE2, and so OPA, cannot run, and the one definition is estate_alert.credential_shape, shared
 	# with the Telegram senders (#113). The hook is the adapter for two events (Stop reply text,
