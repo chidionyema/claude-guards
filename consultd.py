@@ -45,6 +45,7 @@ through a tunnel sets CONSULT_TOKEN and the token is the whole gate. The
 subprocess backends run in an empty directory with no repository in it and
 without --yolo or --auto, so a consult cannot edit anything.
 """
+
 import hashlib
 import json
 import os
@@ -102,8 +103,15 @@ def log(row):
         with open(LOG_FILE, "a") as fh:
             fh.write(json.dumps(row) + "\n")
     except Exception:
-        try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 104))
-        except Exception: pass
+        try:
+            (
+                __import__("sys").path.append(
+                    __import__("os").path.expanduser("~/.claude/scripts")
+                ),
+                __import__("guard_report").broken(__file__, 104),
+            )
+        except Exception:
+            pass
 
 
 def workdir():
@@ -144,8 +152,12 @@ class KimiBackend(Backend):
         if not self.BIN.exists():
             return False, f"{self.BIN} is not on this machine"
         try:
-            p = subprocess.run([str(self.BIN), "provider", "list"],
-                               capture_output=True, text=True, timeout=20)
+            p = subprocess.run(
+                [str(self.BIN), "provider", "list"],
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
         except subprocess.TimeoutExpired:
             return False, "`kimi provider list` did not answer in 20s"
         out = strip_ansi(p.stdout + p.stderr)
@@ -171,8 +183,9 @@ class KimiBackend(Backend):
         model = os.environ.get("CONSULT_KIMI_MODEL")
         if model:
             cmd[1:1] = ["-m", model]
-        p = subprocess.run(cmd, cwd=workdir(), capture_output=True,
-                           text=True, timeout=timeout)
+        p = subprocess.run(
+            cmd, cwd=workdir(), capture_output=True, text=True, timeout=timeout
+        )
         out = strip_ansi(p.stdout).strip()
         err = strip_ansi(p.stderr).strip()
         if p.returncode != 0 and not out:
@@ -210,10 +223,14 @@ class OllamaBackend(Backend):
         return True, f"{self.model()} (local, offline, no quota to run out)"
 
     def ask(self, prompt, timeout):
-        body = json.dumps({"model": self.model(), "prompt": prompt,
-                           "stream": False}).encode()
-        req = urllib.request.Request(f"{self.URL}/api/generate", data=body,
-                                     headers={"Content-Type": "application/json"})
+        body = json.dumps(
+            {"model": self.model(), "prompt": prompt, "stream": False}
+        ).encode()
+        req = urllib.request.Request(
+            f"{self.URL}/api/generate",
+            data=body,
+            headers={"Content-Type": "application/json"},
+        )
         with urllib.request.urlopen(req, timeout=timeout) as r:
             out = json.loads(r.read()).get("response", "").strip()
         if not out:
@@ -233,45 +250,19 @@ class NoneBackend(Backend):
         raise RuntimeError("no consult backend on this machine")
 
 
-# The browser bridge is a separate file and a separate interpreter. If it is
-# absent or unimportable the cascade simply starts one backend shorter, because
-# a consult daemon that will not boot is worse than one without kimi in it.
-_WEB_BRIDGES = []
-try:
-    from kimi_bridge_backend import KimiBridgeBackend
-    _WEB_BRIDGES.append(KimiBridgeBackend())
-except Exception:  # noqa: BLE001 - a broken bridge costs one backend, not the daemon
-    pass
-try:
-    from deepseek_bridge_backend import DeepSeekBridgeBackend
-    _WEB_BRIDGES.append(DeepSeekBridgeBackend())
-except Exception:  # noqa: BLE001
-    pass
-
-# Keyed HTTPS rails, ahead of everything. A key cannot expire while nobody is
-# watching; a browser session can, and does. Absent or unimportable costs the
-# cascade three backends, never the daemon.
+# Keyed router lanes first: one endpoint, the estate router, its lanes as the
+# cascade (direct_api_backends.DIRECT, crew#568 Phase 2). Then the local ollama
+# floor, then the honest 503. The kimi and deepseek browser bridges were retired
+# 2026-08-29: a scrape dies at a login wall at 03:00 and stays dead until a
+# person signs in (LAW 27); a router key dies when a number someone watches
+# hits zero. Absent or unimportable costs the cascade its keyed lanes, never
+# the daemon.
 try:
     from direct_api_backends import DIRECT as _DIRECT
 except Exception:  # noqa: BLE001
     _DIRECT = []
 
-# Order: the keyed APIs first, then the web bridges (kimi, then deepseek), then
-# the local floor, then the honest 503.
-#
-# The keyed rails lead as of 2026-08-23, and the reason is failure mode rather
-# than answer quality, which is unmeasured. A bridge dies when a login wall
-# appears at 03:00 and stays dead until a person signs in, which LAW 27 calls
-# turning a one-time cost into an operational one. A key dies when the balance
-# hits zero, which is a number somebody can watch. Measured that day: groq,
-# mistral and openrouter all answered; kimi and deepseek both needed a browser.
-#
-# KimiBackend is deliberately NOT in this list. It calls api.kimi.com/coding,
-# which is Kimi For Coding, a subscription this account does not hold. Measured
-# 2026-08-22: every readiness check returned 402 and the daemon spent a network
-# round trip per cycle proving it. The class stays because subscribing is one
-# line away; the cascade does not carry a backend that cannot answer.
-BACKENDS = _DIRECT + _WEB_BRIDGES + [OllamaBackend(), NoneBackend()]
+BACKENDS = _DIRECT + [OllamaBackend(), NoneBackend()]
 REAL = [b for b in BACKENDS if b.name != "none"]
 
 
@@ -322,8 +313,8 @@ class Service:
         self.counts = {"ok": 0, "failed": 0}
         self._ready = {}
         self._checked_at = 0.0
-        self.strikes = {}   # name -> consecutive failures
-        self.benched = {}   # name -> unix time it may be tried again
+        self.strikes = {}  # name -> consecutive failures
+        self.benched = {}  # name -> unix time it may be tried again
 
     def _bench(self, name):
         """Three failures in a row and a backend sits out for ten minutes.
@@ -357,12 +348,16 @@ class Service:
         """
         r = self.readiness()
         now = time.time()
-        real = [b for b in self.chain
-                if b.name != "none" and r[b.name][0] and self.benched.get(b.name, 0) < now]
+        real = [
+            b
+            for b in self.chain
+            if b.name != "none" and r[b.name][0] and self.benched.get(b.name, 0) < now
+        ]
         return real or [b for b in self.chain if b.name == "none"] or self.chain[:1]
 
-    def consult(self, question, context="", agent="unknown", cid=None,
-                timeout=DEFAULT_TIMEOUT):
+    def consult(
+        self, question, context="", agent="unknown", cid=None, timeout=DEFAULT_TIMEOUT
+    ):
         cid = cid or f"consult-{int(time.time() * 1000)}"
         prompt = build_prompt(question, context, agent)
         started = time.time()
@@ -395,9 +390,14 @@ class Service:
         status = "success" if answer else "failed"
         elapsed = round(time.time() - started, 2)
         self.counts["ok" if status == "success" else "failed"] += 1
-        self.last = {"id": cid, "agent": agent, "status": status,
-                     "backend": used, "elapsed_s": elapsed,
-                     "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+        self.last = {
+            "id": cid,
+            "agent": agent,
+            "status": status,
+            "backend": used,
+            "elapsed_s": elapsed,
+            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
         row = dict(self.last)
         row["tried"] = tried
         row["question_sha256"] = hashlib.sha256(question.encode()).hexdigest()[:16]
@@ -405,23 +405,40 @@ class Service:
             row["question"] = question
             row["answer"] = answer
         log(row)
-        return {"consult_id": cid, "status": status, "answer": answer,
-                "error": None if answer else (err or "no backend answered"),
-                "backend": used, "tried": tried, "elapsed_s": elapsed,
-                "timestamp": self.last["at"]}
+        return {
+            "consult_id": cid,
+            "status": status,
+            "answer": answer,
+            "error": None if answer else (err or "no backend answered"),
+            "backend": used,
+            "tried": tried,
+            "elapsed_s": elapsed,
+            "timestamp": self.last["at"],
+        }
 
     def health(self):
         r = self.readiness()
         live = [b.name for b in self.live() if b.name != "none"]
-        return {"status": "ok" if live else "degraded",
-                "cascade": [b.name for b in self.chain],
-                "live": live,
-                "backends": {n: {"ready": ok, "detail": d,
-                                 "strikes": self.strikes.get(n, 0),
-                                 "benched_for_s": max(0, round(self.benched.get(n, 0) - time.time()))}
-                             for n, (ok, d) in r.items()},
-                "inflight": self.inflight, "counts": self.counts,
-                "last_consult": self.last, "version": VERSION}
+        return {
+            "status": "ok" if live else "degraded",
+            "cascade": [b.name for b in self.chain],
+            "live": live,
+            "backends": {
+                n: {
+                    "ready": ok,
+                    "detail": d,
+                    "strikes": self.strikes.get(n, 0),
+                    "benched_for_s": max(
+                        0, round(self.benched.get(n, 0) - time.time())
+                    ),
+                }
+                for n, (ok, d) in r.items()
+            },
+            "inflight": self.inflight,
+            "counts": self.counts,
+            "last_consult": self.last,
+            "version": VERSION,
+        }
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -474,8 +491,12 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"status": "failed", "error": "question is required"})
             return
         res = self.service.consult(
-            q, data.get("context", ""), data.get("agent", "unknown"),
-            data.get("id"), int(data.get("timeout") or DEFAULT_TIMEOUT))
+            q,
+            data.get("context", ""),
+            data.get("agent", "unknown"),
+            data.get("id"),
+            int(data.get("timeout") or DEFAULT_TIMEOUT),
+        )
         self._send(200 if res["status"] == "success" else 503, res)
 
 
@@ -515,7 +536,7 @@ def cmd_ask(argv):
                 ctx = v
             else:
                 agent = v
-            del argv[i:i + 2]
+            del argv[i : i + 2]
     q = " ".join(a for a in argv if not a.startswith("--"))
     res = Service(wanted()).consult(q, ctx, agent)
     if res["status"] == "success":
@@ -553,11 +574,18 @@ def kimi_diagnose():
     except (OSError, ValueError, KeyError):
         return "no-credentials", f"nothing stored at {KIMI_CREDS}"
 
-    body = urllib.parse.urlencode({"client_id": KIMI_CLIENT_ID,
-                                   "grant_type": "refresh_token",
-                                   "refresh_token": refresh}).encode()
-    req = urllib.request.Request(f"{KIMI_AUTH_HOST}/api/oauth/token", data=body,
-                                 headers={"Content-Type": "application/x-www-form-urlencoded"})
+    body = urllib.parse.urlencode(
+        {
+            "client_id": KIMI_CLIENT_ID,
+            "grant_type": "refresh_token",
+            "refresh_token": refresh,
+        }
+    ).encode()
+    req = urllib.request.Request(
+        f"{KIMI_AUTH_HOST}/api/oauth/token",
+        data=body,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
             fresh = _json.loads(r.read().decode())
@@ -576,16 +604,20 @@ def kimi_diagnose():
     except OSError as e:
         return "unknown", f"refreshed but could not save the rotated grant: {e}"
 
-    probe = urllib.request.Request(f"{KIMI_API}/models",
-                                   headers={"Authorization": "Bearer " + fresh["access_token"]})
+    probe = urllib.request.Request(
+        f"{KIMI_API}/models",
+        headers={"Authorization": "Bearer " + fresh["access_token"]},
+    )
     try:
         with urllib.request.urlopen(probe, timeout=30) as r:
             return "ok", f"{KIMI_API}/models returned {r.status}"
     except urllib.error.HTTPError as e:
         if e.code in (402, 403):
-            return "no-plan", (f"the token is good and {KIMI_API}/models returned "
-                               f"{e.code}: this account is not on Kimi For Coding, "
-                               f"which is a separate subscription from the web app")
+            return "no-plan", (
+                f"the token is good and {KIMI_API}/models returned "
+                f"{e.code}: this account is not on Kimi For Coding, "
+                f"which is a separate subscription from the web app"
+            )
         return "unknown", f"{KIMI_API}/models returned {e.code}"
     except OSError as e:
         return "unknown", f"cannot reach {KIMI_API}: {e}"
@@ -615,17 +647,22 @@ def cmd_login(argv):
         KIMI_NOTE.parent.mkdir(parents=True, exist_ok=True)
         KIMI_NOTE.write_text(why)
         print(f"not minting a device code: {why}", file=sys.stderr)
-        print("a tap cannot fix this. The estate keeps running on ollama.",
-              file=sys.stderr)
+        print(
+            "a tap cannot fix this. The estate keeps running on ollama.",
+            file=sys.stderr,
+        )
         return 1
     if kind == "ok":
-        print(f"the credential is live ({why}) but the CLI wrote no provider. "
-              f"Minting one device code to let it write one.")
+        print(
+            f"the credential is live ({why}) but the CLI wrote no provider. "
+            f"Minting one device code to let it write one."
+        )
     else:
         print(f"kimi is not logged in ({kind}: {why}). Minting one device code.")
     try:
-        p = subprocess.run([str(k.BIN), "login"], capture_output=True,
-                           text=True, timeout=1800)
+        p = subprocess.run(
+            [str(k.BIN), "login"], capture_output=True, text=True, timeout=1800
+        )
     except subprocess.TimeoutExpired:
         KIMI_NOTE.parent.mkdir(parents=True, exist_ok=True)
         KIMI_NOTE.write_text("the device code expired before it was approved")
@@ -639,9 +676,14 @@ def cmd_login(argv):
         KIMI_NOTE.unlink(missing_ok=True)
         print(f"\nlogged in: {detail}")
         return 0
-    reason = next((l.strip() for l in out.splitlines()
-                   if "failed" in l.lower() or "unable" in l.lower()),
-                  "login finished but no provider was configured")
+    reason = next(
+        (
+            l.strip()
+            for l in out.splitlines()
+            if "failed" in l.lower() or "unable" in l.lower()
+        ),
+        "login finished but no provider was configured",
+    )
     KIMI_NOTE.parent.mkdir(parents=True, exist_ok=True)
     KIMI_NOTE.write_text(reason)
     print(f"\nnot logged in: {reason}", file=sys.stderr)
