@@ -45,7 +45,7 @@ how you build it; this is what you are building.
 
 # The laws
 
-Fifty-two rules, in priority order, numbered to 52. **When two laws want different things, the lower number wins.**
+Fifty-three rules, in priority order, numbered to 53. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
 
@@ -122,10 +122,9 @@ standing still.
 | 50 | Every workload emits to the central collector, and coverage is proved by querying the backend, never by scanning files; admission refuses a workload that does not emit | every workload admitted to a cluster, every Mac and cloud surface, and every coverage query the snapshot runs |
 | 51 | Plan, then optimise the plan like a slow algorithm, before any execution: naive steps and round trips counted, bottleneck named, memoize / parallelise / lazy / batch, count again, `Optimised:` line in the PR body and on the board, then execute (founder 2026-08-29, crew#584; ruling R50; procedure in `~/AGENTS-FULL.md`) | before any execution: a feature, a fix, an investigation, a migration, a worker task |
 | 52 | One root per provider, set once; code mints the rest; never a console step (R52, full text `~/AGENTS-FULL.md`) | every credential |
+| 53 | Drills and tests grade features, never look and feel: sign in, pages answer, links work, third-party logins hold; no selector, test id or layout word in any drill or test (R53) | before a drill or test touches a page |
 
-
-
-Five paragraphs of this section (the one-copy topology, the numbering history, the 16b slot, the incidents file, where the full text lives) were moved verbatim to `~/AGENTS-FULL.md` on 2026-08-27 (crew#26 CP-B); nothing reworded. `~/AGENTS-FULL.md` holds every law's prose; `~/.claude/LAWS-INCIDENTS.md` the incidents.
+Law prose, history and move notes: `~/AGENTS-FULL.md`; incidents: `~/.claude/LAWS-INCIDENTS.md`.
 
 # THE FOUR HARD RULES
 
@@ -195,6 +194,3 @@ output already acted on; any standing directive already in a memory file — cit
 
 **Never drop:** a decision, a file path, a command or an error string.
 
-# Moved on 2026-08-29 (crew#584)
-
-The compact-instructions measurement and word-budget table, and the 2026-08-27 CP-B move note, live verbatim in `~/AGENTS-FULL.md`.
