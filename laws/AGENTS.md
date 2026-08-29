@@ -45,7 +45,7 @@ how you build it; this is what you are building.
 
 # The laws
 
-Fifty rules, in priority order, numbered to 50. LAW 24 stood empty until 2026-08-23 and now
+Fifty-one rules, in priority order, numbered to 51. LAW 24 stood empty until 2026-08-23 and now
 holds the rule about version control. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
@@ -53,7 +53,7 @@ kept firing while LAW 1 was still open.
 **Effective order, HOW to work.** Read left to right. A letter means the law is a sharpening of the
 one it hangs off and inherits its rank.
 
-    1 · 2 · 2b(29) · 3 · 3b(39) · 3c(45) · 3d(50) · 4 · 4b(33) · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10
+    1 · 2 · 2b(29) · 3 · 3b(39) · 3c(45) · 3d(50) · 4 · 4b(33) · 4c(51) · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10
     5c(47) · 5d(48) · 5e(49) · 11 · 11b(26) · 12 · 13 · 14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
 
 **Effective order, WHAT to build.** A separate axis. It does not compete with the one above; when a
@@ -121,6 +121,7 @@ standing still.
 | 48 | Continuous execution: a broken state found while answering a question is fixed in the same turn, never reported and parked | the moment a status check, a question or an investigation turns up a P1, a broken state or an easy bug |
 | 49 | Lazy consensus: a safe or reversible action is done and announced `STAGED:` with a 60-minute timer, never asked | before any action that can be defaulted or reversed |
 | 50 | Every workload emits to the central collector, and coverage is proved by querying the backend, never by scanning files; admission refuses a workload that does not emit | every workload admitted to a cluster, every Mac and cloud surface, and every coverage query the snapshot runs |
+| 51 | Plan, then optimise the plan like a slow algorithm, before any execution: naive steps and round trips counted, bottleneck named, memoize / parallelise / lazy / batch, count again, `Optimised:` line in the PR body and on the board, then execute (founder 2026-08-29, crew#584; ruling R50; procedure in `~/AGENTS-FULL.md`) | before any execution: a feature, a fix, an investigation, a migration, a worker task |
 
 
 
@@ -147,6 +148,8 @@ commit search must run first to ensure the code doesn't already exist.
 **4. Stop fighting the harness guards.** When a background run is in flight, do not trigger IDLE
 GUARD collisions or force turns to end prematurely. Execute next tasks that have zero dependency
 on that background run, with zero narrative bloat.
+
+**6. Optimise before execution.** No command that changes the world runs before the plan has been written and optimised in writing (naive steps → bottleneck → memoize, parallelise, lazy, batch → count again → `Optimised:` line). Founder, 2026-08-29: "optimise before build ... note this process down as it will become law ... how to plan and optimise before starting any execution". On trial on crew#584; the operating-model gate enforces the line after the trial.
 
 # How to work
 
@@ -180,10 +183,6 @@ The other eleven subsections (Executable spec or blocked (R29, founder 2026-08-2
 
 # Compact instructions
 
-Measured across one 8.6-hour session: 25 compactions, median 117 seconds each, 9% of the session.
-Every summary ran 1,646–2,839 words against the 1,200-word cap; none met it. Length is the
-wall-clock.
-
 **Must preserve:** the current task and its goal; decisions and what was rejected and why; files
 changed and what changed in each; the exact next step and any unresolved problem, open question or
 failing test; constraints stated this session. Keep file paths, symbol names, commands and error
@@ -191,19 +190,11 @@ messages verbatim.
 
 **Hard budget, 1,200 words total.** When a section is full, cut its oldest entry, never a newer one.
 
-| Section | Words |
-|---|---|
-| task, goal, exact next step | 200 |
-| decisions and rejected options, with the why | 300 |
-| files touched and what changed | 300 |
-| constraints, standing directives, preferences | 200 |
-| everything else | 200 |
-
 **Always drop:** resolved tangents; superseded intermediate states; narration of merged work; tool
 output already acted on; any standing directive already in a memory file — cite the filename.
 
 **Never drop:** a decision, a file path, a command or an error string.
 
-# Moved on 2026-08-27 (crew#26 CP-B)
+# Moved on 2026-08-29 (crew#584)
 
-LAW 48, LAW 49 and LAW 50 prose, the Capabilities register and the How-to-work subsections were moved verbatim to `~/AGENTS-FULL.md` on 2026-08-27 (crew#26 CP-B); nothing reworded. `founder-blocker.py` reads the register from `~/AGENTS-FULL.md`. A `FOUNDER ACTION:` line still names the register row it checked.
+The compact-instructions measurement and word-budget table, and the 2026-08-27 CP-B move note, live verbatim in `~/AGENTS-FULL.md`.
