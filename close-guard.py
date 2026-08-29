@@ -147,12 +147,11 @@ def lane_wants_close(lane_name: str) -> bool:
 
 
 def current_lane(session: str) -> str:
-    """Whatever goal-guard recorded for this session, else default."""
-    p = Path.home() / ".claude" / "state" / "goal" / ("%s.json" % session)
-    try:
-        return str(json.loads(p.read_text(encoding="utf-8")).get("lane") or "default")
-    except Exception:  # noqa: BLE001
-        return "default"
+    """Always "default" since crew#638 deleted goal-guard, which was the only writer of
+    ~/.claude/state/goal/<session>.json. Kept as a function, and kept reading nothing, so the
+    one place a lane could come back is this line rather than a silent read of a file no
+    process creates -- a read like that returns "default" too, but looks like it measured."""
+    return "default"
 
 
 def last_assistant_text(transcript: Path) -> str:

@@ -32,7 +32,7 @@ WRITES = re.compile(r"\bgh\s+(?:issue|pr)\s+(?:comment|create|edit)\b|\bgh\s+api
 
 
 def _last_assistant_text(path: str) -> str:
-    spec = importlib.util.spec_from_file_location("jargon_guard", HERE / "jargon-guard.py")
+    spec = importlib.util.spec_from_file_location("close_guard", HERE / "close-guard.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod.last_assistant_text(pathlib.Path(path))

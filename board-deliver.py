@@ -23,6 +23,7 @@ import json
 import os
 import pathlib
 import sys
+import time
 
 BOARD = pathlib.Path(
     os.environ.get(
@@ -133,22 +134,21 @@ def body(entry: dict) -> str:
 
 
 FOCUS_WORD = "FOCUS:"
+FOCUS_FILE = pathlib.Path.home() / ".claude" / "state" / "goal" / "FOCUS.json"
 
 
-def _goal_guard():
-    import importlib.util
-    here = pathlib.Path(__file__).resolve().parent
-    spec = importlib.util.spec_from_file_location("goal_guard", here / "goal-guard.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+def apply_focus(entries: list[dict], focus_file: pathlib.Path | None = None) -> int:
+    """crew#395: a founder board line beginning FOCUS: becomes the standing focus, whichever
+    channel wrote it. policy/reply.rego reads it (via opa-hook's standing_focus) and refuses a
+    reply that asks him for a direction he has already given.
 
-
-def apply_focus(entries: list[dict], gg=None) -> int:
-    """crew#395: a founder board line starting FOCUS: rewrites every live session's goal the
-    moment any session reads the board, whichever channel wrote it. Idempotent: the same
-    text already standing in FOCUS.json is not applied again, so N sessions delivering the
-    same line make one rewrite and one ledger row. Returns the sessions rewritten."""
+    crew#638 rewrote this. It used to load goal-guard and, through goal_focus.py, overwrite the
+    goal field of every session state file. Both of those were deleted in the founder's triage
+    for judging intent, so there are no session goal files left to rewrite -- only the standing
+    line survives, and this writes it directly. Returns 1 when the file was written, 0 when the
+    same text already stands, so N sessions delivering one line make one write.
+    """
+    path = focus_file or FOCUS_FILE
     total = 0
     for e in entries:
         if sender(e).lower() != "founder":
@@ -156,16 +156,24 @@ def apply_focus(entries: list[dict], gg=None) -> int:
         text = body(e).strip()
         if not text.startswith(FOCUS_WORD):
             continue
-        text = text[len(FOCUS_WORD):].strip()
+        text = " ".join(text[len(FOCUS_WORD):].split())
         if not text:
             continue
         try:
-            gg = gg or _goal_guard()
-            if __import__('goal_focus').read_focus(gg).get("text") == " ".join(text.split()):
+            if json.loads(path.read_text(encoding="utf-8")).get("text") == text:
                 continue
-            total += len(__import__('goal_focus').focus(gg, text, "board:" + str(e.get("ts") or "")))
-        except Exception:
-            pass                       # a focus that cannot be applied never blocks delivery
+        except (OSError, ValueError, AttributeError):
+            pass                       # no focus on disk yet, or an unreadable one: write ours
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"text": text,
+                                       "source": "board:" + str(e.get("ts") or ""),
+                                       "at": int(time.time())}), encoding="utf-8")
+            tmp.replace(path)          # replace, so a reader never sees half a focus
+            total += 1
+        except OSError:
+            pass                       # a focus that cannot be written never blocks delivery
     return total
 
 

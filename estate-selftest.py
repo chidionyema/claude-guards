@@ -153,7 +153,7 @@ def main() -> int:
         ok = discover()
         assert ok, "discover() found no scripts"
         assert all(p.suffix == ".py" for p in ok)
-        probe = run_one(ROOT / "jargon-guard.py")
+        probe = run_one(ROOT / "close-guard.py")   # crew#638: jargon-guard was deleted
         assert probe["status"] in ("PASS", "FAIL", "NO SELFTEST"), probe
         print(f"selftest OK: {len(ok)} scripts discoverable, runner returns {probe['status']}")
         return 0
