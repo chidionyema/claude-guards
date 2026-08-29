@@ -2261,3 +2261,33 @@ checked and why it does not apply. Append a row the moment you find a self-serve
 | Repo admin operations (deploy keys, secrets, rulesets) | `gh` in any session acts as the founder's account; it is repo admin | always |
 | Cluster/OCI state without kubectl | `gh workflow run oke-check.yml -f mode=check` rows (the estate MCP reads the laptop catalog, not the cluster) | idp#241 |
 | Live cluster read/write (kubectl on OKE) | from the founder Mac (the only host in `OKE_ALLOWED_CIDRS`): `export KUBECONFIG=$HOME/.kube/oke-estate OCI_CLI_AUTH=security_token OCI_CLI_PROFILE=otto`; when the token has expired, `oci session authenticate --profile-name otto --region uk-london-1` opens a browser once. `kubectl get kustomizations -A` is the state; `kubectl get events -A --field-selector reason=FailedCreate` names a Kyverno refusal. Use the API-server proxy (`kubectl get --raw /api/v1/namespaces/<ns>/pods/<pod>:<port>/proxy/...`) instead of `kubectl run`, which Kyverno refuses. | crew#325 |
+
+## RULE (on trial, becomes law): How to plan and optimise before starting any execution
+
+Founder, 2026-08-29: "treat the plan ... like its a slow unoptimised algorithm, find ways to ultra optimise to speed up delivery ... optimise before build" / "note this process down ... the thought process on how to do it also, as a rule that any agent can follow".
+
+**When it fires:** before ANY execution — a feature, a fix, an investigation, a migration, a worker task. Founder 2026-08-29: "how to plan and optimise before starting any execution". First write the plan (step 1), then optimise it (steps 2-7), then record (8), then execute (9). No command that changes the world runs before step 8 is on the board.
+
+**The thought process, in order. Answer each question in writing; a step with no written answer was not done.**
+
+1. **Write the naive plan as a list of steps.** One line per step: what it produces, what it needs, how many CI round trips (push, wait, read, fix) it costs. Count the steps and the round trips. This is the runtime you are about to optimise.
+
+2. **Name the bottleneck.** Which step is on the critical path and slowest? For us it is nearly always: a human or CI wait between serial PRs, or a fact re-derived by hand. Write the one line: "slow because ___".
+
+3. **Memoize — is there one source of truth?** For every fact the plan types by hand (a number, a list, a path, a floor), ask: can it be computed from git or a receipt instead? If yes, compute it, never type it; the plan gets one derivation step and every later step reads it. Test: if the source changes, does the plan's output change without a person editing anything?
+
+4. **Parallelise — which steps are independent?** For each pair of steps ask: does B need A's output to start? If not, B starts now, on a worker, in its own branch. Draw the dependency edges; anything with no incoming edge starts at once. Cap: two workers per session.
+
+5. **Lazy — what is needed now?** For each step ask: does something in this delivery call it today? A tier, a branch, an option nobody enables yet is a register row with `status: planned`, not code. Cut it and write the name of what was cut.
+
+6. **Batch — which steps are one change?** Steps that touch the same files, or that would each cost a CI round trip to prove the same thing, become one PR. Rule of thumb: one PR per independent thing a reviewer can accept or refuse alone; never one PR per file.
+
+7. **Rewrite the plan and count again.** Steps before → after, round trips before → after. If it did not shrink, say so; not every plan compresses, and that is a finding, not a failure.
+
+8. **Record it where the reviewer sees it.** The PR body carries one line: `Optimised: <steps before> -> <after>, <round trips before> -> <after>; cut: <what, why>`. The crew issue gets the same line.
+
+9. **Then build.** During the build, if a step turns out to need something the plan cut, add it back and amend the line; do not silently re-inflate.
+
+**Worked example (crew#584, self-service platform options).** Naive: 7 serial PRs (register, planner, floors table, enable command, Backstage template, observability split, staging), ~7 CI round trips, each waiting on the last. Bottleneck: serial PR waits. Memoize: floors computed from git manifests by the planner, never typed into the register. Parallelise: the Backstage template only needs the `enable` command's name, so a worker starts it at once. Lazy: the observability split (lean traces tier) has no consumer today → `status: needs-split`, built when someone enables lean. Batch: register + planner + floors + enable are one change a reviewer accepts together → one PR. Result: 7 serial → 3 (2 in parallel), 7 round trips → 2.
+
+**Enforcement after the trial (LAW 44):** the operating-model gate refuses a feature PR with no `Optimised:` line; the rule enters `~/.claude/AGENTS.md` as a numbered law. Until then this section is the rule.

@@ -45,7 +45,7 @@ how you build it; this is what you are building.
 
 # The laws
 
-Fifty rules, in priority order, numbered to 50. LAW 24 stood empty until 2026-08-23 and now
+Fifty-one rules, in priority order, numbered to 51. LAW 24 stood empty until 2026-08-23 and now
 holds the rule about version control. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
@@ -53,7 +53,7 @@ kept firing while LAW 1 was still open.
 **Effective order, HOW to work.** Read left to right. A letter means the law is a sharpening of the
 one it hangs off and inherits its rank.
 
-    1 · 2 · 2b(29) · 3 · 3b(39) · 3c(45) · 3d(50) · 4 · 4b(33) · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10
+    1 · 2 · 2b(29) · 3 · 3b(39) · 3c(45) · 3d(50) · 4 · 4b(33) · 4c(51) · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10
     5c(47) · 5d(48) · 5e(49) · 11 · 11b(26) · 12 · 13 · 14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
 
 **Effective order, WHAT to build.** A separate axis. It does not compete with the one above; when a
@@ -121,6 +121,7 @@ standing still.
 | 48 | Continuous execution: a broken state found while answering a question is fixed in the same turn, never reported and parked | the moment a status check, a question or an investigation turns up a P1, a broken state or an easy bug |
 | 49 | Lazy consensus: a safe or reversible action is done and announced `STAGED:` with a 60-minute timer, never asked | before any action that can be defaulted or reversed |
 | 50 | Every workload emits to the central collector, and coverage is proved by querying the backend, never by scanning files; admission refuses a workload that does not emit | every workload admitted to a cluster, every Mac and cloud surface, and every coverage query the snapshot runs |
+| 51 | Plan, then optimise the plan like a slow algorithm, before any execution: naive steps and round trips counted, bottleneck named, memoize / parallelise / lazy / batch, count again, `Optimised:` line in the PR body and on the board, then execute (founder 2026-08-29, crew#584; ruling R50; procedure in `~/AGENTS-FULL.md`) | before any execution: a feature, a fix, an investigation, a migration, a worker task |
 
 
 
@@ -147,6 +148,8 @@ commit search must run first to ensure the code doesn't already exist.
 **4. Stop fighting the harness guards.** When a background run is in flight, do not trigger IDLE
 GUARD collisions or force turns to end prematurely. Execute next tasks that have zero dependency
 on that background run, with zero narrative bloat.
+
+**6. Optimise before execution.** No command that changes the world runs before the plan has been written and optimised in writing (naive steps → bottleneck → memoize, parallelise, lazy, batch → count again → `Optimised:` line). Founder, 2026-08-29: "optimise before build ... note this process down as it will become law ... how to plan and optimise before starting any execution". On trial on crew#584; the operating-model gate enforces the line after the trial.
 
 # How to work
 
