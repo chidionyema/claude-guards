@@ -9,10 +9,19 @@ Claude Code pipes a JSON blob on stdin (model, transcript_path, cwd, cost, ...).
 We tail the transcript for the last assistant `usage` and render one compact line.
 Output must be a single line; ANSI colors are supported.
 """
-import json, os, sys
+
+import json, os, re, sys
 
 # context thresholds (tokens) -> (emoji, ansi color, optional nudge)
-GREEN, YELLOW, RED, BOLD, DIM, RESET = "\033[32m", "\033[33m", "\033[31m", "\033[1m", "\033[2m", "\033[0m"
+GREEN, YELLOW, RED, BOLD, DIM, RESET = (
+    "\033[32m",
+    "\033[33m",
+    "\033[31m",
+    "\033[1m",
+    "\033[2m",
+    "\033[0m",
+)
+
 
 def tail_bytes(path, n=200_000):
     """Read the last n bytes of a (possibly huge) transcript without loading it all."""
@@ -25,6 +34,7 @@ def tail_bytes(path, n=200_000):
             return fh.read().decode("utf-8", "replace")
     except Exception:
         return ""
+
 
 def last_resident(path):
     """Resident context of the most recent assistant turn, and its model."""
@@ -42,18 +52,49 @@ def last_resident(path):
         u = (rec.get("message") or {}).get("usage") or {}
         if not u:
             continue
-        resident = (u.get("input_tokens", 0) or 0) + (u.get("cache_read_input_tokens", 0) or 0) \
+        resident = (
+            (u.get("input_tokens", 0) or 0)
+            + (u.get("cache_read_input_tokens", 0) or 0)
             + (u.get("cache_creation_input_tokens", 0) or 0)
+        )
         model = (rec.get("message") or {}).get("model")
     return resident, model
 
+
+STATUS_RE = re.compile(r"^(DONE|INVENTORY|BLOCKED|WORKING|WAITING):\s*(.*)", re.M)
+
+
+def last_status(path, width=90):
+    """What this session is working on: the first line of its latest reply (DONE:/INVENTORY:/
+    BLOCKED:/WORKING:/WAITING:, the reply grammar in ~/.claude/AGENTS.md). Founder 2026-08-29:
+    'is there a way to clearly see from the console what you are working on, permanently displayed'."""
+    found = ""
+    for line in tail_bytes(path, 400_000).splitlines():
+        if '"type":"assistant"' not in line and '"type": "assistant"' not in line:
+            continue
+        try:
+            rec = json.loads(line)
+        except Exception:
+            continue
+        for blk in (rec.get("message") or {}).get("content") or []:
+            if isinstance(blk, dict) and blk.get("type") == "text":
+                m = STATUS_RE.search(blk.get("text") or "")
+                if m:
+                    found = f"{m.group(1)}: {m.group(2)}"
+    found = " ".join(found.split())
+    return found if len(found) <= width else found[: width - 1] + "…"
+
+
 def fmt_tok(n):
-    return f"{n/1000:.0f}K" if n < 1_000_000 else f"{n/1_000_000:.2f}M"
+    return f"{n / 1000:.0f}K" if n < 1_000_000 else f"{n / 1_000_000:.2f}M"
+
 
 HISTORY = os.path.expanduser("~/.claude/estate-spend-history.jsonl")
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "estate"))
 from budget_path import budget_path  # noqa: E402  crew#91
+
 BUDGET = budget_path()
+
 
 def estate_spend():
     """Today's ESTATE-WIDE spend, from the sentinel's cached history.
@@ -78,11 +119,14 @@ def estate_spend():
         if row.get("day") != __import__("datetime").date.today().isoformat():
             return None  # yesterday's row is not today's spend
         import datetime as _dt
-        age_min = (_dt.datetime.now()
-                   - _dt.datetime.fromisoformat(row["at"])).total_seconds() / 60
+
+        age_min = (
+            _dt.datetime.now() - _dt.datetime.fromisoformat(row["at"])
+        ).total_seconds() / 60
         return float(row["total"]), age_min
     except Exception:
         return None
+
 
 def spend_segment():
     """One coloured `$today` segment, or '' if the sentinel has never run."""
@@ -104,8 +148,9 @@ def spend_segment():
     else:
         col, mark = GREEN, "●"
     # >45m means roughly three missed 15-minute runs: the job is wedged, not merely between ticks.
-    stale = f"{DIM} ({age_min/60:.0f}h old){RESET}" if age_min > 45 else ""
+    stale = f"{DIM} ({age_min / 60:.0f}h old){RESET}" if age_min > 45 else ""
     return f"{col}{mark} ${total:,.0f} estate/day{RESET}{stale}"
+
 
 def main():
     try:
@@ -129,14 +174,22 @@ def main():
     else:
         color, mark, nudge = GREEN, "●", ""
 
-    ctx = f"{color}{mark} ctx {fmt_tok(resident)}{RESET}{DIM}{nudge}{RESET}" if resident else f"{DIM}● ctx –{RESET}"
+    ctx = (
+        f"{color}{mark} ctx {fmt_tok(resident)}{RESET}{DIM}{nudge}{RESET}"
+        if resident
+        else f"{DIM}● ctx –{RESET}"
+    )
     parts = [f"{BOLD}{model}{RESET}", ctx]
     spend = spend_segment()
     if spend:
         parts.append(spend)
     if proj:
         parts.append(f"{DIM}{proj}{RESET}")
+    status = last_status(transcript) if transcript else ""
+    if status:
+        parts.append(f"{BOLD}{status}{RESET}")
     print(" │ ".join(parts))
+
 
 if __name__ == "__main__":
     main()
