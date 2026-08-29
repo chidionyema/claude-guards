@@ -12,6 +12,7 @@ a stale page that says it is stale is honest, and a page that cannot say so is a
 
     http://127.0.0.1:8787/                 the board
     http://127.0.0.1:8787/ops              every session, its ticket, its last words
+    http://127.0.0.1:8787/alerts           every estate alert, repeats folded into one row
     http://127.0.0.1:8787/admin            the admin dashboard: freshness, and mint a link
     http://127.0.0.1:8787/audit?t=TOKEN    the full estate audit, behind a minted token
     http://127.0.0.1:8787/health           plain text, for a probe
@@ -48,11 +49,93 @@ AUDIT = os.path.expanduser("~/.claude/state/estate-audit.html")
 AUDIT_JSON = os.path.expanduser("~/.claude/state/estate-audit.json")
 TOKENS = os.path.expanduser("~/.claude/state/audit-tokens.json")
 OPS = os.path.expanduser("~/.claude/state/ops-dashboard.html")
+ALERTS = os.path.expanduser(os.environ.get("ESTATE_ALERT_INBOX",
+                            "~/.estate/alerts/inbox.jsonl"))
 PORT = int(os.environ.get("FOUNDER_BOARD_PORT", "8787"))
 STALE_S = 90 * 60          # the builder runs hourly; 90 minutes means a build was MISSED
 OPS_STALE_S = 15 * 60      # aiden rebuilds /ops every 5 minutes; 15 means ticks are being missed
 AUDIT_STALE_S = int(os.environ.get("AUDIT_STALE_S", 2 * 3600))
 TOKEN_TTL_S = int(os.environ.get("AUDIT_TOKEN_TTL_S", 24 * 3600))
+
+
+
+# ------------------------------------------------------------------- /alerts
+# Founder, 2026-08-29: "i cant see ny innportannt nessages", "they should be goig else where",
+# "flooding ny view". Two separate faults were behind that, and this is the second one.
+#
+# estate_alert.send_operator_alert falls back to ~/.estate/alerts/inbox.jsonl whenever
+# TELEGRAM_ALERT_CHANNEL is unset -- and it is unset. Measured 2026-08-29: 3,104 alerts had
+# accumulated in that file since 08-25, the estate scanner going stale and every spend warning
+# among them, and NOTHING RENDERED IT. The sender returns True for those writes, so the whole
+# path reads as delivered. An instrument nobody reads is not an instrument (LAW 28).
+#
+# So the file gets a page, on the board he already has open. The de-duplication here is for
+# display only and is not the fix for the volume -- that one is in the sender, where it stops the
+# repeats being written at all. This is what makes the ones already written legible: one row per
+# distinct sentence, how many times it fired, when it was last seen, loudest first.
+ALERT_TAIL = 4000          # rows read from the end of the inbox; the file is append-only
+
+
+def _alert_rows(path: str = "") -> list[dict]:
+    """Distinct alerts, newest first, each carrying how many times its sentence fired."""
+    rows = []
+    try:
+        with open(path or ALERTS, encoding="utf-8", errors="replace") as fh:
+            for ln in fh.readlines()[-ALERT_TAIL:]:
+                ln = ln.strip()
+                if not ln:
+                    continue
+                try:
+                    rows.append(json.loads(ln))
+                except json.JSONDecodeError:
+                    continue
+    except OSError:
+        return []
+    groups: dict[tuple, dict] = {}
+    for r in rows:
+        text = " ".join(str(r.get("text") or "").split())
+        if not text:
+            continue
+        src = str(r.get("source") or "?")
+        k = (src, re.sub(r"\d+", "#", text)[:400])
+        ts = r.get("ts") if isinstance(r.get("ts"), (int, float)) else 0
+        g = groups.setdefault(k, {"source": src, "text": text, "n": 0, "first": ts, "last": ts})
+        g["n"] += 1
+        g["text"] = text                      # the most recent wording of the same sentence
+        g["first"] = min(g["first"] or ts, ts) if ts else g["first"]
+        g["last"] = max(g["last"], ts)
+    return sorted(groups.values(), key=lambda g: -g["last"])
+
+
+def _alerts_page(rows: list[dict]) -> bytes:
+    def esc(s):
+        return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+    def when(ts):
+        return time.strftime("%a %H:%M", time.localtime(ts)) if ts else "unknown"
+
+    total = sum(r["n"] for r in rows)
+    head = (f"<h1>Estate alerts</h1><p class=s>{len(rows)} distinct alerts, "
+            f"{total} deliveries. Repeats are folded into one row.</p>")
+    if not rows:
+        head += ("<p class=s>Nothing in the inbox. If that is a surprise, the sender is writing "
+                 "somewhere else: check TELEGRAM_ALERT_CHANNEL.</p>")
+    body = []
+    for r in rows:
+        times = f"<span class=n>&times;{r['n']}</span>" if r["n"] > 1 else ""
+        body.append(f"<tr><td class=w>{when(r['last'])}</td><td class=src>{esc(r['source'])}</td>"
+                    f"<td>{esc(r['text'][:400])} {times}</td></tr>")
+    return (f"""<!doctype html><meta charset=utf-8><title>Estate alerts</title>
+<style>body{{font:15px/1.6 -apple-system,BlinkMacSystemFont,sans-serif;margin:2rem auto;max-width:60rem;
+padding:0 1rem;color:#111;background:#fff}}h1{{font-size:1.4rem;margin:0 0 .2rem}}
+p.s{{color:#666;margin:0 0 1.4rem}}table{{border-collapse:collapse;width:100%}}
+td{{border-top:1px solid #e5e5e5;padding:.55rem .5rem;vertical-align:top}}
+td.w{{white-space:nowrap;color:#666;width:7rem}}td.src{{color:#666;width:12rem;
+font:12px ui-monospace,SFMono-Regular,Menlo,monospace}}
+span.n{{background:#eee;border-radius:9px;padding:1px 7px;color:#555;font-size:12px}}
+@media(prefers-color-scheme:dark){{body{{background:#111;color:#eee}}td{{border-color:#333}}
+p.s,td.w,td.src{{color:#999}}span.n{{background:#333;color:#bbb}}}}</style>
+{head}<table>{''.join(body)}</table>""").encode()
 
 
 # ---------------------------------------------------------------- minted links
@@ -279,6 +362,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self._send(200, _admin_page(), "text/html; charset=utf-8")
             return
+        if path == "/alerts":
+            self._send(200, _alerts_page(_alert_rows()), "text/html; charset=utf-8")
+            return
         if path in ("/ops", "/opsdashboard"):
             #: Every agent session, the GitHub issue it is working under, and its own last status
             #: line. He prompts several tabs at once; this is the page that says which is which.
@@ -310,7 +396,7 @@ class Handler(BaseHTTPRequestHandler):
                        "text/plain")
             return
         if path not in ("/", "/index.html", "/founder-board.html"):
-            self._send(404, b"this server serves: / (board), /ops, /admin, /audit?t=TOKEN, /health\n",
+            self._send(404, b"this server serves: / (board), /ops, /alerts, /admin, /audit?t=TOKEN, /health\n",
                        "text/plain")
             return
         try:
