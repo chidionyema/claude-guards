@@ -94,6 +94,9 @@ def append(feed: Path, session: str, lane: str, body: str, at: dt.datetime | Non
     denied = denials(lines, session, lane, holders(feed, session, lane, at))
     if denied:
         return "; ".join(denied)
+    if not any(l.startswith("📎 FACTS:") for l in lines):
+        # crew#629 CP4, report-only: facts are shared through the ticket block, not re-found per session.
+        print("note: no 📎 FACTS: line; point at the ticket's Infra facts block (bin/idp-ticket-facts) next time (crew#629 CP4)", file=sys.stderr)
     at = at or now()
     feed.parent.mkdir(parents=True, exist_ok=True)
     with feed.open("a", encoding="utf-8") as fh:
@@ -123,8 +126,8 @@ def block_text(session: str, lane: str, age: int) -> str:
             f"python3 ~/.claude/scripts/feed-guard.py append --session {session} --lane {lane} <<'EOF'\n"
             f"🔴 Blocked: <what, who unblocks>\n🟡 Active: <issue numbers>\n🟢 Done: <merged, with sha>\n"
             f"⚪ Pending: <founder pick>\n🔧 TOUCHES: <files, services, ports, secrets you will change in 2h, or none>\n"
-            f"🔀 OVERLAP: <issue numbers another session also touches, or none>\n📍 State: <file or URL>\nEOF\n"
-            f"Eight lines at most; TOUCHES and OVERLAP are required (crew#259, policy/feed.rego).")
+            f"🔀 OVERLAP: <issue numbers another session also touches, or none>\n📎 FACTS: <URL of the ticket's Infra facts block, from bin/idp-ticket-facts, or none>\n📍 State: <file or URL>\nEOF\n"
+            f"Nine lines at most; TOUCHES and OVERLAP are required (crew#259, policy/feed.rego); FACTS is expected (crew#629 CP4).")
 
 
 # crew#403 CP6: the founder asked three times on 2026-08-27 what is planned, what is blocking and
