@@ -2331,3 +2331,11 @@ root, set it as the named secret with `gh secret set` / `bin/idp-vault-put`, say
 FOUNDER ACTION on the same provider is the incident, and the fix is code that mints from the root.
 Tailscale 2026-08-29: five pinned form walkthroughs for a federated identity; the root was an
 OAuth client with scope `oauth_keys` write, and `bin/idp-bootstrap-tailscale` mints `tag:k8s` from it.
+
+# Moved from the resident copy on 2026-08-29 (crew#459)
+
+Five paragraphs of this section (the one-copy topology, the numbering history, the 16b slot, the incidents file, where the full text lives) were moved verbatim to `~/AGENTS-FULL.md` on 2026-08-27 (crew#26 CP-B); nothing reworded. `~/AGENTS-FULL.md` holds every law's prose; `~/.claude/LAWS-INCIDENTS.md` the incidents.
+
+# Moved on 2026-08-29 (crew#584)
+
+The compact-instructions measurement and word-budget table, and the 2026-08-27 CP-B move note, live verbatim in `~/AGENTS-FULL.md`.
