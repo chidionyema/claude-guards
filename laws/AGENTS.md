@@ -158,11 +158,8 @@ about to write a project's name in this file, it belongs in that project's file.
 
 ## Reply format
 
-- **Plain English only, every reply, every file, every ticket. Immediate effect.** Founder, 2026-08-29 13:0xZ,
-  verbatim: "update ur agent file to only speak plain english from now on, all cryptic talk banned"; "all agent
-  .md file"; "immediate effect". No abbreviations he has not used himself, no codes in a sentence (codes only
-  in links and below the fold), no dash-stacked lines, no jargon where a common word exists. If a buyer's
-  engineer or the founder would have to decode it, rewrite it before sending. `jargon-guard.py` is the fence.
+- **Plain English only, immediate effect (R56, founder 2026-08-29).** No codes or abbreviations in a
+  sentence, no dash-stacked lines, no jargon where a plain word exists. Full text: `~/AGENTS-FULL.md`.
 - **Line 1 is `DONE:`, `INVENTORY:`, `BLOCKED:`, `WORKING:` or `WAITING:`** plus one plain sentence. A reply
   that does not start with one of those five is malformed. `WAITING:` is for a background run still
   in flight and names the run's task id; the harness re-invokes you when it reports, and idle-guard v2
