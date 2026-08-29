@@ -45,12 +45,10 @@ def test_incident_crew26_rulings_keep_verbatim_and_stay_under_16kb():
     assert fr._first_sentence("Never do X. Also Y.") == "Never do X."
 
 
-def test_incident_crew26_compactions_are_a_strong_signal(tmp_path):
-    cg = _load("context-guard-hook")
-    signals, strong, fires = cg.assess(0, 0, 0, 0, cg.COMPACT_WARN)
-    assert fires and strong and any("compactions" in s for s in signals)
-    _, strong, fires = cg.assess(0, 0, 0, 0, cg.COMPACT_WARN - 1)
-    assert not fires and not strong
+# crew#638 removed test_incident_crew26_compactions_are_a_strong_signal. It asked
+# context-guard-hook.assess() whether a compaction count meant the session was spending
+# context badly; the founder's triage deleted that guard because nothing on disk says so.
+# The two byte-counted bounds above are what actually held the cost down, and they stay.
 
 
 def test_incident_crew584_meaning_lines_ride_only_the_newest_rulings():

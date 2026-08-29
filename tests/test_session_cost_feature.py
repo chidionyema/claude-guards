@@ -83,26 +83,3 @@ def _(ctx):
 @then("the block is under 16 KB")
 def _(ctx):
     assert len(ctx["block"]) < 16000, len(ctx["block"])
-
-
-@given("a transcript with COMPACT_WARN compaction summaries")
-def _(ctx):
-    ctx["cg"] = _load("context-guard-hook")
-    ctx["compacts"] = ctx["cg"].COMPACT_WARN
-
-
-@when("context-guard assesses the session")
-def _(ctx):
-    ctx["assess"] = ctx["cg"].assess(0, 0, 0, 0, ctx["compacts"])
-
-
-@then("it fires strong and names the count")
-def _(ctx):
-    signals, strong, fires = ctx["assess"]
-    assert fires and strong and any(str(ctx["compacts"]) in s and "compactions" in s for s in signals), signals
-
-
-@then("one fewer compaction is silent on its own")
-def _(ctx):
-    _, strong, fires = ctx["cg"].assess(0, 0, 0, 0, ctx["compacts"] - 1)
-    assert not fires and not strong

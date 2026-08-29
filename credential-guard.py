@@ -32,7 +32,10 @@ WRITES = re.compile(r"\bgh\s+(?:issue|pr)\s+(?:comment|create|edit)\b|\bgh\s+api
 
 
 def _last_assistant_text(path: str) -> str:
-    spec = importlib.util.spec_from_file_location("jargon_guard", HERE / "jargon-guard.py")
+    # crew#638: this reader used to be borrowed from jargon-guard, which was deleted for
+    # judging prose. close-guard holds the identical function and survives, so the borrow moves
+    # there rather than being copied a third time.
+    spec = importlib.util.spec_from_file_location("close_guard", HERE / "close-guard.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod.last_assistant_text(pathlib.Path(path))

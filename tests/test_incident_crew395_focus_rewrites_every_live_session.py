@@ -1,100 +1,72 @@
 """Incident test (rung 4), crew#395: the founder said "forget about fly, you have one mission"
 and a session stayed on crew#66 because ~/.claude/state/goal/<session>.json still said so; it
-then reported BLOCKED on the idle-guard's claim list instead of rewriting its own goal.
+then reported BLOCKED on a claim list instead of taking the direction he had just given.
 
-Paired in one run: `goal-guard.py --focus` rewrites a state file that moved today and leaves a
-three-day-old one alone; the idle-guard claim list under that focus never carries crew#66.
+crew#638 (founder triage, 2026-08-29) deleted goal-guard, goal_focus and auto-objective, so the
+per-session goal files this incident was about no longer exist and cannot go stale. What survives
+is the half that was never a guess: a FOCUS: line on the board becomes the standing focus, and
+policy/reply.rego refuses a reply that asks him for a direction that focus already gives. Both
+halves are graded here; the two tests that drove the deleted CLI went with it.
 """
+import importlib.util
 import json
 import os
-import subprocess
+import shutil
 import sys
-import time
+
+import pytest
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-GG = os.path.join(HERE, "goal-guard.py")
 
 
-def _state(home, sess, goal):
-    d = os.path.join(home, ".claude", "state", "goal")
-    os.makedirs(d, exist_ok=True)
-    p = os.path.join(d, f"{sess}.json")
-    with open(p, "w") as f:
-        json.dump({"goal": goal, "run": 0, "last_progress": "", "last_progress_at": 0, "fired": 0, "calls": 0}, f)
-    return p
+def _load(name: str, filename: str):
+    spec = importlib.util.spec_from_file_location(name, os.path.join(HERE, filename))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
-def _read(p):
-    with open(p) as f:
-        return json.load(f)
-
-
-def test_incident_crew395_focus_rewrites_live_sessions_and_spares_stale_ones(tmp_path):
-    home = str(tmp_path)
-    live = _state(home, "live-aaaa", "crew#66: eradicate fly")
-    stale = _state(home, "stale-bbbb", "crew#13: retire hermes")
-    old = time.time() - 3 * 86400
-    os.utime(stale, (old, old))
-    env = dict(os.environ, HOME=home)
-    r = subprocess.run([sys.executable, GG, "--focus", "crew#284: finish KINI", "--source", "test"],
-                       env=env, capture_output=True, text=True)
-    assert r.returncode == 0, r.stderr
-    assert "focus set for 1 live session(s)" in r.stdout, r.stdout
-    assert _read(live)["goal"] == "crew#284: finish KINI"
-    assert _read(live)["prev_goal"] == "crew#66: eradicate fly"
-    assert _read(stale)["goal"] == "crew#13: retire hermes"
-    focus = _read(os.path.join(home, ".claude", "state", "goal", "FOCUS.json"))
-    assert focus["text"] == "crew#284: finish KINI" and focus["sessions"] == ["live-aaaa"]
-    # the empty line is refused, not laundered into a rewrite of every session
-    r2 = subprocess.run([sys.executable, GG, "--focus", "  "], env=env, capture_output=True, text=True)
-    assert r2.returncode == 1 and _read(live)["goal"] == "crew#284: finish KINI"
-
-
-def test_incident_crew395_claim_list_under_a_focus_never_offers_the_off_mission_item():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("goal_guard", GG)
-    gg = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(gg)
-    sys.path.insert(0, HERE); import goal_focus as gf
-    items = [{"number": 66, "title": "eradicate fly io"}, {"number": 284, "title": "KINI delivered"},
-             {"number": 306, "title": "hard execution chain for kini"}]
-    kept = [i["number"] for i in gf.focus_filter(items, "crew#284: finish KINI")]
-    assert kept == [284, 306]
-    assert gf.focus_filter(items, "") == items
-
-
-def test_incident_crew395_a_founder_focus_line_on_the_board_rewrites_goals_once(tmp_path, monkeypatch):
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("goal_guard", GG)
-    gg = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(gg)
-    gg.STATE_DIR = tmp_path / "goal"
-    gg.LEDGER = tmp_path / "ledger.jsonl"
-    gg.write_state("live-cccc", {"goal": "crew#66: eradicate fly", "run": 0, "last_progress": "",
-                                 "last_progress_at": 0, "fired": 0, "calls": 0})
-    spec2 = importlib.util.spec_from_file_location("board_deliver", os.path.join(HERE, "board-deliver.py"))
-    bd = importlib.util.module_from_spec(spec2)
-    spec2.loader.exec_module(bd)
+def test_incident_crew395_a_founder_focus_line_on_the_board_is_written_once(tmp_path):
+    """A founder FOCUS: line lands in FOCUS.json; nobody else's does; twice is once."""
+    bd = _load("board_deliver", "board-deliver.py")
+    focus_file = tmp_path / "goal" / "FOCUS.json"
     entries = [{"from": "founder", "text": "FOCUS: crew#284: finish KINI", "ts": "2026-08-26T23:30:00Z"},
                {"from": "some-session", "text": "FOCUS: crew#66: fly again", "ts": "2026-08-26T23:31:00Z"}]
-    assert bd.apply_focus(entries, gg) == 1
-    assert gg.read_state("live-cccc")["goal"] == "crew#284: finish KINI"
-    # a second session delivering the same board is not a second rewrite
-    assert bd.apply_focus(entries, gg) == 0
-    assert sum(1 for l in gg.LEDGER.read_text().splitlines() if '"kind":"focus"' in l) == 1
+    assert bd.apply_focus(entries, focus_file) == 1
+    assert json.loads(focus_file.read_text())["text"] == "crew#284: finish KINI"
+    # a second session delivering the same board is not a second write
+    assert bd.apply_focus(entries, focus_file) == 0
+    # a session's own FOCUS: line never becomes the founder's standing focus
+    assert bd.apply_focus([entries[1]], focus_file) == 0
+    assert json.loads(focus_file.read_text())["text"] == "crew#284: finish KINI"
+
+
+def test_incident_crew395_an_empty_focus_line_never_clears_the_standing_one(tmp_path):
+    bd = _load("board_deliver", "board-deliver.py")
+    focus_file = tmp_path / "goal" / "FOCUS.json"
+    bd.apply_focus([{"from": "founder", "text": "FOCUS: crew#284: finish KINI", "ts": "1"}], focus_file)
+    assert bd.apply_focus([{"from": "founder", "text": "FOCUS:    ", "ts": "2"}], focus_file) == 0
+    assert json.loads(focus_file.read_text())["text"] == "crew#284: finish KINI"
+
+
+def test_incident_crew395_the_adapter_reads_the_file_the_board_writes(tmp_path, monkeypatch):
+    """The write and the read are in two scripts. This is the one test that puts them together,
+    because that seam is where crew#623's class of defect lives: each side correct, agreeing on
+    nothing. board-deliver writes, opa-hook.standing_focus reads, same path under one HOME."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    bd = _load("board_deliver", "board-deliver.py")
+    oh = _load("opa_hook", "opa-hook.py")
+    written = tmp_path / ".claude" / "state" / "goal" / "FOCUS.json"
+    assert bd.apply_focus([{"from": "founder", "text": "FOCUS: crew#284: finish KINI", "ts": "1"}], written) == 1
+    assert oh.standing_focus() == "crew#284: finish KINI"
 
 
 def test_incident_crew395_blocked_on_a_direction_the_focus_already_gives_is_refused():
     """crew#398: the rule is policy/reply.rego, evaluated through opa-hook.denials with the focus
     the adapter hands it. BLIND (skipped) without opa, never green."""
-    import importlib.util
-    import shutil
-    import pytest
     if not shutil.which("opa"):
         pytest.skip("BLIND: opa not installed")
-    spec = importlib.util.spec_from_file_location("opa_hook", os.path.join(HERE, "opa-hook.py"))
-    oh = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(oh)
+    oh = _load("opa_hook", "opa-hook.py")
     asks = ("BLOCKED: the board has 138 items.\nTried: the claim list.\nError: none.\n"
             "Need: the founder to decide which item comes first.\nWho: founder.\n")
     hand = ("BLOCKED: vault seed needs a tap.\nTried: gh workflow run vault-seed.yml.\n"

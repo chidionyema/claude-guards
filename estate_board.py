@@ -180,8 +180,6 @@ def next_unclaimed() -> dict | None | str:
     return items[0] if items else None
 
 
-oldest_unclaimed = next_unclaimed  # the name auto-objective.py imports; the rule is finish-first now
-
 # --- crew#527 CP3: the board assigns ------------------------------------------------------------
 FEED = Path(os.environ.get("ESTATE_FEED") or os.path.expanduser("~/.estate/feed.md"))
 ALIVE_HOURS = float(os.environ.get("ESTATE_BOARD_ALIVE_HOURS", "2"))
