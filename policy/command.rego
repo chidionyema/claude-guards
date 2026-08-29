@@ -225,7 +225,7 @@ rules := [
 		# filter on an SDK route). Founder: "when you make a mistake ensure other agents
 		# can't make the same mistake" / "mandate all agents use it" / "rules are pointless
 		# if they don't guide".
-		"re": `\bgit\b[^|;&\n\r]*(?:-c\s*core\.hooksPath=|--no-verify\b)[^|;&\n\r]*\b(?:push|commit)\b`,
+		"re": `\bgit\b(?:[^|;&\n\r]*-c\s*core\.hooksPath=[^|;&\n\r]*\b(?:push|commit)\b|[^|;&\n\r]*\bpush\b[^|;&\n\r]*--no-verify\b)`,
 		"marker": "hooks-bypass-intended",
 		"must_match": "git -c core.hooksPath=/dev/null push origin b",
 		"must_not_match": "git -c core.hooksPath=/dev/null log -1",
