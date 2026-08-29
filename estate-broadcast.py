@@ -114,6 +114,48 @@ def read_board_validated():
     return valid_lines
 
 
+# crew#656 CP0 (founder spec section 2, 2026-08-29). The banned-token check on the one
+# surface every session posts through. Prevention at the write beats judgement at the read.
+#
+# FAIL LOUD ON CONFIG, NOT CLOSED -- deliberately, and this is the one place the spec's
+# general "fail closed" rule inverts. Spec section 4.2 requires that the gate "must not be
+# the only channel by which the estate can be told the gate is broken". This board IS that
+# channel. On 2026-08-29 a fail-closed hook that could not find its own script denied every
+# prompt across five sessions and removed the channel needed to repair it. So: a missing or
+# broken checker prints GATE_UNAVAILABLE and lets the post through. A checker that runs and
+# refuses blocks the post. Config failures are visible; content failures are stopped.
+#
+# Manual override, for the founder and for an incident where the board must carry a
+# quotation containing banned words: ESTATE_VOCABULARY_OVERRIDE=1.
+def _vocabulary_refusal(record):
+    """Return a refusal string for a record that asserts service state in banned words.
+
+    Returns None when the record is acceptable, when the checker is unavailable, or when
+    the override is set. Never raises: a broken check must not take the board down.
+    """
+    import os
+
+    if os.environ.get("ESTATE_VOCABULARY_OVERRIDE") == "1":
+        print("[WARN] state-vocabulary check overridden by ESTATE_VOCABULARY_OVERRIDE",
+              file=sys.stderr)
+        return None
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from state_vocabulary import Refusal, check
+    except Exception as exc:  # noqa: BLE001 - config failure, must stay loud and open
+        print(f"[GATE_UNAVAILABLE] state-vocabulary check could not load: {exc}. "
+              f"Post allowed. This is a broken gate, not a clean post.", file=sys.stderr)
+        return None
+    text = " ".join(
+        str(record.get(f, "")) for f in ("message", "claim", "summary", "title")
+    )
+    try:
+        check(text)
+    except Refusal as exc:
+        return str(exc)
+    return None
+
+
 def append_broadcast(record):
     """
     Append a broadcast record to the board atomically.
@@ -131,6 +173,10 @@ def append_broadcast(record):
     # Validate the record
     if not isinstance(record, dict):
         raise ValueError("record must be a dict")
+
+    refusal = _vocabulary_refusal(record)
+    if refusal:
+        raise ValueError(refusal)
     
     # Ensure required fields
     if 'ts' not in record:
@@ -212,7 +258,7 @@ def main():
         print(f"[ERROR] {e}", file=sys.stderr)
         return 1
     on_github = mirror_to_github(record)
-    print(f"[OK] Posted to board" + ("" if on_github else " (LOCAL ONLY — see warning)"),
+    print("[OK] Posted to board" + ("" if on_github else " (LOCAL ONLY — see warning)"),
           file=sys.stderr)
     return 0
 
