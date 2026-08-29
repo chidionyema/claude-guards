@@ -45,8 +45,7 @@ how you build it; this is what you are building.
 
 # The laws
 
-Fifty-one rules, in priority order, numbered to 51. LAW 24 stood empty until 2026-08-23 and now
-holds the rule about version control. **When two laws want different things, the lower number wins.**
+Fifty-two rules, in priority order, numbered to 52. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
 
@@ -122,6 +121,7 @@ standing still.
 | 49 | Lazy consensus: a safe or reversible action is done and announced `STAGED:` with a 60-minute timer, never asked | before any action that can be defaulted or reversed |
 | 50 | Every workload emits to the central collector, and coverage is proved by querying the backend, never by scanning files; admission refuses a workload that does not emit | every workload admitted to a cluster, every Mac and cloud surface, and every coverage query the snapshot runs |
 | 51 | Plan, then optimise the plan like a slow algorithm, before any execution: naive steps and round trips counted, bottleneck named, memoize / parallelise / lazy / batch, count again, `Optimised:` line in the PR body and on the board, then execute (founder 2026-08-29, crew#584; ruling R50; procedure in `~/AGENTS-FULL.md`) | before any execution: a feature, a fix, an investigation, a migration, a worker task |
+| 52 | One root per provider, set once; code mints the rest; never a console step (R52, full text `~/AGENTS-FULL.md`) | every credential |
 
 
 
