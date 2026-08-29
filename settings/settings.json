@@ -99,6 +99,16 @@
             "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/friction-relay.py"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/feed-guard.py SessionStart",
+            "timeout": 15
+          }
+        ],
+        "matcher": ""
       }
     ],
     "Stop": [
@@ -155,6 +165,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/feed-guard.py Stop",
+            "timeout": 15
+          }
+        ],
+        "matcher": ""
       }
     ],
     "UserPromptSubmit": [
@@ -177,6 +197,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/feed-guard.py UserPromptSubmit",
+            "timeout": 15
+          }
+        ],
+        "matcher": ""
       }
     ],
     "PreToolUse": [
