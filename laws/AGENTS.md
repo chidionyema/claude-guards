@@ -158,6 +158,8 @@ about to write a project's name in this file, it belongs in that project's file.
 
 ## Reply format
 
+- **Plain English only, immediate effect (R56, founder 2026-08-29).** No codes or abbreviations in a
+  sentence, no dash-stacked lines, no jargon where a plain word exists. Full text: `~/AGENTS-FULL.md`.
 - **Line 1 is `DONE:`, `INVENTORY:`, `BLOCKED:`, `WORKING:` or `WAITING:`** plus one plain sentence. A reply
   that does not start with one of those five is malformed. `WAITING:` is for a background run still
   in flight and names the run's task id; the harness re-invokes you when it reports, and idle-guard v2
