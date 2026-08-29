@@ -10,6 +10,7 @@ Built 2026-06-20 after a syntax-broken commit crash-looped the gateway silently.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -80,6 +81,32 @@ def _debounced(key: str, window_s: float, record: bool = True) -> bool:
         try: (__import__("sys").path.append(__import__("os").path.expanduser("~/.claude/scripts")), __import__("guard_report").broken(__file__, 78))
         except Exception: pass
     return False
+
+
+# Founder, 2026-08-29: "nosie eveyrwhere", "i cant see ny innportannt nessages", "they should be
+# goig else where", "flooding ny view". Measured that morning from ~/.estate/alerts/inbox.jsonl:
+# 3,104 alerts, of which 2,609 were NINE distinct sentences repeated, one of them 1,730 times.
+#
+# The debounce above was already here and did nothing about it, because it was opt-in: the send
+# read `if debounce_key and _debounced(...)`, so a caller that named no key repeated forever. A
+# noise control that defaults to off is not a noise control (LAW 44), and this is the second time
+# he has said it -- the comment further down records "still noisy telegram" and "all important
+# links need to be pinned and the noisy stuff moved elsewhere" from 2026-08-25. That fix moved the
+# flood off his DM and into the inbox his board reads. It did not make it smaller.
+#
+# So an alert that names no key derives one from its sender and its own words, with digits
+# normalised out: "BLOCKED for 41m" and "BLOCKED for 42m" are one sentence said twice, not two
+# alerts. The window is an hour rather than the keyed default of five minutes, because a caller
+# that names no key is by definition not managing its own cadence. A caller that must page faster
+# still passes its own key and keeps the 300s default. Nothing is lost either way: every
+# suppressed alert is recorded in the ledger, which is what the ledger is for.
+_UNKEYED_WINDOW_S = 3600.0
+
+
+def _derived_key(source: str, text: str) -> str:
+    """A stable key for an alert whose caller named none: same sender, same sentence, same key."""
+    body = re.sub(r"\d+", "<n>", " ".join(str(text).split()))[:400]
+    return "auto:" + hashlib.sha256(f"{source}\n{body}".encode()).hexdigest()[:16]
 
 
 # Telegram rejects a sendMessage over 4096 characters OUTRIGHT — the whole message, not the
@@ -207,10 +234,13 @@ def send_operator_alert(text: str, *, debounce_key: str | None = None,
     source = os.path.basename(sys.argv[0] or "")
     if not source or source == "-":          # stdin script, or an embedded caller
         source = "estate_alert"
-    if debounce_key and _debounced(debounce_key, debounce_s, record=not dry_run):
+    key, window = debounce_key, debounce_s
+    if not key:
+        key, window = _derived_key(source, text), _UNKEYED_WINDOW_S
+    if _debounced(key, window, record=not dry_run):
         # A suppressed alert is recorded too. The debounce is the noise control that
         # already exists; if it never appears in the ledger it reads as doing nothing.
-        telegram_ledger.record(source, "suppressed", text, key=debounce_key or "")
+        telegram_ledger.record(source, "suppressed", text, key=key)
         return False
     token = _env("TELEGRAM_BOT_TOKEN")
     # Founder, 2026-08-25, three times in one day: "still noisy telegram", "all important
@@ -224,9 +254,9 @@ def send_operator_alert(text: str, *, debounce_key: str | None = None,
                                     str(Path.home() / ".estate" / "alerts" / "inbox.jsonl")))
         inbox.parent.mkdir(parents=True, exist_ok=True)
         with inbox.open("a") as fh:
-            fh.write(json.dumps({"ts": time.time(), "source": source, "key": debounce_key or "",
+            fh.write(json.dumps({"ts": time.time(), "source": source, "key": key,
                                  "text": _fit(text)}) + "\n")
-        telegram_ledger.record(source, "inboxed", text, key=debounce_key or "")
+        telegram_ledger.record(source, "inboxed", text, key=key)
         if dry_run:
             print(f"[estate_alert] inboxed to {inbox} (no TELEGRAM_ALERT_CHANNEL)")
         return True
@@ -235,7 +265,7 @@ def send_operator_alert(text: str, *, debounce_key: str | None = None,
     if not token or not chat:
         if dry_run:
             print(f"[estate_alert] MISSING creds (token={bool(token)} chat={bool(chat)})")
-        telegram_ledger.record(source, "no-creds", text, key=debounce_key or "")
+        telegram_ledger.record(source, "no-creds", text, key=key)
         return False
     text = _fit(text)
     if dry_run:
@@ -243,7 +273,7 @@ def send_operator_alert(text: str, *, debounce_key: str | None = None,
         return True
 
     if ALERT_HOURLY_CAP > 0 and _alerts_sent_last_hour() >= ALERT_HOURLY_CAP:
-        telegram_ledger.record(source, "rate-capped", text, key=debounce_key or "")
+        telegram_ledger.record(source, "rate-capped", text, key=key)
         if not _cap_notice_due():
             return False
         notice = (f"🔇 Alert ceiling reached: {ALERT_HOURLY_CAP} in the last hour, so further "
@@ -261,13 +291,13 @@ def send_operator_alert(text: str, *, debounce_key: str | None = None,
     try:
         ok = _post(token, chat, text)
         telegram_ledger.record(source, "sent" if ok else "failed", text,
-                               key=debounce_key or "", msg_id=int(ok or 0))
+                               key=key, msg_id=int(ok or 0))
         return ok
     except Exception as exc:
         # Never raise — but never swallow the reason either. A page that vanishes with no
         # trace cannot be diagnosed, and this is the path that reports everything else.
         print(f"[estate_alert] send failed: {exc!r}", file=sys.stderr)
-        telegram_ledger.record(source, "failed", text, key=debounce_key or "")
+        telegram_ledger.record(source, "failed", text, key=key)
         return False
 
 
