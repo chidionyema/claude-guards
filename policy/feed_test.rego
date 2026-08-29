@@ -37,10 +37,15 @@ test_refuses_unmarked if {
 	contains(m, "refused: Done: x")
 }
 
-test_refuses_nine_lines if {
-	d := feed.deny with input as {"lines": array.concat(good, ["🟢 x", "🟢 y"])}
+# crew#629 CP4: nine lines fit (the ninth is 📎 FACTS:); ten do not
+test_accepts_nine_lines if {
+	count(feed.deny) == 0 with input as {"lines": array.concat(good, ["🟢 x", "📎 FACTS: https://example.test/x"])}
+}
+
+test_refuses_ten_lines if {
+	d := feed.deny with input as {"lines": array.concat(good, ["🟢 x", "🟢 y", "📎 FACTS: https://example.test/x"])}
 	some m in d
-	contains(m, "got 9")
+	contains(m, "got 10")
 }
 
 test_refuses_empty if {
