@@ -129,10 +129,8 @@ Five paragraphs of this section (the one-copy topology, the numbering history, t
 
 # SECURITY STANCE — R52 (founder 2026-08-29)
 
-**One root credential per provider, made by him once, set as a named secret, then code.** Every
-second credential, policy file and rotation is minted by the pipeline (`bin/idp-bootstrap-*`,
-`oke-check` apply). Never ask him for a console click, a form field, a copied value, or a second
-credential on a provider that has its root. Full text and the Tailscale incident: `~/AGENTS-FULL.md`.
+One root credential per provider, made by him once as a named secret, then code mints the rest.
+Never ask him for a console click, a form field or a copied value. Full text: `~/AGENTS-FULL.md`.
 
 # THE FOUR HARD RULES
 
