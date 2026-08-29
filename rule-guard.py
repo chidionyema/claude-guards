@@ -398,27 +398,20 @@ _OK_STATES = {"SUCCESS", "SKIPPED", "NEUTRAL"}
 
 #: `gh pr merge --auto` hands the decision to GitHub and takes it away from this guard.
 #:
-#: WHY. This fence grades the checks at the instant the command is typed. `--auto` does not merge
-#: at that instant: it queues the merge and lets GitHub fire it when the repository's *required*
-#: contexts go green. Whatever the guard read is stale by construction, and the set GitHub waits
-#: for is not the set the pull request runs.
+#: This fence grades the checks at the instant the command is typed. `--auto` merges later, when
+#: the repository's *required* contexts go green -- a shorter set than the pull request runs, so
+#: whatever the guard read is stale by construction. idp#675 was queued this way and GitHub merged
+#: it at 00:35:33Z on 2026-08-29 with portability-drill run 33223840305 (created 00:32:35Z) still
+#: going; it concluded FAILURE and main's drill gate was out for ~30 minutes.
 #:
-#: On 2026-08-29 `gh pr merge 675 --repo chidionyema/idp --squash --auto --delete-branch` queued
-#: idp#675. GitHub merged it at 00:35:33Z. The portability-drill run for that head sha
-#: (33223840305, created 00:32:35Z) was still going and concluded FAILURE. chidionyema/idp
-#: requires four contexts -- offline-gate, bdd, security-scan, operating-model-gate -- out of the
-#: thirteen a pull request actually runs, so `hydrate` and `k3s` were never waited for. main's
-#: drill gate was out for roughly thirty minutes and every pull request touching platform/** or
-#: clusters/** inherited an unmeetable floor.
+#: Making the missed job required is the wrong repair and was measured first: hydrate and k3s are
+#: path-filtered to platform/** and clusters/**, and GitHub has no "required only when it runs", so
+#: a required context that never registers blocks every unrelated pull request forever.
 #:
-#: The obvious repair -- make `hydrate` required -- is the wrong one and was measured before this
-#: rule was written: both jobs are path-filtered to platform/** and clusters/**, and GitHub has no
-#: "required only when it runs". A required context that never registers blocks every pull request
-#: that does not touch those trees, forever. So the fence stays here, where the command is typed.
-#:
-#: NOT a blanket refusal. `--auto` is exactly as safe as the repository's required set is complete.
-#: When every check the pull request runs is required, GitHub waits for all of them and this rule
-#: allows the command. It refuses only when it can name a check GitHub will not wait for.
+#: NOT a blanket refusal (LAW 38). When every check the pull request runs is required, GitHub waits
+#: for all of them and this rule allows the command. It refuses only when it can name a check that
+#: would be outrun. Full incident and both-ways cases:
+#: test_incident_crew488_auto_merge_outruns_the_guard.py
 _GH_MERGE_AUTO = re.compile(r"\bgh\s+pr\s+merge\b[^;|&\n]*?\s--auto\b")
 
 
