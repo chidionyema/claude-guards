@@ -127,22 +127,12 @@ standing still.
 
 Five paragraphs of this section (the one-copy topology, the numbering history, the 16b slot, the incidents file, where the full text lives) were moved verbatim to `~/AGENTS-FULL.md` on 2026-08-27 (crew#26 CP-B); nothing reworded. `~/AGENTS-FULL.md` holds every law's prose; `~/.claude/LAWS-INCIDENTS.md` the incidents.
 
-# SECURITY STANCE — RULING R52 (founder, 2026-08-29, verbatim: "OUR SECURITY STANCE NEEDS TO BE CLEAR TO ALL AGENTS, IN AGENTS.MD FILES FOR THE LAST TIME")
+# SECURITY STANCE — R52 (founder 2026-08-29)
 
-**One root credential per provider, made by a person once, then code.** At onboarding a provider,
-the founder makes exactly one root (an API key or an OAuth client with the single scope that mints
-keys), on his own machine, and puts it straight into the vault or a repository secret. No agent sees
-it, relays it, or asks for it in chat (R49). From that moment every scoped credential, every policy
-file, every rotation is minted by the pipeline through the provider's API or Terraform
-(`bin/idp-bootstrap-*`, `oke-check` apply). The ACL is a file in git, synced by CI.
-
-**What an agent may never ask the founder for:** a console click, a form field, a value copied
-from one app to another, a screenshot of a wizard, a second credential on a provider that has its
-root. The only permitted FOUNDER ACTION on a provider is the root, once, in this shape: *make the
-root, set it as `<NAMED_SECRET>` with `gh secret set` / `bin/idp-vault-put`, say "set".* A second
-FOUNDER ACTION on the same provider is the incident, and the fix is code that mints from the root.
-Tailscale 2026-08-29: five pinned form walkthroughs for a federated identity; the root was an
-OAuth client with scope `oauth_keys` write, and `bin/idp-bootstrap-tailscale` mints `tag:k8s` from it.
+**One root credential per provider, made by him once, set as a named secret, then code.** Every
+second credential, policy file and rotation is minted by the pipeline (`bin/idp-bootstrap-*`,
+`oke-check` apply). Never ask him for a console click, a form field, a copied value, or a second
+credential on a provider that has its root. Full text and the Tailscale incident: `~/AGENTS-FULL.md`.
 
 # THE FOUR HARD RULES
 
