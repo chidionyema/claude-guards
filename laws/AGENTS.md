@@ -183,10 +183,6 @@ The other eleven subsections (Executable spec or blocked (R29, founder 2026-08-2
 
 # Compact instructions
 
-Measured across one 8.6-hour session: 25 compactions, median 117 seconds each, 9% of the session.
-Every summary ran 1,646–2,839 words against the 1,200-word cap; none met it. Length is the
-wall-clock.
-
 **Must preserve:** the current task and its goal; decisions and what was rejected and why; files
 changed and what changed in each; the exact next step and any unresolved problem, open question or
 failing test; constraints stated this session. Keep file paths, symbol names, commands and error
@@ -194,19 +190,11 @@ messages verbatim.
 
 **Hard budget, 1,200 words total.** When a section is full, cut its oldest entry, never a newer one.
 
-| Section | Words |
-|---|---|
-| task, goal, exact next step | 200 |
-| decisions and rejected options, with the why | 300 |
-| files touched and what changed | 300 |
-| constraints, standing directives, preferences | 200 |
-| everything else | 200 |
-
 **Always drop:** resolved tangents; superseded intermediate states; narration of merged work; tool
 output already acted on; any standing directive already in a memory file — cite the filename.
 
 **Never drop:** a decision, a file path, a command or an error string.
 
-# Moved on 2026-08-27 (crew#26 CP-B)
+# Moved on 2026-08-29 (crew#584)
 
-LAW 48, LAW 49 and LAW 50 prose, the Capabilities register and the How-to-work subsections were moved verbatim to `~/AGENTS-FULL.md` on 2026-08-27 (crew#26 CP-B); nothing reworded. `founder-blocker.py` reads the register from `~/AGENTS-FULL.md`. A `FOUNDER ACTION:` line still names the register row it checked.
+The compact-instructions measurement and word-budget table, and the 2026-08-27 CP-B move note, live verbatim in `~/AGENTS-FULL.md`.

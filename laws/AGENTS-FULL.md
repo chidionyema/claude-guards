@@ -2291,3 +2291,26 @@ Founder, 2026-08-29: "treat the plan ... like its a slow unoptimised algorithm, 
 **Worked example (crew#584, self-service platform options).** Naive: 7 serial PRs (register, planner, floors table, enable command, Backstage template, observability split, staging), ~7 CI round trips, each waiting on the last. Bottleneck: serial PR waits. Memoize: floors computed from git manifests by the planner, never typed into the register. Parallelise: the Backstage template only needs the `enable` command's name, so a worker starts it at once. Lazy: the observability split (lean traces tier) has no consumer today → `status: needs-split`, built when someone enables lean. Batch: register + planner + floors + enable are one change a reviewer accepts together → one PR. Result: 7 serial → 3 (2 in parallel), 7 round trips → 2.
 
 **Enforcement after the trial (LAW 44):** the operating-model gate refuses a feature PR with no `Optimised:` line; the rule enters `~/.claude/AGENTS.md` as a numbered law. Until then this section is the rule.
+
+# Moved from AGENTS.md on 2026-08-29 (crew#584, LAW 51 made room)
+
+## Compact instructions, measurement and budget table
+
+Measured across one 8.6-hour session: 25 compactions, median 117 seconds each, 9% of the session.
+Every summary ran 1,646–2,839 words against the 1,200-word cap; none met it. Length is the
+wall-clock.
+
+| Section | Words |
+|---|---|
+| task, goal, exact next step | 200 |
+| decisions and rejected options, with the why | 300 |
+| files touched and what changed | 300 |
+| constraints, standing directives, preferences | 200 |
+| everything else | 200 |
+
+
+## Move note of 2026-08-27
+
+# Moved on 2026-08-27 (crew#26 CP-B)
+
+LAW 48, LAW 49 and LAW 50 prose, the Capabilities register and the How-to-work subsections were moved verbatim to `~/AGENTS-FULL.md` on 2026-08-27 (crew#26 CP-B); nothing reworded. `founder-blocker.py` reads the register from `~/AGENTS-FULL.md`. A `FOUNDER ACTION:` line still names the register row it checked.
