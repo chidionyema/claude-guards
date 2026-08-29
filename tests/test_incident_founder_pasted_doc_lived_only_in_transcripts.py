@@ -93,3 +93,11 @@ def test_the_hook_is_wired_on_every_prompt():
     assert any("founder-doc-capture.py" in c for c in cmds), (
         "founder-doc-capture.py is not a UserPromptSubmit hook"
     )
+
+
+def test_example_keys_in_a_pasted_article_are_redacted_on_write(tmp_path, monkeypatch):
+    mod = load(tmp_path, monkeypatch)
+    doc = "Elite approach\n" + 'curl -u "tskey-api-YOUR_KEY:" https://x\n' + "z " * 800
+    run_hook(mod, doc, tmp_path)
+    text = next((tmp_path / "docs" / "founder").glob("*.md")).read_text()
+    assert "tskey-api" not in text and "<redacted>" in text

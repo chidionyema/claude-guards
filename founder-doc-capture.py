@@ -42,6 +42,19 @@ SAVE_ORDER = re.compile(
     r"|\bsave (this|the|that) (doc|document|spec|policy)\b",
     re.I,
 )
+# A pasted article carries example keys ("tskey-api-YOUR_KEY", "sk-...") and the estate's secret scan
+# grades git history, so a placeholder in a document is a red scan forever. Redact the shapes on
+# write; the founder's own words are never a place a live secret belongs (R49).
+SECRET_SHAPES = re.compile(
+    r"(tskey-[a-z]+-[A-Za-z0-9_\-]{4,}|sk-[A-Za-z0-9_\-]{16,}|ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}"
+    r"|AKIA[0-9A-Z]{16}|xox[abp]-[A-Za-z0-9\-]{10,}|-u [\"']?[^\s\"']+:[^\s\"']*[\"']?)"
+)
+
+
+def scrub(text: str) -> str:
+    return SECRET_SHAPES.sub("<redacted>", text)
+
+
 # Text the harness or a hook put in the prompt box. Not the founder's words; never a document.
 MACHINE_PREFIXES = (
     "<",
@@ -97,7 +110,7 @@ def write_doc(prompt: str, ts: datetime, session: str, cwd: str) -> Path | None:
         f"chars: {len(prompt)}\n"
         "source: founder prompt, verbatim (founder-doc-capture.py)\n"
         "---\n\n"
-        f"{prompt.rstrip()}\n"
+        f"{scrub(prompt.rstrip())}\n"
     )
     path.write_text(body, encoding="utf-8")
     return path
@@ -173,7 +186,7 @@ def _stamp(text: str) -> datetime | None:
         return None
 
 
-def backfill() -> int:
+def backfill(do_commit: bool = True) -> int:
     """One pass over every directives log: every document-shaped founder prompt becomes a file."""
     written: list[Path] = []
     for log in sorted(DIRECTIVES.glob("*.jsonl")):
@@ -190,7 +203,7 @@ def backfill() -> int:
             path = write_doc(prompt, ts, row.get("session", ""), row.get("cwd", ""))
             if path:
                 written.append(path)
-    if written:
+    if written and do_commit:
         commit(written)
     print(f"backfilled {len(written)} founder document(s) into {DOC_DIR}")
     return 0
@@ -209,11 +222,14 @@ def list_docs(grep: str | None) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--backfill", action="store_true")
+    ap.add_argument(
+        "--no-commit", action="store_true", help="backfill: write files only"
+    )
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--grep")
     a = ap.parse_args()
     if a.backfill:
-        return backfill()
+        return backfill(do_commit=not a.no_commit)
     if a.list or a.grep:
         return list_docs(a.grep)
     return hook()
