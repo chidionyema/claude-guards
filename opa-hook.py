@@ -26,6 +26,7 @@ That is the Stop runner hand_rolled_policy.rego was waiting for (crew#281 CP2).
 """
 from __future__ import annotations
 
+import calendar
 import json
 import os
 import re
@@ -58,7 +59,7 @@ def denials(payload: dict, query: str = QUERY) -> list[str]:
     if not opa:
         raise NoVerdict("no `opa` on PATH")
     try:
-        out = subprocess.run(
+        out = subprocess.run(  # noqa: S603 - argv list, the opa binary from PATH, no shell
             [opa, "eval", "--strict-builtin-errors", "--format", "json",
              *sum(((["--ignore", p]) for p in IGNORE), []),
              "--data", POLICY, "--stdin-input", query],
@@ -135,6 +136,22 @@ def standing_focus() -> str:
         return ""
 
 
+def estate_snapshot() -> dict:
+    """The cached estate state document (written by estate-state-relay.py at SessionStart), handed
+    to the policies as input.estate. `fresh` is the one derived field: available, not stale, and
+    fetched under 30 minutes ago. Everything else is the document, verbatim (crew#648 CP4)."""
+    path = os.path.expanduser("~/.estate/estate-state.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            state = json.load(fh)
+        fetched = calendar.timegm(time.strptime(state["fetched_at"], "%Y-%m-%dT%H:%M:%SZ"))  # UTC in, UTC out; the Mac clock is BST
+        age_min = (time.time() - fetched) / 60
+    except (OSError, ValueError, KeyError, TypeError):
+        return {"fresh": False}
+    fresh = bool(state.get("available")) and not state.get("stale") and age_min < 30
+    return {"fresh": fresh, "age_minutes": round(age_min, 1), "document": state.get("document") or {}}
+
+
 def refuse(event: str, why: str) -> int:
     reason = closed(why)
     if event == "Stop":
@@ -166,7 +183,7 @@ def decide(payload: dict, event: str) -> int:
         if payload.get("stop_hook_active"):
             return 0
         reply = last_reply_above_fold(str(payload.get("transcript_path", "")))
-        payload_in = {"event": "Stop", "reply": reply, "focus": standing_focus()}
+        payload_in = {"event": "Stop", "reply": reply, "focus": standing_focus(), "estate": estate_snapshot()}
         age = checkpoint_age_s(str(payload.get("transcript_path", "")))
         if age is not None:
             payload_in["checkpoint_age_s"] = age
@@ -174,6 +191,7 @@ def decide(payload: dict, event: str) -> int:
         if msgs:
             print(json.dumps({"decision": "block", "reason": "\n\n".join(sorted(msgs))}))
         return 0
+    payload = {**payload, "estate": estate_snapshot()}
     msgs = denials(payload)
     if not msgs:
         return 0
@@ -187,4 +205,4 @@ if __name__ == "__main__":
     except SystemExit:
         raise
     except Exception as e:  # noqa: BLE001 - crew#603: a crashed adapter is a refusal
-        raise SystemExit(refuse("unknown", f"{type(e).__name__}: {e}"))
+        raise SystemExit(refuse("unknown", f"{type(e).__name__}: {e}")) from None

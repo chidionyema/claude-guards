@@ -178,3 +178,36 @@ test_redirect_with_override_allowed if {
 test_write_with_override_allowed if {
 	count(hooks.deny) == 0 with input as {"tool_name": "Write", "tool_input": {"file_path": "/Users/x/dev/code/idp/NOTES.md", "content": "# docs-path-intended: fixture for a test\n"}}
 }
+
+fresh_estate := {"fresh": true, "age_minutes": 4, "document": {"runtime": {"clusters": [], "surfaces": []}}}
+
+bash_with_estate(cmd, estate) := {"tool_name": "Bash", "tool_input": {"command": cmd}, "estate": estate}
+
+test_estate_state_refetch_refused_while_fresh if {
+	count(hooks.deny) == 1 with input as {"tool_name": "mcp__estate__get_estate_state", "tool_input": {}, "estate": fresh_estate}
+}
+
+test_estate_state_refetch_allowed_when_stale_or_missing if {
+	count(hooks.deny) == 0 with input as {"tool_name": "mcp__estate__get_estate_state", "tool_input": {}, "estate": {"fresh": false}}
+	count(hooks.deny) == 0 with input as {"tool_name": "mcp__estate__get_estate_state", "tool_input": {}}
+}
+
+test_flux_rows_reread_refused_and_names_the_section if {
+	some m in hooks.deny with input as bash_with_estate("bin/idp-kube flux get kustomizations -A", fresh_estate)
+	contains(m, "flux_rows")
+}
+
+test_failed_runs_and_p0_rereads_refused if {
+	count(hooks.deny) == 1 with input as bash_with_estate("gh run list -R chidionyema/idp --status failure -L 5", fresh_estate)
+	count(hooks.deny) == 1 with input as bash_with_estate("gh issue list -R chidionyema/crew --label P0", fresh_estate)
+}
+
+test_a_read_the_document_does_not_hold_passes if {
+	count(hooks.deny) == 0 with input as bash_with_estate("gh workflow run oke-check.yml -f mode=break-glass -f playbook=diagnose", fresh_estate)
+	count(hooks.deny) == 0 with input as bash_with_estate("gh run view 33306238947 --log", fresh_estate)
+	count(hooks.deny) == 0 with input as bash_with_estate("flux get kustomizations -A", {"fresh": false})
+}
+
+test_snapshot_override_passes if {
+	count(hooks.deny) == 0 with input as bash_with_estate("flux get kustomizations -A  # snapshot-refresh-intended", fresh_estate)
+}
