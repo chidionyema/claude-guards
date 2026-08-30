@@ -64,18 +64,21 @@ deny contains msg if {
 	input.tool_name == "Artifact"
 	not action in read_only
 	not contains(haystack, vendor_override)
-	msg := sprintf(concat("", [
-		"BLOCKED: this publishes a founder-facing page to claude.ai.\n\n",
-		"  He already has a board that does not need you alive to be read:\n",
-		"      %s\n",
-		"  Built by   ~/.claude/scripts/founder_board.py  (launchd: com.founder.board)\n",
-		"  Served by  ~/.claude/scripts/board_serve.py    (launchd: com.founder.boardserve)\n\n",
-		"  Add a collector to founder_board.py so the content persists in our own\n",
-		"  platform. LAW 34 / R8: no provider single point of failure, Claude included.\n",
-		"  LAW 39: the local board already existed.\n\n",
-		"  If it genuinely must go outside the estate -- a buyer, an advisor, a\n",
-		"  customer -- put  # %s  in the description or title and say why.",
-	]), [local_board, vendor_override])
+	msg := sprintf(
+		concat("", [
+			"BLOCKED: this publishes a founder-facing page to claude.ai.\n\n",
+			"  He already has a board that does not need you alive to be read:\n",
+			"      %s\n",
+			"  Built by   ~/.claude/scripts/founder_board.py  (launchd: com.founder.board)\n",
+			"  Served by  ~/.claude/scripts/board_serve.py    (launchd: com.founder.boardserve)\n\n",
+			"  Add a collector to founder_board.py so the content persists in our own\n",
+			"  platform. LAW 34 / R8: no provider single point of failure, Claude included.\n",
+			"  LAW 39: the local board already existed.\n\n",
+			"  If it genuinely must go outside the estate -- a buyer, an advisor, a\n",
+			"  customer -- put  # %s  in the description or title and say why.",
+		]),
+		[local_board, vendor_override],
+	)
 }
 
 # ---------------------------------------------------------------------------
@@ -169,18 +172,21 @@ rogue_doc(path) if {
 	not docs_allowed(path)
 }
 
-docs_reason(path) := sprintf(concat("", [
-	"BLOCKED: %s is a markdown file outside the documentation structure (ADR 0002, Diátaxis).\n\n",
-	"  Put it where a reader will find it and TechDocs will render it:\n",
-	"      docs/tutorials/     a lesson, step by step\n",
-	"      docs/how-to/        a task, for someone who knows the ground\n",
-	"      docs/reference/     facts, tables, data, generated output\n",
-	"      docs/explanation/   concepts, research, why it is this way\n",
-	"      docs/decisions/     an ADR (MADR shape, ## Sources with two URLs)\n",
-	"  and add it to mkdocs.yml nav. Root governance files (README, CLAUDE, AGENTS,\n",
-	"  FOUNDER) and a `*-body.md` in a temp dir for `gh --body-file` are allowed.\n\n",
-	"  If this file genuinely is not documentation, put  # %s  in it and say why.",
-]), [path, docs_override])
+docs_reason(path) := sprintf(
+	concat("", [
+		"BLOCKED: %s is a markdown file outside the documentation structure (ADR 0002, Diátaxis).\n\n",
+		"  Put it where a reader will find it and TechDocs will render it:\n",
+		"      docs/tutorials/     a lesson, step by step\n",
+		"      docs/how-to/        a task, for someone who knows the ground\n",
+		"      docs/reference/     facts, tables, data, generated output\n",
+		"      docs/explanation/   concepts, research, why it is this way\n",
+		"      docs/decisions/     an ADR (MADR shape, ## Sources with two URLs)\n",
+		"  and add it to mkdocs.yml nav. Root governance files (README, CLAUDE, AGENTS,\n",
+		"  FOUNDER) and a `*-body.md` in a temp dir for `gh --body-file` are allowed.\n\n",
+		"  If this file genuinely is not documentation, put  # %s  in it and say why.",
+	]),
+	[path, docs_override],
+)
 
 deny contains msg if {
 	input.tool_name in {"Write", "Edit", "MultiEdit"}
@@ -200,4 +206,45 @@ deny contains msg if {
 	some m in regex.find_all_string_submatch_n(redirect_targets, cmd, -1)
 	rogue_doc(m[1])
 	msg := docs_reason(m[1])
+}
+
+# ---------------------------------------------------------------------------
+# crew#648 CP4 (founder 2026-08-30): "guard any actions, tool calls, for example an agent attempts
+# which return information they already have". The estate state document is injected whole at
+# session start (estate-state-relay.py) and handed here as input.estate. While it is fresh (under
+# 30 minutes, not stale), a call that only re-reads one of its sections is refused and told where
+# the answer already is. Reads the document does not hold (pod logs, a diagnose playbook, a
+# specific run) are not listed and pass. Append `# snapshot-refresh-intended` to a command when
+# the point is a newer reading than the document's.
+snapshot_override := "# snapshot-refresh-intended"
+
+# `<regex over the Bash command>: <section of the document that already answers it>`
+snapshot_sources := {
+	`(^|\s)flux\s+get\s+(kustomizations?|ks|helmreleases?|hr|all)\b`: "document.runtime.clusters[].flux_rows (Flux rows with ready and message)",
+	`\bgh\s+run\s+list\b[^|]*--status\s+failure`: "document.delivery.failed_runs",
+	`\bgh\s+issue\s+list\b[^|]*(P0|priority:p0|p0)`: "document.delivery.open_p0",
+	`\bgh\s+api\s+repos/[^ ]+/commits/main\b|\bgit\s+rev-parse\s+origin/main\b`: "document.delivery.main_sha",
+	`\bcurl\b[^|]*(signoz|hc|llm|catalogue)\.[a-z0-9.-]+\.[a-z]+/?(\s|$)`: "document.runtime.surfaces (the last drill verdict per routed surface)",
+}
+
+deny contains msg if {
+	input.tool_name == "mcp__estate__get_estate_state"
+	object.get(input, ["estate", "fresh"], false) == true
+	msg := sprintf(
+		"BLOCKED (crew#648 CP4): you already have the estate state document; it was injected at session start %.0f minutes ago and is under the 30-minute line. Read it from your context, or the cache at ~/.estate/estate-state.json.",
+		[object.get(input, ["estate", "age_minutes"], 0)],
+	)
+}
+
+deny contains msg if {
+	input.tool_name == "Bash"
+	object.get(input, ["estate", "fresh"], false) == true
+	cmd := object.get(input, ["tool_input", "command"], "")
+	not contains(cmd, snapshot_override)
+	some re, section in snapshot_sources
+	regex.match(re, cmd)
+	msg := sprintf(
+		"BLOCKED (crew#648 CP4): this command re-fetches what the estate state document already holds: %s. The document was injected at session start (%.0f min old). Read it from your context. If you need a newer reading than the document's, append `%s` and say why.",
+		[section, object.get(input, ["estate", "age_minutes"], 0), snapshot_override],
+	)
 }

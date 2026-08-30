@@ -192,3 +192,41 @@ deny contains msg if {
 		[trim_space(line), input.checkpoint_age_s],
 	)
 }
+
+# crew#648 CP4 (founder 2026-08-30). Every session starts with the estate state document
+# (estate-state-relay.py); the reply's status may not contradict it. When the document is fresh
+# (input.estate.fresh: available, not stale, fetched under 30 minutes ago) and says a production
+# cluster or a routed surface is red, a reply that calls the estate, cluster, platform or
+# production green is refused with the rows that say otherwise. "The tests are green" is not a
+# claim about the estate and passes.
+green_claim_re := `(?i)\b(estate|cluster|platform|production|prod)\b[^.\n]{0,40}\b(is|are|all|reads?|looks?)\s+green\b|\ball green\b`
+
+estate_red_rows contains row if {
+	some c in object.get(input, ["estate", "document", "runtime", "clusters"], [])
+	upper(object.get(c, "state", "")) != "OK"
+	row := sprintf("cluster %s (%s): %s", [c.name, object.get(c, "role", "?"), object.get(c, "state", "?")])
+}
+
+estate_red_rows contains row if {
+	some c in object.get(input, ["estate", "document", "runtime", "clusters"], [])
+	some r in object.get(c, "flux_rows", [])
+	r.ready == false
+	row := sprintf("  %s/%s %s: %s", [r.namespace, r.name, r.kind, substring(object.get(r, "message", ""), 0, 110)])
+}
+
+estate_red_rows contains row if {
+	some s in object.get(input, ["estate", "document", "runtime", "surfaces"], [])
+	lower(object.get(s, "verdict", "")) != "ok"
+	row := sprintf("surface %s %s: %s", [s.name, s.verdict, substring(object.get(s, "detail", ""), 0, 110)])
+}
+
+deny contains msg if {
+	input.event == "Stop"
+	object.get(input, ["estate", "fresh"], false) == true
+	regex.match(green_claim_re, input.reply)
+	count(estate_red_rows) > 0
+	msg := sprintf(
+		"BLOCKED (crew#648 CP4): the reply calls the estate green while the estate state document you were handed at session start says:\n  %s\nSay what is red, or say what you graded and that these rows were not it.",
+		[concat("\n  ", sort(estate_red_rows))],
+	)
+}

@@ -1,26 +1,23 @@
 #!/usr/bin/env python3
-"""estate-state-guard.py -- crew#648 CP4: every session starts with the state of the estate.
+"""estate-state-relay.py -- crew#648 CP4: every session starts with the whole estate, structured.
 
-SessionStart: call `get_estate_state` on the estate MCP (the server and its bearer come from the
-harness's own MCP config, never a literal here, LAW 46), cache the document under ~/.estate and
-print a plain-English summary as context: age, stale flag, the production cluster's verdict and
-its red Flux rows, red surfaces, open P0s, freeze. A server that cannot be reached is a BLIND line,
-never a quiet green (silent-green is the incident class, crew#668).
+SessionStart: call `get_estate_state` on the estate MCP (server and bearer from the harness's own
+MCP config, never a literal here, LAW 46), cache the document under ~/.estate and inject it whole
+as JSON, red rows first. Founder 2026-08-30: "you need to ingest the whole estate in structured
+format ... that way you dont need to spend time trying to find information you already have".
+A server that cannot be reached is a BLIND line, never a quiet green (crew#668).
 
-Stop: the reply's status may not contradict the document. When the cached document (under 30
-minutes old) says the production cluster or a routed surface is red and the reply says the estate,
-the cluster or the platform is green, the reply is refused with the rows that say otherwise.
-A refusal is once per reply, twice per session at most, like dod-guard.
+This file decides nothing. The two refusals that read the cached document are Rego, evaluated by
+opa-hook.py: policy/reply.rego refuses a reply that calls the estate green while the document says
+red; policy/hooks.rego refuses a tool call that re-fetches what the document already holds.
 
-Self-test: `python3 estate-state-guard.py --selftest`.
+Self-test: `python3 estate-state-relay.py --selftest`; live: `--fetch`.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
-import re
 import sys
 import urllib.error
 import urllib.request
@@ -29,13 +26,8 @@ from pathlib import Path
 
 HOME = Path(os.environ.get("HOME", "~")).expanduser()
 CACHE = HOME / ".estate" / "estate-state.json"
-STATE = HOME / ".estate" / "estate-state-guard.json"
 TIMEOUT = 8
 FRESH_MINUTES = 30
-GREEN_CLAIM = re.compile(
-    r"\b(estate|cluster|platform|production|prod)\b[^.\n]{0,40}\b(is|are|all|reads?|looks?)\s+green\b|\ball green\b",
-    re.I,
-)
 
 
 def server() -> tuple[str, dict]:
@@ -89,7 +81,7 @@ def fetch() -> dict:
             "params": {
                 "protocolVersion": "2025-03-26",
                 "capabilities": {},
-                "clientInfo": {"name": "estate-state-guard", "version": "1"},
+                "clientInfo": {"name": "estate-state-relay", "version": "1"},
             },
         },
         None,
@@ -218,94 +210,18 @@ def session_start() -> int:
     return 0
 
 
-def cached() -> dict | None:
-    try:
-        state = json.loads(CACHE.read_text())
-        at = datetime.strptime(state["fetched_at"], "%Y-%m-%dT%H:%M:%SZ").replace(
-            tzinfo=timezone.utc
-        )
-    except Exception:  # noqa: BLE001
-        return None
-    if (datetime.now(timezone.utc) - at).total_seconds() > FRESH_MINUTES * 60:
-        return None
-    return state
-
-
-def offences(text: str, state: dict | None) -> list[str]:
-    """Rows the reply contradicts: it claims the estate is green while the fresh document is red."""
-    if (
-        not state
-        or not state.get("available")
-        or state.get("stale")
-        or not GREEN_CLAIM.search(text)
-    ):
-        return []
-    return red_rows(state.get("document") or {})
-
-
-def last_assistant_text(transcript: Path) -> str:
-    text = ""
-    with transcript.open(encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            try:
-                row = json.loads(line)
-            except ValueError:
-                continue
-            if row.get("type") != "assistant":
-                continue
-            content = (row.get("message") or {}).get("content")
-            if not isinstance(content, list):
-                continue
-            joined = "\n".join(
-                b.get("text", "")
-                for b in content
-                if isinstance(b, dict) and b.get("type") == "text"
-            ).strip()
-            if joined:
-                text = joined
-    return text
-
-
-def stop(payload: dict) -> int:
-    path = payload.get("transcript_path") or ""
-    if not path or not os.path.exists(path):
-        return 0
-    text = last_assistant_text(Path(path))
-    found = offences(text, cached())
-    if not found:
-        return 0
-    session = str(payload.get("session_id") or "unknown")
-    digest = hashlib.sha256(text.encode()).hexdigest()[:16]
-    try:
-        st = json.loads(STATE.read_text())
-    except Exception:  # noqa: BLE001
-        st = {}
-    mine = st.get(session) or {"count": 0, "seen": []}
-    if digest in mine["seen"] or mine["count"] >= 2:
-        return 0
-    mine["count"] += 1
-    mine["seen"] = (mine["seen"] + [digest])[-20:]
-    st[session] = mine
-    STATE.write_text(json.dumps(st))
-    print(
-        "BLOCKED by estate-state-guard (crew#648 CP4): the reply calls the estate green while the estate state document says:\n  "
-        + "\n  ".join(found)
-        + "\nSay what is red, or say what you graded and that these rows were not it.",
-        file=sys.stderr,
-    )
-    return 2
-
-
 def check(cond: object, why: str) -> None:
     if not cond:
-        raise SystemExit("estate-state-guard selftest: " + why)
+        raise SystemExit("estate-state-relay selftest: " + why)
 
 
 def selftest() -> int:
     red = {
         "available": True,
         "stale": False,
+        "age_minutes": 3,
         "document": {
+            "generated_at": "x",
             "runtime": {
                 "clusters": [
                     {
@@ -326,59 +242,20 @@ def selftest() -> int:
                 "surfaces": [
                     {"name": "second-hop", "verdict": "FAIL", "detail": "did not load"}
                 ],
-            }
+            },
         },
     }
-    check(
-        offences("DONE: the estate is green and the founder used it", red),
-        "green over red must be refused",
-    )
-    check(
-        offences("INVENTORY: all green on the cluster", red),
-        "offences('INVENTORY: all green on the cluster', red)",
-    )
-    check(
-        not offences("INVENTORY: the tests are green; cluster FAIL on tailscale", red),
-        "green tests are not a green estate",
-    )
-    check(
-        not offences("DONE: estate is green", {**red, "stale": True}),
-        "a stale document refuses nothing",
-    )
-    check(
-        not offences("DONE: estate is green", None),
-        "not offences('DONE: estate is green', None)",
-    )
-    ok = {
-        "available": True,
-        "stale": False,
-        "document": {
-            "runtime": {
-                "clusters": [{"name": "oke", "role": "production", "state": "OK"}],
-                "surfaces": [],
-            }
-        },
-    }
-    check(
-        not offences("DONE: the estate is green", ok),
-        "not offences('DONE: the estate is green', ok)",
-    )
     check(
         "BLIND" in summary({"available": False, "error": "no artifact"}),
-        "'BLIND' in summary({'available': False, 'error': 'no artifac",
+        "a missing document is BLIND",
     )
+    out = summary(red)
     check(
-        "RED rows"
-        in summary(
-            {
-                **red,
-                "age_minutes": 3,
-                "document": {**red["document"], "generated_at": "x"},
-            }
-        ),
-        "'RED rows' in summary({**red, 'age_minutes': 3, 'document': ",
+        "RED rows" in out and "tailscale" in out and "second-hop" in out,
+        "red rows are listed first",
     )
-    print("ok estate-state-guard selftest")
+    check('"generated_at": "x"' in out, "the whole document is injected, verbatim JSON")
+    print("ok estate-state-relay selftest")
     return 0
 
 
@@ -389,15 +266,8 @@ def main(argv: list[str]) -> int:
         state = fetch()
         print(summary(state))
         return 0 if state.get("available") and not state.get("stale") else 1
-    kind = argv[0] if argv else ""
-    if kind == "SessionStart":
+    if argv and argv[0] == "SessionStart":
         return session_start()
-    if kind == "Stop":
-        try:
-            payload = json.load(sys.stdin)
-        except Exception:  # noqa: BLE001
-            payload = {}
-        return stop(payload)
     return 0
 
 

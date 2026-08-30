@@ -141,3 +141,33 @@ test_dropping_a_worktree_is_not_a_parked_thread if {
 test_parking_a_named_lane_without_path_still_refused if {
 	count(deny) == 1 with input as stop_aged("Parking the drift lane for now, switching away from it.", 7200)
 }
+
+red_estate := {"fresh": true, "document": {"runtime": {
+	"clusters": [{"name": "oke", "role": "production", "state": "FAIL", "flux_rows": [{"kind": "Kustomization", "namespace": "flux-system", "name": "tailscale", "ready": false, "message": "stalled"}]}],
+	"surfaces": [{"name": "second-hop", "verdict": "FAIL", "detail": "did not load"}],
+}}}
+
+ok_estate := {"fresh": true, "document": {"runtime": {"clusters": [{"name": "oke", "role": "production", "state": "OK"}], "surfaces": []}}}
+
+test_green_over_a_red_document_refused if {
+	count(deny) == 1 with input as {"event": "Stop", "reply": "DONE: the estate is green and the founder used it", "estate": red_estate}
+}
+
+test_refusal_names_the_red_rows if {
+	some m in deny with input as {"event": "Stop", "reply": "INVENTORY: all green on the cluster", "estate": red_estate}
+	contains(m, "tailscale")
+	contains(m, "second-hop")
+}
+
+test_green_tests_are_not_a_green_estate if {
+	count(deny) == 0 with input as {"event": "Stop", "reply": "INVENTORY: the tests are green; cluster FAIL on tailscale", "estate": red_estate}
+}
+
+test_green_over_a_green_document_allowed if {
+	count(deny) == 0 with input as {"event": "Stop", "reply": "DONE: the estate is green", "estate": ok_estate}
+}
+
+test_a_stale_or_missing_document_refuses_nothing if {
+	count(deny) == 0 with input as {"event": "Stop", "reply": "DONE: estate is green", "estate": {"fresh": false}}
+	count(deny) == 0 with input as {"event": "Stop", "reply": "DONE: estate is green"}
+}
