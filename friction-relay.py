@@ -193,7 +193,8 @@ def refresh() -> int:
             continue
         seen.add(k)
         uniq.append(h)
-    payload = {"built_at": now, "window_hours": WINDOW // 3600, "complaints": uniq}
+    payload = {"built_at": now, "window_hours": WINDOW // 3600, "complaints": uniq,
+               "incidents": _fetch_incidents()}
     tmp = CACHE + ".tmp"
     os.makedirs(os.path.dirname(CACHE), exist_ok=True)
     with open(tmp, "w", encoding="utf-8") as fh:
@@ -202,6 +203,68 @@ def refresh() -> int:
     print("friction-relay: %d complaints in the last %dh across %d transcripts"
           % (len(uniq), WINDOW // 3600, len(_recent_transcripts(now))))
     return 0
+
+
+#: crew#668 CP6: the incident ledger is training data, so its lesson is read at every session
+#: start. The rows live in the board repository (incidents/LEDGER.jsonl, incidents/GUARDS.jsonl,
+#: rendered as docs/INCIDENTS.md); they are fetched through the API in the background refresh so
+#: nothing here names a checkout (LAW 46), and rendered from the cache so the hook stays fast.
+BOARD_REPO = os.environ.get("ESTATE_BOARD_REPO", "chidionyema/crew")
+INCIDENT_CLASSES_SHOWN = 5
+
+
+def _board_jsonl(path: str) -> list[dict]:
+    try:
+        out = subprocess.run(
+            ["gh", "api", "-H", "Accept: application/vnd.github.raw",
+             "repos/%s/contents/%s" % (BOARD_REPO, path)],
+            capture_output=True, text=True, check=False, timeout=30).stdout
+    except Exception:
+        return []
+    rows = []
+    for line in out.splitlines():
+        try:
+            rows.append(json.loads(line))
+        except Exception:
+            continue
+    return rows
+
+
+def _fetch_incidents() -> dict:
+    """Top incident classes across every guard on record, plus the open incidents."""
+    ledger = _board_jsonl("incidents/LEDGER.jsonl")
+    guards = _board_jsonl("incidents/GUARDS.jsonl")
+    return summarise_incidents(ledger, guards)
+
+
+def summarise_incidents(ledger: list, guards: list) -> dict:
+    counts: dict = {}
+    for r in ledger + guards:                       # a ledger row carries `classes`, a guard `class`
+        for c in (r.get("classes") or [r.get("class")]) or []:
+            c = str(c or "unclassified")
+            counts[c] = counts.get(c, 0) + 1
+    ranked = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+    open_rows = [r for r in ledger if not r.get("resolved")]
+    return {"guards": len(guards), "incidents": len(ledger),
+            "classes": ranked[:INCIDENT_CLASSES_SHOWN + 1],
+            "open": [{"id": r.get("id", "?"), "title": str(r.get("title", ""))[:100]}
+                     for r in open_rows[:5]]}
+
+
+def render_incidents(cache: dict) -> str:
+    inc = cache.get("incidents") or {}
+    classes = [kv for kv in inc.get("classes") or [] if kv[0] != "unclassified"]
+    if not classes and not inc.get("open"):
+        return ""
+    lines = ["[friction-relay] WHAT THE ESTATE KEEPS GETTING WRONG (crew#668). %d incidents, %d"
+             " guards on record; the top classes, from the ledger the pipeline generates:"
+             % (inc.get("incidents", 0), inc.get("guards", 0)), ""]
+    for cls, n in classes[:INCIDENT_CLASSES_SHOWN]:
+        lines.append("  - %-32s %d" % (cls, n))
+    for r in inc.get("open") or []:
+        lines.append("  OPEN %s: %s" % (r.get("id"), r.get("title")))
+    lines += ["", "  Before you write a guard, a script or a fix, check it is not one of these again."]
+    return "\n".join(lines)
 
 
 def _ago(ts: float, now: float) -> str:
@@ -351,9 +414,9 @@ def hook() -> int:
     if now - float(cache.get("built_at") or 0) > STALE:
         _kick_refresh()
     text = render(cache, now)
-    rulings = render_rulings()
-    if rulings:
-        text = (text + "\n\n" + rulings) if text else rulings
+    for block in (render_incidents(cache), render_rulings()):
+        if block:
+            text = (text + "\n\n" + block) if text else block
     if text:
         sys.stdout.write(text + "\n")
     return 0
@@ -400,6 +463,18 @@ def selftest() -> int:
     ck("standing rulings are injected", "STANDING FOUNDER RULINGS" in ru)
     ck("the fly ruling is carried verbatim", "not going back to fly" in ru)
     ck("the rulings block stays under 16 KB (crew#26: it was 28.6 KB)", len(ru) < 16000)
+    led = [{"id": "I1", "classes": ["fix-proved-on-the-wrong-surface"], "title": "Otto dark",
+            "resolved": ""},
+           {"id": "I0", "classes": ["silent-green"], "title": "closed", "resolved": "2026-08-30"}]
+    gua = [{"class": "silent-green"}] * 3 + [{"class": "unclassified"}] * 9
+    inc = render_incidents({"incidents": summarise_incidents(led, gua)})
+    ck("incident classes are ranked and injected", inc.index("silent-green") < inc.index("wrong-surface"))
+    ck("an unclassified guard is counted, never ranked", "unclassified" not in inc)
+    ck("an open incident is named", "OPEN I1: Otto dark" in inc)
+    ck("a resolved incident is counted, not listed as open", "OPEN I0" not in inc)
+    ck("no incident data injects nothing", render_incidents({}) == "")
+    ck("the ledger is read from the board repo, never a checkout path (LAW 46)",
+       "repos/%s/contents" in open(__file__).read() and "incidents/LEDGER" in open(__file__).read())
     ck("a meaning is cut to its first sentence",
        _first_sentence("Never do X. Also never do Y.") == "Never do X.")
     ck("a long first sentence is capped", len(_first_sentence("a " * 400)) <= MEANING_CAP)
