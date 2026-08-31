@@ -389,6 +389,18 @@ def gate_text(
     return text, None
 
 
+def guard(text, surface, session=""):
+    """The one door for the hand-rolled guards (dod-guard.py, feed-guard.py): returns
+    (gated_text, refusal_lines). Never raises: a gate that cannot run is GATE_UNAVAILABLE, the loud
+    channel, and the caller decides whether that blocks (founder spec section 4.2)."""
+    try:
+        gated, refusal = gate_text(text, session=session, surface=surface)
+    except Exception as exc:  # noqa: BLE001
+        msg = f"GATE_UNAVAILABLE: the claim gate failed ({exc}); say UNKNOWN or fix the gate."
+        return text, [msg]
+    return gated, ([refusal] if refusal else [])
+
+
 def build_envelope(
     service, state, claim, command=None, query=None, prom=None, now=None
 ):

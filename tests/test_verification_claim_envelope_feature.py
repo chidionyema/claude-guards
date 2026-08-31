@@ -129,12 +129,12 @@ def step_14(ctx):
 def step_15(ctx):
     dod = load("dod-guard")
     cg = load("claim_gate")
-    ctx["reply_offences"] = dod.claim_offences(
-        "INVENTORY: backstage\n" + cg.render(ctx["env"])
-    )
-    ctx["bare_offences"] = dod.claim_offences(
-        "INVENTORY: backstage is MEASURED_OK, no block"
-    )
+    ctx["reply_offences"] = dod.claim_guard(
+        "INVENTORY: backstage\n" + cg.render(ctx["env"]), "founder-reply"
+    )[1]
+    ctx["bare_offences"] = dod.claim_guard(
+        "INVENTORY: backstage is MEASURED_OK, no block", "founder-reply"
+    )[1]
     gate(ctx, ctx["env"], surface="founder-reply")
 
 

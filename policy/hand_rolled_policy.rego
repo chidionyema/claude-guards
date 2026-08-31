@@ -116,7 +116,10 @@ legacy := {
 	# the reply text; opa-hook.py runs only on PreToolUse (Artifact) and no Stop runner feeds a
 	# transcript to OPA yet, so the rule cannot be Rego today. Follow-up on crew#281: a Stop
 	# runner, then dod-guard and blocker-guard move to policy/reply.rego and leave this list.
-	"dod-guard.py": 202,
+	# 202 -> 205 on 2026-08-31 (session ef0354ef, crew#656 CP2). No refusal was added here: the
+	# refusal is claim_gate.guard (the ```claim envelope rule, founder spec 2026-08-29 section 4);
+	# the lines are the import and the one call that hands the founder reply to it.
+	"dod-guard.py": 205,
 	# Added 2026-08-26 at 94 lines, the first time it is committed: settings.json has run it
 	# untracked since 2026-08-25 (LAW 24). Same reason as dod-guard: a Stop rule over the reply
 	# and the Telegram ledger, no OPA Stop runner exists. Same follow-up, same exit.
@@ -132,7 +135,9 @@ legacy := {
 	# capabilities, progress or when. It is content, not a decision: OPA cannot read the page
 	# or print it into the prompt. The prompt match (STATUS_RE) is the only rule, and it has
 	# no refusal to migrate; three incident tests prove it both ways.
-	"feed-guard.py": 428, # 270 lines before ruff format; same code, the estate Python standard (crew#620) reflowed it on 2026-08-29
+	# 428 -> 433 on 2026-08-31 (session ef0354ef, crew#656 CP2). No refusal was added here: the
+	# refusal is claim_gate.guard; the lines are the import and the call that hands the handoff to it.
+	"feed-guard.py": 433, # 270 lines before ruff format; same code, the estate Python standard (crew#620) reflowed it on 2026-08-29
 	# vendor-lock-guard (crew#273, claude-guards#63): scans PROSE -- markdown, .feature and
 	# the last assistant message -- for a vendor name in the same sentence as a word that
 	# makes it mandatory. conftest has no parser for markdown or free text, so this rule
