@@ -347,6 +347,13 @@
       "verbatim": "looks NEVER tell nne about pr UNTIL green. Enforce it ... u build sonethig , nake sure it passes checks ... no point telling ne just to se it red ... so check ur own work",
       "meaning": "The founder hears about a pull request exactly once: when every check on it is green. A red or still-running pull request is worked silently; naming it hands him triage instead of a capability. idp pull request 1077 was named to him three times while its gates were red.",
       "guard": "pr-green-guard.py (Stop hook): refuses a reply whose text carries a GitHub pull-request URL when that pull request's checks are not all green; last run per check name; fails open when gh cannot answer (LAW 38)."
+    },
+    {
+      "id": "R62-every-pr-has-a-cleanup-section",
+      "date": "2026-08-31",
+      "verbatim": "we never cleannup every pr nust have cleanup section nandatory ... and i will defie what it says",
+      "meaning": "Every pull request body carries a Cleanup section naming what the change removes or leaves behind. Said while 13 leftover worktrees sat inside the idp folder and 325 were registered. The founder defines the section's required content; until his definition lands the gate checks presence only.",
+      "guard": "idp policy/operating_model.rego (operating-model gate) — presence rule, graded against every open PR before it merges."
     }
   ],
   "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R54 (R53 landed 2026-08-29, crew#459; R52 2026-08-29; (R50 landed 2026-08-29, crew#584; R45 landed 2026-08-28, crew#584; R44 landed 2026-08-28, crew#66; R43 landed 2026-08-28, crew#66; R42 landed 2026-08-27 via claude-guards#144, crew#488) (R34-R37 landed 2026-08-25 via claude-guards#60); grep the estate for the id before you add one."
