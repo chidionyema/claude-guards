@@ -106,6 +106,24 @@ def collisions(
     return out
 
 
+def claim_refusal(body: str, session: str) -> tuple[str, str | None]:
+    """crew#656 CP2: a handoff that asserts MEASURED_OK/MEASURED_FAIL carries its ```claim
+    envelope and the envelope is checked (founder spec section 4.2). Returns (body, refusal);
+    the body comes back rewritten when stale evidence was downgraded to UNKNOWN. A gate that
+    cannot load is reported on stderr and does not block: the feed is one of the channels that
+    reports a broken gate."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import claim_gate
+    except Exception as exc:  # noqa: BLE001
+        print(
+            f"[GATE_UNAVAILABLE] claim gate could not load: {exc}; handoff not gated",
+            file=sys.stderr,
+        )
+        return body, None
+    return claim_gate.gate_text(body, session=session, surface="feed")
+
+
 def append(
     feed: Path,
     session: str,
@@ -118,8 +136,12 @@ def append(
     if not any(l.startswith(METER_MARK) for l in lines) and len(lines) < 8:
         lines.append(meter if meter is not None else meter_line())
     denied = denials(lines, session, lane, holders(feed, session, lane, at))
+    gated, refusal = claim_refusal("\n".join(lines), session)
+    if refusal:
+        denied.append(refusal)
     if denied:
         return "; ".join(denied)
+    lines = gated.splitlines()
     if not any(l.startswith("📎 FACTS:") for l in lines):
         # crew#629 CP4, report-only: facts are shared through the ticket block, not re-found per session.
         print(

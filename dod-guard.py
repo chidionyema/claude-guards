@@ -91,7 +91,22 @@ def offences(text: str) -> list[str]:
             out.append("STAGED: needs `Auto-activating in <N> minutes.` with a number.")
     if kind in ("DONE", "INVENTORY") and has_line(fold, "Evidence:") and not evidence_is_checkable(fold):
         out.append("`Evidence:` must contain a URL, a commit hash, a file path or a `command`.")
+    out.extend(claim_offences(text))
     return out
+
+
+def claim_offences(text: str, session: str = "") -> list[str]:
+    """crew#656 CP2, founder spec section 4.3: a reply to the founder that asserts
+    MEASURED_OK or MEASURED_FAIL carries its ```claim envelope and the envelope is checked, the
+    same rule as the board. GATE_UNAVAILABLE is an offence too: it is the loud channel, and the
+    reply can use a `command` envelope or UNKNOWN, neither of which needs the metric store."""
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import claim_gate
+    except Exception as exc:  # noqa: BLE001
+        return [f"GATE_UNAVAILABLE: the claim gate could not load ({exc}); say UNKNOWN or fix the gate."]
+    _, refusal = claim_gate.gate_text(text, session=session, surface="founder-reply")
+    return [refusal] if refusal else []
 
 
 def last_assistant_text(transcript: Path) -> str:

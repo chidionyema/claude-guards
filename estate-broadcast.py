@@ -156,6 +156,35 @@ def _vocabulary_refusal(record):
     return None
 
 
+def _claim_refusal(record):
+    """crew#656 CP2: a MEASURED_* assertion on the board carries its ```claim envelope, and the
+    envelope is checked (founder spec section 4.2). Stale evidence is rewritten to UNKNOWN in
+    place. Same posture as the vocabulary gate: content failures block, a gate that cannot load
+    prints GATE_UNAVAILABLE and lets the post through, because this board is the channel the
+    estate reports a broken gate on. Override: ESTATE_VOCABULARY_OVERRIDE=1.
+    """
+    import os
+
+    if os.environ.get("ESTATE_VOCABULARY_OVERRIDE") == "1":
+        return None
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import claim_gate
+    except Exception as exc:  # noqa: BLE001 - config failure, loud and open
+        print(f"[GATE_UNAVAILABLE] claim gate could not load: {exc}. Post allowed. "
+              f"This is a broken gate, not a clean post.", file=sys.stderr)
+        return None
+    field = next((f for f in ("message", "claim", "summary") if isinstance(record.get(f), str)), None)
+    if field is None:
+        return None
+    text, refusal = claim_gate.gate_text(record[field], session=str(record.get("from", "")), surface="board")
+    if refusal:
+        return refusal
+    if text != record[field]:
+        record[field] = text
+    return None
+
+
 def append_broadcast(record):
     """
     Append a broadcast record to the board atomically.
@@ -174,7 +203,7 @@ def append_broadcast(record):
     if not isinstance(record, dict):
         raise ValueError("record must be a dict")
 
-    refusal = _vocabulary_refusal(record)
+    refusal = _vocabulary_refusal(record) or _claim_refusal(record)
     if refusal:
         raise ValueError(refusal)
     
