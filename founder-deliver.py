@@ -76,9 +76,15 @@ def last_assistant_text(transcript: Path) -> str:
 
 
 def deliverable(text: str) -> tuple[str, list[str]] | None:
-    """(headline, links) when the reply is a DONE: with links he can open, else None."""
+    """(headline, links) when the reply is a DONE:/AUDIT: with links he can open, else None.
+
+    AUDIT: added 2026-08-31, his words in one sitting: "whats the protocol when i ask for
+    audit and reearsh?", "i need it sen tto telegrn also pinnned", "you hvae to autonate it",
+    "i wot be repeating nnyself". An audit or research result opens AUDIT: with the one URL;
+    this hook sends it and pins it (see _send_real). Ruling R63 in rulings.json.
+    """
     lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
-    if not lines or not lines[0].startswith("DONE:"):
+    if not lines or not (lines[0].startswith("DONE:") or lines[0].startswith("AUDIT:")):
         return None
     above = text.split("\n---", 1)[0]
     links: list[str] = []
@@ -112,7 +118,7 @@ def _save(state: dict) -> None:
         pass
 
 
-def _send_real(text: str, delivery_id: str) -> bool:
+def _send_real(text: str, delivery_id: str, pin: bool = False) -> bool:
     """Post the receipt to his DM with three decision buttons, and ledger it.
 
     Not estate_alert.send_operator_alert: with TELEGRAM_ALERT_CHANNEL unset that function
@@ -159,6 +165,23 @@ def _send_real(text: str, delivery_id: str) -> bool:
         telegram_ledger.record("founder-deliver", "failed", text, key=delivery_id)
         return False
     telegram_ledger.record("founder-deliver", "sent" if mid else "failed", text, key=delivery_id)
+    if pin and mid:
+        # Founder, 2026-08-25 and again 2026-08-31: "all important links need to be pinned",
+        # "i need it sent to telegram also pinned". Best-effort: a pin that fails must never
+        # unsend the message or block the turn.
+        pin_payload = json.dumps({"chat_id": chat, "message_id": mid,
+                                  "disable_notification": True}).encode()
+        pin_req = urllib.request.Request(
+            f"https://api.telegram.org/bot{token}/pinChatMessage", data=pin_payload,
+            headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(pin_req, timeout=10) as r:
+                pinned = bool(json.load(r).get("ok"))
+        except Exception as exc:  # noqa: BLE001
+            pinned = False
+            print("[founder-deliver] pin failed (message still sent): %s" % exc, file=sys.stderr)
+        telegram_ledger.record("founder-deliver", "pinned" if pinned else "pin-failed",
+                               text[:80], key=delivery_id)
     return bool(mid)
 
 
@@ -187,7 +210,9 @@ def handle(payload: dict, send=_send_real, state_path: Path = STATE) -> str:
     did = delivery_id(fresh)
     msg = "[receipt %s] session %s\n%s\n\n%s\n\nTap one. The verdict lands on the issue and the board." % (
         did, session, head, "\n".join(fresh))
-    ok = send(msg, did)
+    # An AUDIT: reply is pinned (R63). Old two-argument sender stubs keep working: the
+    # keyword call happens only on the audit path, and _send_real accepts it.
+    ok = send(msg, did, pin=True) if head.startswith("AUDIT:") else send(msg, did)
     if not ok:
         return "blind"
     for u in fresh:
@@ -336,6 +361,21 @@ def selftest() -> int:
         ok4 = r4 == "skip" and len(calls) == 1
         print("not-done   ", "PASS" if ok4 else "FAIL (%s)" % r4)
         fails += not ok4
+
+        pins: list[bool] = []
+
+        def fake_pin(text, did, pin=False):
+            calls.append(text)
+            pins.append(pin)
+            return True
+
+        audit = ("AUDIT: science lane collection register verified and published.\n"
+                 "https://github.com/chidionyema/crew/pull/754\n---\nevidence")
+        r4b = handle({"transcript_path": str(transcript(d, audit)), "session_id": "abc"},
+                     send=fake_pin, state_path=st)
+        ok4b = r4b == "sent" and pins == [True]
+        print("audit-pins ", "PASS" if ok4b else "FAIL (%s pins=%s)" % (r4b, pins))
+        fails += not ok4b
 
         r5 = handle({"transcript_path": str(transcript(d, "DONE: x https://github.com/o/r/pull/9")),
                      "session_id": "abc"}, send=lambda t, d: False, state_path=st)

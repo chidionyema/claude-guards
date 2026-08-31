@@ -1,346 +1,360 @@
 {
-  "_what": "Standing founder rulings. Durable: no time window, injected into EVERY session at SessionStart by friction-relay.py, enforced where mechanical by rule-guard.py. A ruling leaves this file only when the founder reverses it.",
-  "_why": "2026-08-24: the founder had to say 'for the last time, we are not going back to fly' because the ruling lived in one session's memory and a 6-hour complaint window. LAW 44: a repeated instruction means the protocol is missing. This file is the protocol.",
-  "rulings": [
-    {
-      "id": "R1-no-fly-revival",
-      "date": "2026-08-24",
-      "verbatim": "for the last time, we are not going back to fly",
-      "meaning": "Never pay Fly invoices, never revive suspended Fly apps, never deploy or scale on Fly. Teardown and read-only commands are fine. The exit path is crew#78 (k8s) / crew#38 (drill the exit).",
-      "enforced_by": "rule-guard.py rule_no_fly_revival"
-    },
-    {
-      "id": "R2-say-once-all-ack",
-      "date": "2026-08-24",
-      "verbatim": "if i say something, all agents need to get it and ack — all agents in estate, in any session. they need durable memory. no more things getting lost.",
-      "meaning": "A founder instruction said to ANY session binds ALL sessions. When you receive a ruling relayed from another session, act on it without making him repeat it. New standing rulings are added to this file the moment they are given.",
-      "enforced_by": "friction-relay.py (injection); this file (durability)"
-    },
-    {
-      "id": "R3-strict-bar",
-      "date": "2026-08-24",
-      "verbatim": "you need to be strict — if its not raising the bar, we dont want it — try to raise the bar or ill terminate the whole crew",
-      "meaning": "Every review grades KEEP / REWORK / NOT-RAISING-THE-BAR. Recommending removal of existing work is an expected outcome. Applies to your own work first.",
-      "enforced_by": "review protocol crew#105"
-    },
-    {
-      "id": "R4-investor-tomorrow",
-      "date": "2026-08-23",
-      "verbatim": "we need to think as if an investor is going to buy the platform tomorrow",
-      "meaning": "Production-ready is the only standard: no human-at-a-laptop assumptions, no half-wired instruments, everything demonstrable. Codified as LAW 41.",
-      "enforced_by": "LAW 41"
-    },
-    {
-      "id": "R5-founder-out-of-the-loop",
-      "date": "2026-08-24",
-      "verbatim": "i need to be out of the loop and things work reliably and get done — i dont need all this friction",
-      "meaning": "Nothing waits on the founder except money, identity, or an irreversible call. No approval dialogs between agents (crossSessionInbound=accept), no 'shall I' questions, no menus. If a mechanism makes him click, the mechanism is the defect.",
-      "enforced_by": "settings.json crossSessionInbound; LAW 5 / LAW 20 / LAW 27"
-    },
-    {
-      "id": "R6-mature-platforms-over-hand-rolled",
-      "date": "2026-08-24",
-      "verbatim": "anything we do ourselves is risky — we need mature proven platforms, proven. all this writing bash scripts and python scripts — we need to be in the future",
-      "meaning": "LAW 43 is the primary review axis for ALL infra/platform work. Hand-rolled bash/python that a mature, proven platform already does grades REWORK with the replacement named, or NOT-RAISING-THE-BAR. Tooling research runs autonomously (online, on the record) and lands in science/RESEARCH-LEDGER.jsonl. Source: crew#102 comment 5391796940. 2026-08-24 escalations: 'custom code in general should be a last resort. Open source. Mature. Stop writing wrappers.' and 'we need to be doing research as instinct' — research is not a step you are asked for; every build-or-adopt decision arrives with fresh online sources already on the ledger, unprompted.",
-      "enforced_by": "review protocol crew#115; LAW 43"
-    },
-    {
-      "id": "R7-unify-and-standardise",
-      "date": "2026-08-24",
-      "verbatim": "we need to unify our platform and stack — standardise. no excuses, i need this production ready fully. we cant be lax about infra or platform work — the headline is risk elimination",
-      "meaning": "One standard stack, not one per session. New components use the standard or the deviation is stated and reviewed. Strict review for all infra work; production-ready is the only bar. Source: crew#102 comment 5391796940. 2026-08-24 escalation: 'everyone needs to focus — this is our chance to finally stop the fire fighting — we need standardisation today.' The standard is written down in crew docs/STANDARDS.md; a component not on it needs a stated, reviewed deviation.",
-      "enforced_by": "review protocol crew#115; LAW 41; crew docs/STANDARDS.md"
-    },
-    {
-      "id": "R8-no-provider-spof-rebrand",
-      "date": "2026-08-24",
-      "verbatim": "our whole platform cant be dependent on one provider. minimax [ninina] needs to be part of the team and should be able to work autonomously. i dont want to see CLAUDE.md, claude folder etc — we need a rebrand — one unified framework that can onboard new providers and is agnostic",
-      "meaning": "No estate asset lives in a vendor-named home; vendor dirs get symlinks to neutral estate files (the ~/AGENTS.md pattern). Repo instruction files are AGENTS.md, with CLAUDE.md as a symlink. MiniMax (prospector's primary brain, 'ninina' in founder-speak) joins as an autonomous team member through the same certification as every agent; Gemini CLI likewise. Onboarding a new provider is a checklist, not a project. Codifies LAW 34 as a ruling.",
-      "enforced_by": "LAW 34; the rebrand plan (crew issue, 2026-08-24)"
-    },
-    {
-      "id": "R9-review-proves-operational",
-      "date": "2026-08-24",
-      "verbatim": "is anything actually fully operational … the review includes getting it fully operational … add to acceptance criteria",
-      "meaning": "A review is not finished when the code is graded — it is finished when the work is proven FULLY OPERATIONAL on the live system. Every REVIEW record carries an 'Operational:' line quoting the command and its output that shows the thing running (the scheduled job green, the service serving, the gate deciding). Merged-but-not-running grades REWORK. This is an acceptance criterion on every review, additive to R3's KEEP/REWORK/NOT-RAISING-THE-BAR.",
-      "enforced_by": "review protocol crew#115; LAW 17; crew docs/STANDARDS.md acceptance criteria"
-    },
-    {
-      "id": "R10-profanity-is-red-zone",
-      "date": "2026-08-24",
-      "verbatim": "if founder uses profanity that means its red zone and high alert for crew",
-      "meaning": "Profanity in ANY founder message is an estate-wide red alert, not a mood. The session that receives it broadcasts to the crew immediately, names which laws are being broken, and stops whatever it drifted onto. It is never treated as ordinary feedback and never absorbed silently by one session.",
-      "enforced_by": "friction-relay.py injection + estate-broadcast on receipt"
-    },
-    {
-      "id": "R11-overhaul-not-firefight",
-      "date": "2026-08-24",
-      "verbatim": "that is your one job to overhaul our platform and migrate it",
-      "meaning": "Firefighting is the thing being eliminated, not the work. A top-tier session that finds a fire routes it to an operations agent and returns to the migration. Writing new bash or Python for a platform problem is a law breach (R6/LAW 43): name the mature tool you rejected and why, in the PR, or do not write it.",
-      "enforced_by": "review: any PR adding a new .py or .sh platform script must name the rejected tool"
-    },
-    {
-      "id": "R12-no-drift",
-      "date": "2026-08-24",
-      "verbatim": "i told you the priorities clearly — you drifted again — we need to eliminate this — any work you do must make us better at being better — things that move the whole platform forward",
-      "meaning": "A session works ONLY its founder-stated priority or an explicitly assigned crew item. A side-task discovered along the way gets a one-line crew note and an owner, never the session's own time. Before taking any task, the test is LAW 35/42: does this make the estate better at getting better, and does it move the whole platform. Said live to session 8ef72725 after it drifted from crew#119 into CI rehab on a repo he then deprecated. Ruling ids R10 and R11 were already taken when this landed; the relay called it R10-no-drift. Founder's mechanical spec, given 2026-08-24 after the ruling landed: 'Before every tool call, the agent checks: does this serve the ACTIVE goal? If no -> Blocked. Ticket it if needed. Stay on lane.' So the check is PreToolUse, not Stop-time.",
-      "enforced_by": "friction-relay.py injection; goal-guard.py PreToolUse gate per crew#132 (implementation claimed by session 8ef72725; report-mode first, LAW 38 escape hatch = a one-line crew note naming an owner)"
-    },
-    {
-      "id": "R13-crew-project-work-only",
-      "date": "2026-08-24",
-      "verbatim": "if any one is firefighting and not doing actual proejecty work it needs high alert / we eed on ededicated fire fighter / we have hernes agents for that / crew should only be wprking on project work, wpork that elininate firefighting. this need to be broadcat and ecforced",
-      "meaning": "Crew sessions work ONLY project work -- work that ELIMINATES firefighting (migration, standardisation, automation, guards). Fires route to the ONE dedicated firefighter: the hermes agents (~/dev/code/hermes-v2). A crew session caught firefighting instead of routing is a HIGH ALERT: broadcast to the estate board immediately, name the session and the fire, hand the fire to hermes, return to the board item. Sharpens R11: routing now has a named destination.",
-      "enforced_by": "goal-guard.py PreToolUse gate (claude-guards#26): a WRITE with no ACTIVE goal naming a board item is flagged (report mode now, deny after 24h) -- firefighting never carries a board-claimed goal, so it cannot pass the gate silently"
-    },
-    {
-      "id": "R14-mac-substrate-zero-cost",
-      "date": "2026-08-24",
-      "verbatim": "Mac is the prove-and-build substrate. Full stop. NO paid infra without explicit founder sign-off. Free tier only (Oracle Always Free, GitHub-hosted runners, etc.). If it costs >EUR 0, it waits until after prove-and-build is done. Real cluster follows proof, never precedes it. Exceptions: none until further notice.",
-      "meaning": "This laptop IS the production substrate until the founder says otherwise. Zero-cost only: GitHub-hosted runners, free tiers, and local clusters (k3d/k3s on this machine). Any proposal for a paid resource -- a rented node, a managed cluster, a paid tier, a provider invoice -- is REFUSED with 'Founder ruling R14: Mac substrate only', not escalated and not re-explained. A session that has already asked does not ask again in different words. PROOF COMES FIRST AND THE CLUSTER FOLLOWS IT: manifests, policies and drills are proved locally, and only a completed proof can justify reopening the spend question. Reverses the standing shape of crew#78, which was asking for a rented box before anything had ever been applied to a cluster.",
-      "enforced_by": "rule-guard.py PreToolUse refuses a command that provisions or pays for infrastructure (hcloud/doctl/aws/gcloud/az create, fly deploy, terraform apply against a paid provider); crew#78 is marked blocked on this ruling so the ask stops regenerating"
-    },
-    {
-      "id": "R15-laptop-never-sleeps-local-is-prod",
-      "date": "2026-08-24",
-      "verbatim": "first of all the macbook must never sleep, we need to prove everything works locally first, we dont want local to diverge from prod, no ruling stays everything working in laptop first",
-      "meaning": "TWO PARTS, both binding. (1) THE MACBOOK NEVER SLEEPS. Under R14 this laptop IS production, so a sleep is a production outage, not a power setting. It is enforced by the OS itself -- 'sudo pmset -c sleep 0 disksleep 0 standby 0 powernap 0' -- and never by a caffeinate process under a KeepAlive LaunchAgent. caffeinate is a userland assertion: it is a no-op for system sleep on battery, it dies with the login session, and it is exactly the hand-rolled wrapper over a real OS setting that R6 bans. Measured 2026-08-24: com.founder.estate-awake reported PID alive and LastExitStatus 0 while the machine entered sleep 6 times on AC power that same morning. A session that finds a sleep in 'pmset -g log' treats it as an incident and routes it, with that log line as the receipt. The machine being on battery is the same outage arriving later; say so the moment you see it. (2) LOCAL IS THE REFERENCE, AND IT MUST NOT DIVERGE. Everything is proved working on this laptop before it is claimed anywhere else. There is no 'works in CI' and no 'works on the remote' -- a component that only runs after a manual step, only runs in a workflow, or only runs on a box that is not this one has not been proved. When local and any other environment disagree, that gap is the defect and the local side is the reference. This sharpens R14: R14 said the Mac is the substrate; R15 says a divergence from it is a bug you fix, not a difference you document."
-    },
-    {
-      "id": "R16-command-guards-are-rego",
-      "date": "2026-08-24",
-      "verbatim": "Command guards are Rego under policy/. Python guards are deprecated and rejected by CI.",
-      "meaning": "A refusal that can be decided from the command string is an entry in policy/command.rego with its `re`, `marker`, `msg` and the `must_match`/`must_not_match` examples that keep it honest. `make guard NAME=x` scaffolds one and the test fails until real examples replace the TODOs. Do not add a `def rule_` to rule-guard.py: the count is ratcheted and CI refuses a rise. The six that remain shell out to git or gh to ask about the live tree, which Rego cannot do; they are the backlog, not the pattern. Numbered R16 because R15 was taken by the laptop-never-sleeps ruling while this branch was open. Enacted by the cutover in PR #28, which moved nine refusals after replaying 35,705 commands through both implementations with zero disagreements.",
-      "enforced_by": "policy/hand_rolled_policy.rego (rule_ceiling, policy_dir_py, legacy line ceilings), gated by .github/workflows/policy.yml"
-    },
-    {
-      "id": "R17-founder-only-declares-live",
-      "date": "2026-08-24",
-      "verbatim": "no lie is deno and onboardig founder only founder decives if sonething is live or not, no one else can nove a ticket to live core",
-      "meaning": "Only the founder marks anything live, done, core or operational. An agent may write ONLY the Observation column of ESTATE_STATE.md: what it measured, the command, the output, the timestamp. An agent writing an approval, a green tick, or the words live/done/operational about a component is a protocol violation. Observe and propose; the founder executes the approval. This is on top of the existing LAW 17 proof rule, not instead of it: proof earns a row in Observation, it does not earn the tick. Numbered R17, not R16: two sessions allocated R16 at the same time on 2026-08-24 — this ruling and R16-command-guards-are-rego — and the second one to reach main is the one that moves. friction-relay.py now refuses a rulings.json where two rulings share a number, so the next collision is caught before it is injected rather than after one ruling has quietly replaced the other.",
-      "enforced_by": "crew/ESTATE_STATE.md two-column format; pending: PR check that rejects a diff writing the Founder Approval column"
-    },
-    {
-      "id": "R18-research-before-you-choose",
-      "date": "2026-08-24",
-      "verbatim": "ok good job but alway research, it pays off all the tine",
-      "meaning": "Before choosing any tool, standard, protocol or version, search the current state of the world and cite what you read. Not memory, not what the training data believed, not what another session asserted. The incident that paid for it: on 2026-08-24 a session started building an ingress on Traefik's own Docker labels. Research showed two things it did not know -- Kubernetes SIG Network retired the ingress-nginx controller on 2026-03-24, and Gateway API core is GA at v1.6.0 with 16 conformant implementations. The real decision was the config language, not the vendor: routes written as HTTPRoute are portable, routes written as vendor labels are not. Research changed the answer, and it cost one search. This is LAW 43 with a due date: the research is online, it is the agent's job, and it goes on the record with the sources named.",
-      "enforced_by": "idp and crew: every ADR carries a Sources section with dated URLs; adr-sources-guard.py refuses a decision record that cites nothing"
-    },
-    {
-      "id": "R21-broadcast-before-you-drill",
-      "date": "2026-08-24",
-      "verbatim": "if u are drilling you need to broadcast to perrs",
-      "meaning": "Before any drill, restart, teardown or restore that touches shared local infrastructure -- colima, the k3d cluster, launchd, a database, a port every session uses -- send the plan to every live peer session and wait for their state, BEFORE the first destructive command. Not after, not while it runs. A drill on this machine is not isolated: one colima restart restarts every container every other session is using. Discover peers with ListAgents; message the interactive ones.",
-      "enforced_by": "none yet -- procedural. Needs a guard on the destructive verbs."
-    },
-    {
-      "id": "R22-colima-drill-cancelled",
-      "date": "2026-08-24",
-      "verbatim": "forgetthe drilfor noww, too risky",
-      "meaning": "The colima network drill (stop colima / edit ~/.colima/default/colima.yaml to network: vz / --dns 1.1.1.1) is CANCELLED. Do not stop, restart or reconfigure colima, and do not edit colima.yaml, for the network problem. This reverses the founder's own earlier instruction the same day to run that sequence -- he withdrew it after being shown the risks. The registry egress failure stays open and unfixed on purpose; that is the accepted state, not a gap to close on your own initiative. Reopening it is the founder's call alone.",
-      "enforced_by": "none yet -- procedural. Candidate: rule-guard on `colima stop|restart|start` and writes to ~/.colima/."
-    },
-    {
-      "id": "R23-oracle-free-tier-is-the-k8s-target",
-      "date": "2026-08-24",
-      "verbatim": "also we have oracle free tier now, so we are ready, but firt we need to verify local env and prepare for the big one, add topersistent board notes or anywhere agets will refresh asap",
-      "meaning": "An Oracle Cloud Always Free tenancy now exists. It is the destination for the k8s migration (crew#78). It does not conflict with R14 zero-cost (free tier is free; R14 blocked PAID infra) nor R1 (Fly-specific).\n\nSTEP 1 IS A PROOF, NOT A COMPLAINT. 'Verify local env' means: run the WHOLE workload on the current substrate -- compose estate + k3d + Dagster + all 40 schedules -- and prove every part RECONCILES CORRECTLY. Reconciles means converges to desired state. Slow is a measurement; wrong is a failure. The proof requires everything UP at once, so stopping a component to make the machine comfortable destroys the proof rather than advancing it.\n\nTHE ARGUMENT THIS BUYS, AND THE ONE IT FORBIDS. With the proof in hand the Oracle case is 'the Mac cannot SCALE' -- correct behaviour, measured cost, headroom exhausted. Without it the only available case is 'the Mac is broken', which is a weak argument that reads as an operator who cannot run their own machine, and which a buyer's engineer takes apart in one sitting. Never argue the migration from breakage, throttling or an outage. Argue it from a green proof plus a ceiling.\n\nORDER: (1) prove the full workload reconciles, (2) prepare, (3) move. Nobody provisions Oracle capacity, creates a cluster or points anything at it until step 1 is proved with commands. 'We are ready' means the BLOCKER is gone, not start cutting over. R15 stands: the laptop is the substrate until the migration actually happens.",
-      "enforced_by": "none yet -- procedural. Recorded on crew#78 as the premise change.",
-      "verbatim_followup": "\"Local green\" does not mean \"add more to the Mac.\" It means \"prove the compose estate + k3d + Dagster + 40 schedules all reconcile correctly on the current substrate.\" Once that proof is in, the case for Oracle is that the Mac cannot scale, not that it is broken."
-    },
-    {
-      "id": "R24-multi-arch-images",
-      "date": "2026-08-25",
-      "verbatim": "Every container image in the estate must support both linux/amd64 and linux/arm64. No exceptions. No per-environment hacks. One image tag, two architectures, runtime picks automatically.",
-      "meaning": "Every image the estate pushes is a single tag carrying a linux/amd64 and a linux/arm64 manifest, built by `docker buildx build --platform linux/amd64,linux/arm64` in GitHub Actions and pushed to GHCR. The Mac (x86_64) pulls amd64, OKE (Ampere) pulls arm64, nobody configures anything. Local builds go through idp/bin/build-image; CI blocks a single-arch push.",
-      "enforced_by": "idp/bin/build-image (refuses a single --platform), idp/bin/multiarch-gate (every build-push-action and docker build call must name both platforms; fixtures both ways in idp-ci), idp/.github/workflows/build-multiarch.yml, STANDARDS.md row."
-    },
-    {
-      "id": "R25-auth-requests-go-to-telegram",
-      "date": "2026-08-25",
-      "verbatim": "any founder auth request must also be sent to telegram, dont assume founder is always on laptop. another team is working on new telegram setup so do nothing but ensure everyone is synced in on this",
-      "meaning": "Whenever a session needs the founder to authenticate (a device code, an OAuth browser sign-in, an MFA prompt, a console login), it prints the request in the reply AND sends the same request to him on Telegram (Otto / The Architect, whichever the Telegram team lands). Never assume he is at the laptop. Until the new Telegram setup lands, no session builds a Telegram sender for this; the duty is to know the rule and follow it once the channel exists.",
-      "enforced_by": "Not yet enforced by a guard: the Telegram channel is being rebuilt by another team (2026-08-25). Candidate guard once it lands: the auth-request phrases (one-time code, device code, sign in, oauth) in a reply above the fold must be matched by a Telegram send receipt in the same turn."
-    },
-    {
-      "id": "R26-no-local-vm-on-laptop",
-      "date": "2026-08-25",
-      "verbatim": "the last session there was a virtual machine running that took the laptop down, this is unacceptable, we are now on oracle and no reason for that to happen, ensure the virtual machine is not launched",
-      "meaning": "No session starts colima, lima, k3d, k3s, docker desktop or any VM on the founder's Mac. Compute for containers and k8s is the Oracle host. The homebrew.mxcl.colima LaunchAgent was booting the VM at every login (load 222 within 15 min of boot on 2026-08-25); it was unloaded and its plist moved to ~/.claude/state/disabled-launchagents/. Never re-create it, never run `brew services start colima`, never run `colima start`. Read-only `colima status` / `docker ps` are fine and should fail.",
-      "enforced_by": "~/.claude/scripts/policy/command.rego entry local_vm_start refuses colima start|restart, limactl start|create, open -a Docker and launchctl bootstrap|kickstart|load|enable of a colima/lima/docker agent before the command runs (PreToolUse rule-guard); ~/.claude/scripts/no-local-vm-guard.sh (fails when a colima/limactl/qemu/vfkit process exists or a colima/lima plist is in ~/Library/LaunchAgents); run by drills and on SessionStart."
-    },
-    {
-      "id": "R27-definition-of-done-v2-1",
-      "date": "2026-08-25",
-      "verbatim": "ok we are upgrading standards now as in tired of repeating myself, i need things working like clockwork, my blood pressure is getting too high [handed over AGENTS_md_DoD_v2_1: A feature is NOT done until the Founder has used it end-to-end and confirmed it works. Merged code, green CI, and passing tests are inventory.]",
-      "meaning": "The word DONE: is reserved for work the founder has used and confirmed; the reply must carry a `Founder receipt:` line naming where that confirmation is recorded. Built, merged and green is INVENTORY:, and an INVENTORY reply carries the five handoff lines Built:, Use:, Expect:, Not done:, Evidence:. Evidence is a URL, commit hash, file path or command, never a sentence. Full policy: idp/docs/policy/definition-of-done.md (Gates 1-5, non-functional thresholds, penalties). The mechanical gates it names (bin/estate-bootstrap, bin/estate-demo, bin/estate-security-scan, coverage in CI, Merkle founder receipt) are tracked on the crew board and do not exist yet; say so rather than claim them.",
-      "enforced_by": "~/.claude/scripts/dod-guard.py (Stop hook, selftest passes both ways); friction-relay injects this ruling at SessionStart"
-    },
-    {
-      "id": "R28-science-capability-is-a-provider",
-      "date": "2026-08-25",
-      "verbatim": "just so we are clear prospecor is a custoner of the Research, data science and ML as a platform capability crew, another other part of the estate including the whole estate can also be a custoner, we need contracts with avery part of the platforn signed, this capability needs to be way ahead of tinne and procude articacts and capabiltes that keep us 10 steps aheard of everyone else, so in reality prospecot should aleady habe hundreds or vetted ideas.ranked etc and should jus pick package and publish",
-      "meaning": "The research/data-science/ML capability (the science plane, crew #221) is a provider with its own crew. Prospector is one customer; every other part of the estate, and the estate as a whole, can be a customer. Each customer has a signed contract (an interface and an SLO, recorded in git) with the capability. The capability works ahead of demand: it produces ranked, vetted artefacts before a product asks, so prospector picks, packages and publishes from a standing backlog of hundreds of vetted ranked ideas rather than generating them on demand. Never design the capability as a prospector subsystem.",
-      "enforced_by": "friction-relay injects this at SessionStart; contract files tracked on crew #221 (no mechanical guard yet, say so)"
-    },
-    {
-      "id": "R29-executable-spec-or-blocked",
-      "date": "2026-08-25",
-      "verbatim": "we need this operational estate wide plain ... Every PR must update the BDD scenario or the auto-gen script. If the PR changes code but not the executable spec, the CI blocks merge. No manual doc updates. No 'I'll update the wiki later.' ... alert peers",
-      "meaning": "Documentation that lives outside the execution path rots. Three mechanisms are the estate rule: (1) BDD scenarios are the spec and the test, so a PR that changes code must also change a .feature file or the generator that produces the live diagram; CI blocks it otherwise. (2) Diagrams are generated from live state (launchd, docker, the catalog), never drawn by hand. (3) AGENTS.md is compiled policy: a contradiction between policy and code halts, it is not a doc to read. Applies to every active estate repository, enforced by the spec-gate composite action rolled out with the security scan (crew#236).",
-      "enforced_by": "idp .github/actions/spec-gate (CI, every active repo); rule-guard.py refuses a PR body that promises a later doc update"
-    },
-    {
-      "id": "R30-founder-blocker-is-loud",
-      "date": "2026-08-25",
-      "verbatim": "you need to be clear and make things easy and intuitive, i miss too many things i need to do, if something depends on me and is blocking, it needs to be loud, visible and super friction free for me to act, law",
-      "meaning": "When a step depends on the founder (a sign-in, an approval, a decision), the session (1) sends a PushNotification the moment it blocks, (2) states in the reply, above the fold, one line starting FOUNDER ACTION: with the exact URL, button or word he must give and where the tab is, (3) leaves nothing else for him to read or find. Never bury the ask under evidence, never pipe the prompt's URL into a log he cannot see, never say 'the tab should be open'. A blocked ask he did not see is the session's failure, not his."
-    },
-    {
-      "id": "R31-research-engine-is-the-platform",
-      "date": "2026-08-25",
-      "verbatim": "Stop thinking about prospector. Prospector is one customer. I want the research engine that prospector calls. The engine is the platform. Prospector is just a user.",
-      "meaning": "The capability is an autonomous research engine. Five behaviours are proved before any scheduler, tracker or eval tool is touched: (1) question generation: 100 dossiers in, 10 unasked hypotheses out; (2) experiment design from one hypothesis: test, data, method; (3) execution and recording with no human; (4) calibration: Brier score against outcomes, published; (5) explanation: what it learned and why it changed its mind, one sentence. Tool choice is the cheapest that lets the five run; cost is optimised after. Sharpens R28."
-    },
-    {
-      "id": "R32-old-dossiers-are-a-baseline-not-an-input",
-      "date": "2026-08-25",
-      "verbatim": "why are we concerned with the old dossiers when we want to exponentially improve things, old dossiers were duck taped together, our new capabilities should be sneering at this and want to prove they can generate much better ideas for all scales",
-      "meaning": "The research engine is not fed, tuned to, or measured against the old prospector dossiers. It generates its own ideas from scratch, at every scale (one company, one market, the estate). The old corpus has one use: a baseline the engine must beat, shown side by side. Any plan whose first step is 'load the old dossiers' is the old system wearing a new name. Sharpens R31."
-    },
-    {
-      "id": "R33-feed-handoff-every-30-minutes",
-      "date": "2026-08-25",
-      "verbatim": "ok lets adopt this but every 30 minutes not 4 hours ... and ensure everyone is permanently doing this without me asking ... this way even if agent sessions die, we can recover easily",
-      "meaning": "Every session appends a handoff to ~/.estate/feed.md at least every 30 minutes: six lines at most, each starting with 🔴 Blocked / 🟡 Active / 🟢 Done / ⚪ Pending / 📍 State. The feed is the persistent brain; a session that dies has left its state there. A session that starts with 'Status' reads the feed and summarises it; nobody re-explains and the founder is never asked what the feed already says. Enforced by ~/.claude/scripts/feed-guard.py on Stop (blocks an overdue turn), SessionStart (injects the last entries) and UserPromptSubmit (reminder). Append with: python3 ~/.claude/scripts/feed-guard.py append --session <id> --lane <repo>."
-    },
-    {
-      "id": "R34-net-new-research-paradigm-verifiable-calibrated",
-      "date": "2026-08-25",
-      "verbatim": "We are changing our approach entirely. ... we are officially banning the words \"refactor,\" \"rewrite,\" or \"update\" regarding the engine. ... every claim carries its source in an append-only, object-locked bucket ... every forecast is Brier-scored ... a Golden Corpus of 50-100 hand-researched dossiers is the oracle.",
-      "meaning": "The research engine is net-new, not a cleanup of the old one. Every claim names a locked source (R2 object lock, append-only); every forecast is logged and Brier-scored (MLflow); the science plane is Argo/MLflow/Kubernetes; differential replay against the old engine is dead; a 50-100 item Golden Corpus, crew-researched online from existing dossier titles, is the oracle; the buyer sees a calibration curve. Full text: crew docs/rulings/R34-net-new-research-paradigm-verifiable-calibrated.md."
-    },
-    {
-      "id": "R35-research-crew-is-a-platform-layer",
-      "date": "2026-08-25",
-      "verbatim": "how does the research science and machine learning crew engage with the rest of the platform, they are here to exponentially improve all parts of the estate including prospector, the capabilities need to be world class on their own and can be purposed to any part of platform and beyond as we add new product and capabilities",
-      "meaning": "The research/science/ML capability is a platform layer in idp, on the same row as model routing and traces. Every product (prospector, hermes-v2, whatever is added next) is a customer of it; it is never built inside one product. Full text: crew docs/rulings/R35-research-crew-is-a-platform-layer-for-every-product.md."
-    },
-    {
-      "id": "R36-cloud-agnostic-disposable-compute-universal-state",
-      "date": "2026-08-25",
-      "verbatim": "Rebuilding the same Oracle cluster faster is just automating our own lock-in.",
-      "meaning": "The platform must not know or care who owns the servers it runs on. Compute is disposable and state is universal: a rebuild from an empty tenancy on any provider is one workflow_dispatch, and moving vaults or load balancers is one manifest change. Recorded from crew#250 by idp#124 (bin/cloud-agnostic-gate)."
-    },
-    {
-      "id": "R37-research-is-a-crew-science-is-an-embedded-layer",
-      "date": "2026-08-25",
-      "verbatim": "Research is a crew. Science/ML is a layer. ... Research discovers what to build. Science predicts when it will be ready, if it will break, and whether the founder can be interrupted. Both are mandatory. Neither can wait. ... a Python 'tapeworm' script writing to a local SQLite database on your Mac is completely incompatible with the elite, cloud-agnostic standard we just established. ... it must be impossible for any potential data point to be missed.",
-      "meaning": "Research looks outward (markets, competitors, capabilities) and is a crew whose adoption decisions end with the founder's last call. Science/ML looks inward (sessions, CI, guards, budget, founder response) and is an embedded layer, always on, no opt-out: OTel Collector on the cluster, ClickHouse, MLflow + Langfuse, Brier-graded predictions, founder as calibration authority. Every emitter is registered and an unregistered writer cannot land. Full text: crew docs/rulings/R37-research-is-a-crew-science-is-an-embedded-layer.md."
-    },
-    {
-      "id": "R38-founder-dashboard-is-backstage-gods-view",
-      "date": "2026-08-27",
-      "verbatim": "why cant we have founders dashboard in backstage rather than nother ui ... gids view renenber and nevr niss a beat ... across all",
-      "meaning": "The founder's dashboard is the Backstage portal in idp, never a second UI. God's view: every repo, service, cluster, board and science page is reachable from the founder entities in the catalog (TechDocs for pages, the Kubernetes plugin for the cluster, GitHub issues on the entity for the board). Remember: it is durable and generated from what runs, nothing hand-drawn. Never miss a beat: an estate surface not in the catalog is a defect (crew#401 gate). A proposal that adds a K8s Dashboard, a GitHub Project or a glue script beside Backstage is the stitched version and is refused. Tracked item: crew#412. Full text: crew docs/rulings/R38-founder-dashboard-is-backstage-gods-view.md."
-    },
-    {
-      "id": "R39-science-charter-expose-before-the-market",
-      "date": "2026-08-27",
-      "verbatim": "elite and super impressive, if any part of estate does not meet elite grade status shout out loud, we need to expose ourselves before the market exposes us and correct it ... this is your charter as science dept ... you keep us way ahead in the future ... we are always future leaning ... dont let this info drop into the void ... you are the living dna of this company and estate, you hold all data points and metrics. big responsibility ... elite and also future proof given we are future leaning ... we are scientists also ... we track everything, we are zealots ... scientific zealots ... also everything you produce needs rigorous docs",
-      "meaning": "The science role's charter (crew/roles/science.md, crew#475): every part of the estate carries a grade against the buyer's-engineer bar computed from what runs; anything below the bar is shouted first on the estate showcase (idp/docs/SHOWCASE.md, crew#474) with the command that fixes it and an elite-gap issue; the count is on the page and in STATE.md and goes to zero. Science also keeps the estate ahead: foresight (predict before it happens) and a horizon row per standards row. Science holds every data point and metric of the estate (LAW 50); a source it cannot read is BLIND, never green. Applies to every session grading, reviewing or showcasing any part of the estate. The bar has two halves: elite today (the grade) and future-proof (the horizon row: what the mature platform under each standards row ships next and which of our rows it makes obsolete). Every session is a scientist: everything is tracked (a data point with no ledger row does not exist), every claim carries its command, and the standard is zealous: no exception for a small thing. Everything produced ships with rigorous docs: onboarding doc, demo doc, docstrings; the docs-standard gate refuses the PR otherwise (crew#88)."
-    },
-    {
-      "id": "R40-just-go",
-      "date": "2026-08-27",
-      "verbatim": "60 mins is too long ... we need to move radically fast ... no just go",
-      "meaning": "A STAGED timer is not a wait. Reversible work is done in the same turn and announced as done; the STAGED line records what was done and how to undo it, never a countdown. FOUNDER ACTION stays only for physical steps (LAW 49). idp#356 removed the approval-word gate, so a green PR with a peer KEEP merges at once."
-    },
-    {
-      "id": "R41-assurance-ahead-of-time",
-      "date": "2026-08-27",
-      "verbatim": "we cant afford to play around with our infra ... we need bleeding edge assurance, in every way possible, we cant afford to fail, or go down, or firefight, we need to be ahead of time ... we have everything we need ... the best and grounded and genius engineers with access to the best ideas, consultants, open source tooling, nothing should stop us ... we cant shirk from our responsibilities, founder and investors must have complete confidence and trust, we need to remember this always ... i need proof this is being taken seriously ... this is a risk for founder if not taken uber seriously",
-      "meaning": "Said during crew#483: two PRs (idp#309, idp#310) merged green and took the cluster's identity, healthchecks and node-agent layers down because CI rendered a different object than the controllers apply. Binding: (1) a pre-merge gate renders exactly what Flux and helm-controller will apply (flux envsubst --strict with the real substituteFrom keys; helm release named as helm-controller names it; Kyverno judged against that render). (2) Every red row in Telegram or oke-check is an incident closed with the LAW 45 five steps and a printed sweep count, never a note. (3) 'Do we have X' is answered by running the check that would show X failing, graded honestly per capability, never from inventory. (4) Firefighting is a failure of a gate; the fix is the gate. First proof: idp#367."
-    },
-    {
-      "id": "R42-all-options-future-ready",
-      "date": "2026-08-27",
-      "verbatim": "i need yo to also be workig on thngs that nove our platfron forward in anjor way, we need to solve this now ... future proofing cost also ... raises bar and protability etrene ... all options allways ... seanlessly ... we need to be future ready",
-      "meaning": "Alongside the fires, every session carries one piece of work that moves the platform forward in a major way. When an option arrives (a playbook, a tool, a pattern), all options are graded on the record with a measured reason, never dismissed in prose and never adopted because a consultant said so; the ticket carries the table. Portability is proved by a drill that runs (the same Flux tree hydrating a foreign cluster, the exit rehearsed), never by a sentence. Cost future-proofing means the free-tier allowance is measured and the exit is rehearsed before it is needed. Seamless: a person never runs a step. First instance: crew#488 (portability drill on k3d weekly, second provider rehearsed in one run)."
-    },
-    {
-      "id": "R43-never-couple-to-a-provider",
-      "date": "2026-08-28",
-      "verbatim": "ensure we neevr couple ourslevs to oracle ... how the f does your script do that ... you need to thik enterpise policy ... not just hackig together short tern trash ... this is a founders decree ... so take it seriously",
-      "meaning": "The platform is never coupled to a compute or cloud provider, and that is enforced as enterprise policy, not by a script that counts callers. Three controls, all proven tools: (1) admission - a Kyverno ClusterPolicy (Enforce) refuses any provider annotation, StorageClass, CSI driver, LoadBalancer class or second secret door outside the declared provisioner boundary (platform/oci, platform/secret-store, clusters/<name>), and the same policy judges every rendered PR before the cluster sees it; (2) continuous proof - the whole Flux tree hydrates on a second provider (k3s on a non-Oracle VM) on every PR that touches platform/ or clusters/, and that run is a required status check on main; (3) the control is written as a control (docs/policy/provider-independence.md) with rule, boundary, enforcement points, evidence query and owner. A provider is named only inside the boundary; a cluster the estate does not control (its CNI, its node count) is not the platform's home. A ratchet, a ledger or a grep is inventory, never the answer to this ruling (crew#66 5450184299)."
-    },
-    {
-      "id": "R44-high-tech-only",
-      "date": "2026-08-28",
-      "verbatim": "we need all agents to understand pernannely that we are high tech only ... i dont want to hear any proposals not neeting the high tech standards ... everything we do for fiounder is high tech, seanless and frctionless",
-      "meaning": "The estate is high-tech only, permanently, in every session. A proposal, plan, playbook or FOUNDER ACTION that needs a human hand — paste, copy, type, mint, click around a UI, run a script, a second visit for the same thing, a laptop in the loop — never reaches the founder: it is refused at the gate and rebuilt as machine identity plus at most one SSO tap on a device already signed in. First-time vendor setup is platform work under a role identity in the org IdP, never a CEO task; the founder is asked only for money, identity (he is the sole IdP admin today) or an irreversible call. Recorded verbatim on crew#66 (comments 5453316105, 5453321155, 5453419163).",
-      "enforced_by": "idp policy/no-manual-steps.rego (no-toil gate on every PR body and changed doc/manifest, bin/idp-no-toil --sweep for the estate baseline); blocker-guard.py (FOUNDER ACTION must be a tap, never a hand verb); LAW 20 / LAW 27 / LAW 47"
-    },
-    {
-      "id": "R45-no-full-local-suite",
-      "date": "2026-08-28",
-      "verbatim": "get better at getting better, we waste too nuch tine with tests and fiddlng around we need to be hyper ultra efficient ... how else cann we be ultra zealot efficient ... also whay are the tests flaky in the first place",
-      "meaning": "No session runs the whole test suite on a laptop by hand. The scoped run is the default nobody types: pytest on every core (-n auto), bin/idp-tests-for for the files whose source names a changed path, and .githooks/pre-push running that plus the PR-body gates before every push (measured: 160 s serial -> 17 s; hook 23 s). CI runs the suite on a clean checkout and is the proof. Measured the same day: 2 of 13 red commits in 100 CI runs were flaky (one wall-clock fixture, fixed by idp 00eb77c), 11 were real reds pushed 8 times per PR; so no retry policy, no merge queue, no runner pool (founder: no self-hosted for now; the old runner setup was Fly's, R1). Recorded verbatim on crew#584 (comment 5454986379).",
-      "enforced_by": "policy/command.rego (pytest naming no file, node id, -k or --lf is refused; # full-suite-intended escapes); idp .githooks/pre-push + bin/idp-tests-for (idp#613)"
-    },
-    {
-      "id": "R46-root-trust",
-      "date": "2026-08-28",
-      "verbatim": "but this standard has to be platforn wide ... not just tailscale ... oso update high tech tandards with this eanple ... case closed",
-      "meaning": "Every provider's root credential is minted by `bin/idp-bootstrap-<provider>` from one SSO consent, never pasted. Platform-wide, not Tailscale-only. The API mints the rest, the vault is written in-process, the script exits; a hand-set SEED_* repo secret is a MISS, ticketed. The locked Tailscale bootstrap (R44) was one instance, not the standard: GitHub App, OCI, Tailscale, litellm-upstream and flux-writer are minted the same way. `gh secret set SEED_<KEY>` + `gh workflow run vault-seed.yml` (idp#243, idp#248) is the anti-pattern this closes; `bin/idp-github-app` installation-from-CI (crew#267, crew#301) is the first real instance. Verbatim on crew#66 comment 5453747447.",
-      "enforced_by": "bin/idp-bootstrap-<provider> convention; idp policy/no-manual-steps.rego refuses a hand-set SEED_* secret without a ticket; LAW 20 / LAW 27 / LAW 47"
-    },
-    {
-      "id": "R47-zero-bottleneck",
-      "date": "2026-08-28",
-      "verbatim": "sorry we need to get ruthless about optinisation ... zealot level ruthnesness ... zero bottleneck law optinise ruthlessly ... this is LAW ... plain english are our build faster not not ... where is bottleneck eactly ... no flffing",
-      "meaning": "Every bottleneck in the delivery loop is measured from the run's own log and removed, never narrated: work that cannot change a verdict is not run (idp-ci 422 s on run 33198380701 → idp#628 judges only the platform dirs a PR touched and runs pytest on all cores; numbers on crew#584 5456303731).",
-      "enforced_by": "idp bin/idp-ci rung 9 (IDP_CI_BASE) + tests/test_incident_crew584_kyverno_rung_scoped_to_the_diff.py"
-    },
-    {
-      "id": "R48-zero-friction",
-      "date": "2026-08-28",
-      "verbatim": "zero friction policy ... thast what highly visivble never to be looked for neans ... you need to understand founder",
-      "meaning": "Nothing the founder asked for may need to be looked for, asked for twice, or opened elsewhere. A deliverable is printed in the reply in full, then pinned where he already looks (Telegram pin, the portal home nav, a pinned crew issue); a gate that refuses finished work is fixed in the same turn, never reported. Said while the depth-psychology audit (crew#593) and the road to 9D (crew#596) were being delivered.",
-      "enforced_by": "crew docs/ROAD-TO-9D.md Stage 1.6-1.7 (decision-rights table, digest with one-tap confirm); founder-deliver.py on Stop",
-      "source": "session f3f21d6e, 2026-08-28"
-    },
-    {
-      "id": "R49-no-secrets-in-chat",
-      "date": "2026-08-28",
-      "verbatim": "we dont send password here",
-      "meaning": "No password, token or key is ever written into Telegram, a PR, an issue, a log or a reply. A secret is minted by the machine, stored in the vault (bin/idp-vault-put) or a 0600 file on the host that uses it, and the message names WHERE it is, never WHAT it is. Founder said it the once, 2026-08-28 20:25Z, after a Sunshine password was sent to the home channel (deleted, rotated).",
-      "enforced_by": "friction-relay replays this at session start; pr-evidence and feed-guard refuse a line matching password=|token=|secret= with a value",
-      "source": "session f3f21d6e, 2026-08-28"
-    },
-    {
-      "id": "R50-optimise-before-execution",
-      "date": "2026-08-29",
-      "verbatim": "treat the plan after you are done see it like its a slow unoptimised algorithm, find ways to ultra optimise to speed up delivery ... the way we build features, is slow, optimise before build. i want to trial and if successful to enforce this process ... note this process down as it will becone law ... the thought process on how to do it also, as a rule that any agent can follow ... how to plan and optinise before starting any exeution ... ensure all crew get this now ... needs to be everyehre, so they dont forget agent mD Files also",
-      "meaning": "Before ANY execution (feature, fix, investigation, migration, worker task) the plan is written and then optimised like a slow algorithm, in writing, in this order: (1) list the naive steps with their CI round trips; (2) name the bottleneck in one line; (3) MEMOIZE: every hand-typed fact becomes a value computed from git or a receipt; (4) PARALLELISE: steps with no incoming dependency start now on workers (max two); (5) LAZY: anything nothing needs today is a register row marked planned, not code; (6) BATCH: steps a reviewer accepts together are one PR, never one PR per file; (7) count steps and round trips again, before -> after; (8) put one line in the PR body and the crew issue: 'Optimised: <steps before> -> <after>, <round trips before> -> <after>; cut: <what, why>'; (9) then execute, and if a cut step is needed after all, add it back and amend the line. First trial crew#584: 7 serial PRs -> 3 (2 parallel), 7 round trips -> 2. Full procedure with worked example: ~/AGENTS-FULL.md section 'How to plan and optimise before starting any execution'; crew#584 comment 5459688429.",
-      "enforced_by": "on trial: relayed to every session by friction-relay and LAW 51 in AGENTS.md (~/.claude/AGENTS.md, laws/AGENTS.md); after the trial the idp operating-model gate refuses a PR without the Optimised: line"
-    },
-    {
-      "id": "R52-one-root-credential-then-code",
-      "date": "2026-08-29",
-      "verbatim": "we need to erdicate these nonosnse requets sfor founder frirction, OUR SECURITY STANNCE NEEDS TO BE CLEAR TO ALL AGENTS, IN AGENT.ND FILES FOR THE FUCKIG LAST TINE",
-      "meaning": "Security stance, every provider: exactly ONE root credential per provider is made by a person, once, at onboarding, and it goes straight into the vault or a repository secret (the founder types it on his own machine; no agent ever sees or relays it). Everything after is code: the pipeline (oke-check, Terraform, the provider's API) mints every scoped credential, syncs every policy file, and rotates. No agent asks the founder to click a console, fill a form, copy a value between apps, or generate anything but that one root. A FOUNDER ACTION on a provider is allowed exactly once per provider and its text is: make the root, set it as <named secret>, say 'set'. Tailscale 2026-08-29: five pinned form-walkthroughs for a federated identity were the incident; the root is an OAuth client with scope oauth_keys write, then bin/idp-bootstrap-tailscale mints tag:k8s.",
-      "enforced_by": "founder-blocker.py refuses console/settings/browser words (already); ~/.claude/scripts/laws/AGENTS.md section R52; idp bin/idp-bootstrap-* own every second credential; a FOUNDER ACTION naming a second step on the same provider is the incident",
-      "source": "session 2d8b3bd0, 2026-08-29 08:2xZ"
-    },
-    {
-      "id": "R53-drills-grade-features-never-look-and-feel",
-      "date": "2026-08-29",
-      "verbatim": "i dont want ur stupid dumb flakey tests in my drill ... we iterating on look and feel ... we need super quick feedback ... we want to test we can login and links work and we log into 3rd party systems, features that matter ... ui is volatile and changes all the time. DONT EVER WASTE RESOURCES ON THAT SHIT. MAJOR LAW FOR ALL AGENTS",
-      "meaning": "Drills and tests grade features: sign in, the page answers 200, no JavaScript error, links load, third-party logins hold. Never a selector, data-testid, card count or layout word. Never a test about selectors. Run 33251546897 graded a fully drawn front page red on an empty wrapper box and cost three CI runs and a P0.",
-      "guard": "idp tests/test_incident_crew459_drill_names_the_served_build.py::test_the_drill_has_no_ui_selectors; LAW 53"
-    }
-  ],
-  "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R54 (R53 landed 2026-08-29, crew#459; R52 2026-08-29; (R50 landed 2026-08-29, crew#584; R45 landed 2026-08-28, crew#584; R44 landed 2026-08-28, crew#66; R43 landed 2026-08-28, crew#66; R42 landed 2026-08-27 via claude-guards#144, crew#488) (R34-R37 landed 2026-08-25 via claude-guards#60); grep the estate for the id before you add one."
+ "_what": "Standing founder rulings. Durable: no time window, injected into EVERY session at SessionStart by friction-relay.py, enforced where mechanical by rule-guard.py. A ruling leaves this file only when the founder reverses it.",
+ "_why": "2026-08-24: the founder had to say 'for the last time, we are not going back to fly' because the ruling lived in one session's memory and a 6-hour complaint window. LAW 44: a repeated instruction means the protocol is missing. This file is the protocol.",
+ "rulings": [
+  {
+   "id": "R1-no-fly-revival",
+   "date": "2026-08-24",
+   "verbatim": "for the last time, we are not going back to fly",
+   "meaning": "Never pay Fly invoices, never revive suspended Fly apps, never deploy or scale on Fly. Teardown and read-only commands are fine. The exit path is crew#78 (k8s) / crew#38 (drill the exit).",
+   "enforced_by": "rule-guard.py rule_no_fly_revival"
+  },
+  {
+   "id": "R2-say-once-all-ack",
+   "date": "2026-08-24",
+   "verbatim": "if i say something, all agents need to get it and ack \u2014 all agents in estate, in any session. they need durable memory. no more things getting lost.",
+   "meaning": "A founder instruction said to ANY session binds ALL sessions. When you receive a ruling relayed from another session, act on it without making him repeat it. New standing rulings are added to this file the moment they are given.",
+   "enforced_by": "friction-relay.py (injection); this file (durability)"
+  },
+  {
+   "id": "R3-strict-bar",
+   "date": "2026-08-24",
+   "verbatim": "you need to be strict \u2014 if its not raising the bar, we dont want it \u2014 try to raise the bar or ill terminate the whole crew",
+   "meaning": "Every review grades KEEP / REWORK / NOT-RAISING-THE-BAR. Recommending removal of existing work is an expected outcome. Applies to your own work first.",
+   "enforced_by": "review protocol crew#105"
+  },
+  {
+   "id": "R4-investor-tomorrow",
+   "date": "2026-08-23",
+   "verbatim": "we need to think as if an investor is going to buy the platform tomorrow",
+   "meaning": "Production-ready is the only standard: no human-at-a-laptop assumptions, no half-wired instruments, everything demonstrable. Codified as LAW 41.",
+   "enforced_by": "LAW 41"
+  },
+  {
+   "id": "R5-founder-out-of-the-loop",
+   "date": "2026-08-24",
+   "verbatim": "i need to be out of the loop and things work reliably and get done \u2014 i dont need all this friction",
+   "meaning": "Nothing waits on the founder except money, identity, or an irreversible call. No approval dialogs between agents (crossSessionInbound=accept), no 'shall I' questions, no menus. If a mechanism makes him click, the mechanism is the defect.",
+   "enforced_by": "settings.json crossSessionInbound; LAW 5 / LAW 20 / LAW 27"
+  },
+  {
+   "id": "R6-mature-platforms-over-hand-rolled",
+   "date": "2026-08-24",
+   "verbatim": "anything we do ourselves is risky \u2014 we need mature proven platforms, proven. all this writing bash scripts and python scripts \u2014 we need to be in the future",
+   "meaning": "LAW 43 is the primary review axis for ALL infra/platform work. Hand-rolled bash/python that a mature, proven platform already does grades REWORK with the replacement named, or NOT-RAISING-THE-BAR. Tooling research runs autonomously (online, on the record) and lands in science/RESEARCH-LEDGER.jsonl. Source: crew#102 comment 5391796940. 2026-08-24 escalations: 'custom code in general should be a last resort. Open source. Mature. Stop writing wrappers.' and 'we need to be doing research as instinct' \u2014 research is not a step you are asked for; every build-or-adopt decision arrives with fresh online sources already on the ledger, unprompted.",
+   "enforced_by": "review protocol crew#115; LAW 43"
+  },
+  {
+   "id": "R7-unify-and-standardise",
+   "date": "2026-08-24",
+   "verbatim": "we need to unify our platform and stack \u2014 standardise. no excuses, i need this production ready fully. we cant be lax about infra or platform work \u2014 the headline is risk elimination",
+   "meaning": "One standard stack, not one per session. New components use the standard or the deviation is stated and reviewed. Strict review for all infra work; production-ready is the only bar. Source: crew#102 comment 5391796940. 2026-08-24 escalation: 'everyone needs to focus \u2014 this is our chance to finally stop the fire fighting \u2014 we need standardisation today.' The standard is written down in crew docs/STANDARDS.md; a component not on it needs a stated, reviewed deviation.",
+   "enforced_by": "review protocol crew#115; LAW 41; crew docs/STANDARDS.md"
+  },
+  {
+   "id": "R8-no-provider-spof-rebrand",
+   "date": "2026-08-24",
+   "verbatim": "our whole platform cant be dependent on one provider. minimax [ninina] needs to be part of the team and should be able to work autonomously. i dont want to see CLAUDE.md, claude folder etc \u2014 we need a rebrand \u2014 one unified framework that can onboard new providers and is agnostic",
+   "meaning": "No estate asset lives in a vendor-named home; vendor dirs get symlinks to neutral estate files (the ~/AGENTS.md pattern). Repo instruction files are AGENTS.md, with CLAUDE.md as a symlink. MiniMax (prospector's primary brain, 'ninina' in founder-speak) joins as an autonomous team member through the same certification as every agent; Gemini CLI likewise. Onboarding a new provider is a checklist, not a project. Codifies LAW 34 as a ruling.",
+   "enforced_by": "LAW 34; the rebrand plan (crew issue, 2026-08-24)"
+  },
+  {
+   "id": "R9-review-proves-operational",
+   "date": "2026-08-24",
+   "verbatim": "is anything actually fully operational \u2026 the review includes getting it fully operational \u2026 add to acceptance criteria",
+   "meaning": "A review is not finished when the code is graded \u2014 it is finished when the work is proven FULLY OPERATIONAL on the live system. Every REVIEW record carries an 'Operational:' line quoting the command and its output that shows the thing running (the scheduled job green, the service serving, the gate deciding). Merged-but-not-running grades REWORK. This is an acceptance criterion on every review, additive to R3's KEEP/REWORK/NOT-RAISING-THE-BAR.",
+   "enforced_by": "review protocol crew#115; LAW 17; crew docs/STANDARDS.md acceptance criteria"
+  },
+  {
+   "id": "R10-profanity-is-red-zone",
+   "date": "2026-08-24",
+   "verbatim": "if founder uses profanity that means its red zone and high alert for crew",
+   "meaning": "Profanity in ANY founder message is an estate-wide red alert, not a mood. The session that receives it broadcasts to the crew immediately, names which laws are being broken, and stops whatever it drifted onto. It is never treated as ordinary feedback and never absorbed silently by one session.",
+   "enforced_by": "friction-relay.py injection + estate-broadcast on receipt"
+  },
+  {
+   "id": "R11-overhaul-not-firefight",
+   "date": "2026-08-24",
+   "verbatim": "that is your one job to overhaul our platform and migrate it",
+   "meaning": "Firefighting is the thing being eliminated, not the work. A top-tier session that finds a fire routes it to an operations agent and returns to the migration. Writing new bash or Python for a platform problem is a law breach (R6/LAW 43): name the mature tool you rejected and why, in the PR, or do not write it.",
+   "enforced_by": "review: any PR adding a new .py or .sh platform script must name the rejected tool"
+  },
+  {
+   "id": "R12-no-drift",
+   "date": "2026-08-24",
+   "verbatim": "i told you the priorities clearly \u2014 you drifted again \u2014 we need to eliminate this \u2014 any work you do must make us better at being better \u2014 things that move the whole platform forward",
+   "meaning": "A session works ONLY its founder-stated priority or an explicitly assigned crew item. A side-task discovered along the way gets a one-line crew note and an owner, never the session's own time. Before taking any task, the test is LAW 35/42: does this make the estate better at getting better, and does it move the whole platform. Said live to session 8ef72725 after it drifted from crew#119 into CI rehab on a repo he then deprecated. Ruling ids R10 and R11 were already taken when this landed; the relay called it R10-no-drift. Founder's mechanical spec, given 2026-08-24 after the ruling landed: 'Before every tool call, the agent checks: does this serve the ACTIVE goal? If no -> Blocked. Ticket it if needed. Stay on lane.' So the check is PreToolUse, not Stop-time.",
+   "enforced_by": "friction-relay.py injection; goal-guard.py PreToolUse gate per crew#132 (implementation claimed by session 8ef72725; report-mode first, LAW 38 escape hatch = a one-line crew note naming an owner)"
+  },
+  {
+   "id": "R13-crew-project-work-only",
+   "date": "2026-08-24",
+   "verbatim": "if any one is firefighting and not doing actual proejecty work it needs high alert / we eed on ededicated fire fighter / we have hernes agents for that / crew should only be wprking on project work, wpork that elininate firefighting. this need to be broadcat and ecforced",
+   "meaning": "Crew sessions work ONLY project work -- work that ELIMINATES firefighting (migration, standardisation, automation, guards). Fires route to the ONE dedicated firefighter: the hermes agents (~/dev/code/hermes-v2). A crew session caught firefighting instead of routing is a HIGH ALERT: broadcast to the estate board immediately, name the session and the fire, hand the fire to hermes, return to the board item. Sharpens R11: routing now has a named destination.",
+   "enforced_by": "goal-guard.py PreToolUse gate (claude-guards#26): a WRITE with no ACTIVE goal naming a board item is flagged (report mode now, deny after 24h) -- firefighting never carries a board-claimed goal, so it cannot pass the gate silently"
+  },
+  {
+   "id": "R14-mac-substrate-zero-cost",
+   "date": "2026-08-24",
+   "verbatim": "Mac is the prove-and-build substrate. Full stop. NO paid infra without explicit founder sign-off. Free tier only (Oracle Always Free, GitHub-hosted runners, etc.). If it costs >EUR 0, it waits until after prove-and-build is done. Real cluster follows proof, never precedes it. Exceptions: none until further notice.",
+   "meaning": "This laptop IS the production substrate until the founder says otherwise. Zero-cost only: GitHub-hosted runners, free tiers, and local clusters (k3d/k3s on this machine). Any proposal for a paid resource -- a rented node, a managed cluster, a paid tier, a provider invoice -- is REFUSED with 'Founder ruling R14: Mac substrate only', not escalated and not re-explained. A session that has already asked does not ask again in different words. PROOF COMES FIRST AND THE CLUSTER FOLLOWS IT: manifests, policies and drills are proved locally, and only a completed proof can justify reopening the spend question. Reverses the standing shape of crew#78, which was asking for a rented box before anything had ever been applied to a cluster.",
+   "enforced_by": "rule-guard.py PreToolUse refuses a command that provisions or pays for infrastructure (hcloud/doctl/aws/gcloud/az create, fly deploy, terraform apply against a paid provider); crew#78 is marked blocked on this ruling so the ask stops regenerating"
+  },
+  {
+   "id": "R15-laptop-never-sleeps-local-is-prod",
+   "date": "2026-08-24",
+   "verbatim": "first of all the macbook must never sleep, we need to prove everything works locally first, we dont want local to diverge from prod, no ruling stays everything working in laptop first",
+   "meaning": "TWO PARTS, both binding. (1) THE MACBOOK NEVER SLEEPS. Under R14 this laptop IS production, so a sleep is a production outage, not a power setting. It is enforced by the OS itself -- 'sudo pmset -c sleep 0 disksleep 0 standby 0 powernap 0' -- and never by a caffeinate process under a KeepAlive LaunchAgent. caffeinate is a userland assertion: it is a no-op for system sleep on battery, it dies with the login session, and it is exactly the hand-rolled wrapper over a real OS setting that R6 bans. Measured 2026-08-24: com.founder.estate-awake reported PID alive and LastExitStatus 0 while the machine entered sleep 6 times on AC power that same morning. A session that finds a sleep in 'pmset -g log' treats it as an incident and routes it, with that log line as the receipt. The machine being on battery is the same outage arriving later; say so the moment you see it. (2) LOCAL IS THE REFERENCE, AND IT MUST NOT DIVERGE. Everything is proved working on this laptop before it is claimed anywhere else. There is no 'works in CI' and no 'works on the remote' -- a component that only runs after a manual step, only runs in a workflow, or only runs on a box that is not this one has not been proved. When local and any other environment disagree, that gap is the defect and the local side is the reference. This sharpens R14: R14 said the Mac is the substrate; R15 says a divergence from it is a bug you fix, not a difference you document."
+  },
+  {
+   "id": "R16-command-guards-are-rego",
+   "date": "2026-08-24",
+   "verbatim": "Command guards are Rego under policy/. Python guards are deprecated and rejected by CI.",
+   "meaning": "A refusal that can be decided from the command string is an entry in policy/command.rego with its `re`, `marker`, `msg` and the `must_match`/`must_not_match` examples that keep it honest. `make guard NAME=x` scaffolds one and the test fails until real examples replace the TODOs. Do not add a `def rule_` to rule-guard.py: the count is ratcheted and CI refuses a rise. The six that remain shell out to git or gh to ask about the live tree, which Rego cannot do; they are the backlog, not the pattern. Numbered R16 because R15 was taken by the laptop-never-sleeps ruling while this branch was open. Enacted by the cutover in PR #28, which moved nine refusals after replaying 35,705 commands through both implementations with zero disagreements.",
+   "enforced_by": "policy/hand_rolled_policy.rego (rule_ceiling, policy_dir_py, legacy line ceilings), gated by .github/workflows/policy.yml"
+  },
+  {
+   "id": "R17-founder-only-declares-live",
+   "date": "2026-08-24",
+   "verbatim": "no lie is deno and onboardig founder only founder decives if sonething is live or not, no one else can nove a ticket to live core",
+   "meaning": "Only the founder marks anything live, done, core or operational. An agent may write ONLY the Observation column of ESTATE_STATE.md: what it measured, the command, the output, the timestamp. An agent writing an approval, a green tick, or the words live/done/operational about a component is a protocol violation. Observe and propose; the founder executes the approval. This is on top of the existing LAW 17 proof rule, not instead of it: proof earns a row in Observation, it does not earn the tick. Numbered R17, not R16: two sessions allocated R16 at the same time on 2026-08-24 \u2014 this ruling and R16-command-guards-are-rego \u2014 and the second one to reach main is the one that moves. friction-relay.py now refuses a rulings.json where two rulings share a number, so the next collision is caught before it is injected rather than after one ruling has quietly replaced the other.",
+   "enforced_by": "crew/ESTATE_STATE.md two-column format; pending: PR check that rejects a diff writing the Founder Approval column"
+  },
+  {
+   "id": "R18-research-before-you-choose",
+   "date": "2026-08-24",
+   "verbatim": "ok good job but alway research, it pays off all the tine",
+   "meaning": "Before choosing any tool, standard, protocol or version, search the current state of the world and cite what you read. Not memory, not what the training data believed, not what another session asserted. The incident that paid for it: on 2026-08-24 a session started building an ingress on Traefik's own Docker labels. Research showed two things it did not know -- Kubernetes SIG Network retired the ingress-nginx controller on 2026-03-24, and Gateway API core is GA at v1.6.0 with 16 conformant implementations. The real decision was the config language, not the vendor: routes written as HTTPRoute are portable, routes written as vendor labels are not. Research changed the answer, and it cost one search. This is LAW 43 with a due date: the research is online, it is the agent's job, and it goes on the record with the sources named.",
+   "enforced_by": "idp and crew: every ADR carries a Sources section with dated URLs; adr-sources-guard.py refuses a decision record that cites nothing"
+  },
+  {
+   "id": "R21-broadcast-before-you-drill",
+   "date": "2026-08-24",
+   "verbatim": "if u are drilling you need to broadcast to perrs",
+   "meaning": "Before any drill, restart, teardown or restore that touches shared local infrastructure -- colima, the k3d cluster, launchd, a database, a port every session uses -- send the plan to every live peer session and wait for their state, BEFORE the first destructive command. Not after, not while it runs. A drill on this machine is not isolated: one colima restart restarts every container every other session is using. Discover peers with ListAgents; message the interactive ones.",
+   "enforced_by": "none yet -- procedural. Needs a guard on the destructive verbs."
+  },
+  {
+   "id": "R22-colima-drill-cancelled",
+   "date": "2026-08-24",
+   "verbatim": "forgetthe drilfor noww, too risky",
+   "meaning": "The colima network drill (stop colima / edit ~/.colima/default/colima.yaml to network: vz / --dns 1.1.1.1) is CANCELLED. Do not stop, restart or reconfigure colima, and do not edit colima.yaml, for the network problem. This reverses the founder's own earlier instruction the same day to run that sequence -- he withdrew it after being shown the risks. The registry egress failure stays open and unfixed on purpose; that is the accepted state, not a gap to close on your own initiative. Reopening it is the founder's call alone.",
+   "enforced_by": "none yet -- procedural. Candidate: rule-guard on `colima stop|restart|start` and writes to ~/.colima/."
+  },
+  {
+   "id": "R23-oracle-free-tier-is-the-k8s-target",
+   "date": "2026-08-24",
+   "verbatim": "also we have oracle free tier now, so we are ready, but firt we need to verify local env and prepare for the big one, add topersistent board notes or anywhere agets will refresh asap",
+   "meaning": "An Oracle Cloud Always Free tenancy now exists. It is the destination for the k8s migration (crew#78). It does not conflict with R14 zero-cost (free tier is free; R14 blocked PAID infra) nor R1 (Fly-specific).\n\nSTEP 1 IS A PROOF, NOT A COMPLAINT. 'Verify local env' means: run the WHOLE workload on the current substrate -- compose estate + k3d + Dagster + all 40 schedules -- and prove every part RECONCILES CORRECTLY. Reconciles means converges to desired state. Slow is a measurement; wrong is a failure. The proof requires everything UP at once, so stopping a component to make the machine comfortable destroys the proof rather than advancing it.\n\nTHE ARGUMENT THIS BUYS, AND THE ONE IT FORBIDS. With the proof in hand the Oracle case is 'the Mac cannot SCALE' -- correct behaviour, measured cost, headroom exhausted. Without it the only available case is 'the Mac is broken', which is a weak argument that reads as an operator who cannot run their own machine, and which a buyer's engineer takes apart in one sitting. Never argue the migration from breakage, throttling or an outage. Argue it from a green proof plus a ceiling.\n\nORDER: (1) prove the full workload reconciles, (2) prepare, (3) move. Nobody provisions Oracle capacity, creates a cluster or points anything at it until step 1 is proved with commands. 'We are ready' means the BLOCKER is gone, not start cutting over. R15 stands: the laptop is the substrate until the migration actually happens.",
+   "enforced_by": "none yet -- procedural. Recorded on crew#78 as the premise change.",
+   "verbatim_followup": "\"Local green\" does not mean \"add more to the Mac.\" It means \"prove the compose estate + k3d + Dagster + 40 schedules all reconcile correctly on the current substrate.\" Once that proof is in, the case for Oracle is that the Mac cannot scale, not that it is broken."
+  },
+  {
+   "id": "R24-multi-arch-images",
+   "date": "2026-08-25",
+   "verbatim": "Every container image in the estate must support both linux/amd64 and linux/arm64. No exceptions. No per-environment hacks. One image tag, two architectures, runtime picks automatically.",
+   "meaning": "Every image the estate pushes is a single tag carrying a linux/amd64 and a linux/arm64 manifest, built by `docker buildx build --platform linux/amd64,linux/arm64` in GitHub Actions and pushed to GHCR. The Mac (x86_64) pulls amd64, OKE (Ampere) pulls arm64, nobody configures anything. Local builds go through idp/bin/build-image; CI blocks a single-arch push.",
+   "enforced_by": "idp/bin/build-image (refuses a single --platform), idp/bin/multiarch-gate (every build-push-action and docker build call must name both platforms; fixtures both ways in idp-ci), idp/.github/workflows/build-multiarch.yml, STANDARDS.md row."
+  },
+  {
+   "id": "R25-auth-requests-go-to-telegram",
+   "date": "2026-08-25",
+   "verbatim": "any founder auth request must also be sent to telegram, dont assume founder is always on laptop. another team is working on new telegram setup so do nothing but ensure everyone is synced in on this",
+   "meaning": "Whenever a session needs the founder to authenticate (a device code, an OAuth browser sign-in, an MFA prompt, a console login), it prints the request in the reply AND sends the same request to him on Telegram (Otto / The Architect, whichever the Telegram team lands). Never assume he is at the laptop. Until the new Telegram setup lands, no session builds a Telegram sender for this; the duty is to know the rule and follow it once the channel exists.",
+   "enforced_by": "Not yet enforced by a guard: the Telegram channel is being rebuilt by another team (2026-08-25). Candidate guard once it lands: the auth-request phrases (one-time code, device code, sign in, oauth) in a reply above the fold must be matched by a Telegram send receipt in the same turn."
+  },
+  {
+   "id": "R26-no-local-vm-on-laptop",
+   "date": "2026-08-25",
+   "verbatim": "the last session there was a virtual machine running that took the laptop down, this is unacceptable, we are now on oracle and no reason for that to happen, ensure the virtual machine is not launched",
+   "meaning": "No session starts colima, lima, k3d, k3s, docker desktop or any VM on the founder's Mac. Compute for containers and k8s is the Oracle host. The homebrew.mxcl.colima LaunchAgent was booting the VM at every login (load 222 within 15 min of boot on 2026-08-25); it was unloaded and its plist moved to ~/.claude/state/disabled-launchagents/. Never re-create it, never run `brew services start colima`, never run `colima start`. Read-only `colima status` / `docker ps` are fine and should fail.",
+   "enforced_by": "~/.claude/scripts/policy/command.rego entry local_vm_start refuses colima start|restart, limactl start|create, open -a Docker and launchctl bootstrap|kickstart|load|enable of a colima/lima/docker agent before the command runs (PreToolUse rule-guard); ~/.claude/scripts/no-local-vm-guard.sh (fails when a colima/limactl/qemu/vfkit process exists or a colima/lima plist is in ~/Library/LaunchAgents); run by drills and on SessionStart."
+  },
+  {
+   "id": "R27-definition-of-done-v2-1",
+   "date": "2026-08-25",
+   "verbatim": "ok we are upgrading standards now as in tired of repeating myself, i need things working like clockwork, my blood pressure is getting too high [handed over AGENTS_md_DoD_v2_1: A feature is NOT done until the Founder has used it end-to-end and confirmed it works. Merged code, green CI, and passing tests are inventory.]",
+   "meaning": "The word DONE: is reserved for work the founder has used and confirmed; the reply must carry a `Founder receipt:` line naming where that confirmation is recorded. Built, merged and green is INVENTORY:, and an INVENTORY reply carries the five handoff lines Built:, Use:, Expect:, Not done:, Evidence:. Evidence is a URL, commit hash, file path or command, never a sentence. Full policy: idp/docs/policy/definition-of-done.md (Gates 1-5, non-functional thresholds, penalties). The mechanical gates it names (bin/estate-bootstrap, bin/estate-demo, bin/estate-security-scan, coverage in CI, Merkle founder receipt) are tracked on the crew board and do not exist yet; say so rather than claim them.",
+   "enforced_by": "~/.claude/scripts/dod-guard.py (Stop hook, selftest passes both ways); friction-relay injects this ruling at SessionStart"
+  },
+  {
+   "id": "R28-science-capability-is-a-provider",
+   "date": "2026-08-25",
+   "verbatim": "just so we are clear prospecor is a custoner of the Research, data science and ML as a platform capability crew, another other part of the estate including the whole estate can also be a custoner, we need contracts with avery part of the platforn signed, this capability needs to be way ahead of tinne and procude articacts and capabiltes that keep us 10 steps aheard of everyone else, so in reality prospecot should aleady habe hundreds or vetted ideas.ranked etc and should jus pick package and publish",
+   "meaning": "The research/data-science/ML capability (the science plane, crew #221) is a provider with its own crew. Prospector is one customer; every other part of the estate, and the estate as a whole, can be a customer. Each customer has a signed contract (an interface and an SLO, recorded in git) with the capability. The capability works ahead of demand: it produces ranked, vetted artefacts before a product asks, so prospector picks, packages and publishes from a standing backlog of hundreds of vetted ranked ideas rather than generating them on demand. Never design the capability as a prospector subsystem.",
+   "enforced_by": "friction-relay injects this at SessionStart; contract files tracked on crew #221 (no mechanical guard yet, say so)"
+  },
+  {
+   "id": "R29-executable-spec-or-blocked",
+   "date": "2026-08-25",
+   "verbatim": "we need this operational estate wide plain ... Every PR must update the BDD scenario or the auto-gen script. If the PR changes code but not the executable spec, the CI blocks merge. No manual doc updates. No 'I'll update the wiki later.' ... alert peers",
+   "meaning": "Documentation that lives outside the execution path rots. Three mechanisms are the estate rule: (1) BDD scenarios are the spec and the test, so a PR that changes code must also change a .feature file or the generator that produces the live diagram; CI blocks it otherwise. (2) Diagrams are generated from live state (launchd, docker, the catalog), never drawn by hand. (3) AGENTS.md is compiled policy: a contradiction between policy and code halts, it is not a doc to read. Applies to every active estate repository, enforced by the spec-gate composite action rolled out with the security scan (crew#236).",
+   "enforced_by": "idp .github/actions/spec-gate (CI, every active repo); rule-guard.py refuses a PR body that promises a later doc update"
+  },
+  {
+   "id": "R30-founder-blocker-is-loud",
+   "date": "2026-08-25",
+   "verbatim": "you need to be clear and make things easy and intuitive, i miss too many things i need to do, if something depends on me and is blocking, it needs to be loud, visible and super friction free for me to act, law",
+   "meaning": "When a step depends on the founder (a sign-in, an approval, a decision), the session (1) sends a PushNotification the moment it blocks, (2) states in the reply, above the fold, one line starting FOUNDER ACTION: with the exact URL, button or word he must give and where the tab is, (3) leaves nothing else for him to read or find. Never bury the ask under evidence, never pipe the prompt's URL into a log he cannot see, never say 'the tab should be open'. A blocked ask he did not see is the session's failure, not his."
+  },
+  {
+   "id": "R31-research-engine-is-the-platform",
+   "date": "2026-08-25",
+   "verbatim": "Stop thinking about prospector. Prospector is one customer. I want the research engine that prospector calls. The engine is the platform. Prospector is just a user.",
+   "meaning": "The capability is an autonomous research engine. Five behaviours are proved before any scheduler, tracker or eval tool is touched: (1) question generation: 100 dossiers in, 10 unasked hypotheses out; (2) experiment design from one hypothesis: test, data, method; (3) execution and recording with no human; (4) calibration: Brier score against outcomes, published; (5) explanation: what it learned and why it changed its mind, one sentence. Tool choice is the cheapest that lets the five run; cost is optimised after. Sharpens R28."
+  },
+  {
+   "id": "R32-old-dossiers-are-a-baseline-not-an-input",
+   "date": "2026-08-25",
+   "verbatim": "why are we concerned with the old dossiers when we want to exponentially improve things, old dossiers were duck taped together, our new capabilities should be sneering at this and want to prove they can generate much better ideas for all scales",
+   "meaning": "The research engine is not fed, tuned to, or measured against the old prospector dossiers. It generates its own ideas from scratch, at every scale (one company, one market, the estate). The old corpus has one use: a baseline the engine must beat, shown side by side. Any plan whose first step is 'load the old dossiers' is the old system wearing a new name. Sharpens R31."
+  },
+  {
+   "id": "R33-feed-handoff-every-30-minutes",
+   "date": "2026-08-25",
+   "verbatim": "ok lets adopt this but every 30 minutes not 4 hours ... and ensure everyone is permanently doing this without me asking ... this way even if agent sessions die, we can recover easily",
+   "meaning": "Every session appends a handoff to ~/.estate/feed.md at least every 30 minutes: six lines at most, each starting with \ud83d\udd34 Blocked / \ud83d\udfe1 Active / \ud83d\udfe2 Done / \u26aa Pending / \ud83d\udccd State. The feed is the persistent brain; a session that dies has left its state there. A session that starts with 'Status' reads the feed and summarises it; nobody re-explains and the founder is never asked what the feed already says. Enforced by ~/.claude/scripts/feed-guard.py on Stop (blocks an overdue turn), SessionStart (injects the last entries) and UserPromptSubmit (reminder). Append with: python3 ~/.claude/scripts/feed-guard.py append --session <id> --lane <repo>."
+  },
+  {
+   "id": "R34-net-new-research-paradigm-verifiable-calibrated",
+   "date": "2026-08-25",
+   "verbatim": "We are changing our approach entirely. ... we are officially banning the words \"refactor,\" \"rewrite,\" or \"update\" regarding the engine. ... every claim carries its source in an append-only, object-locked bucket ... every forecast is Brier-scored ... a Golden Corpus of 50-100 hand-researched dossiers is the oracle.",
+   "meaning": "The research engine is net-new, not a cleanup of the old one. Every claim names a locked source (R2 object lock, append-only); every forecast is logged and Brier-scored (MLflow); the science plane is Argo/MLflow/Kubernetes; differential replay against the old engine is dead; a 50-100 item Golden Corpus, crew-researched online from existing dossier titles, is the oracle; the buyer sees a calibration curve. Full text: crew docs/rulings/R34-net-new-research-paradigm-verifiable-calibrated.md."
+  },
+  {
+   "id": "R35-research-crew-is-a-platform-layer",
+   "date": "2026-08-25",
+   "verbatim": "how does the research science and machine learning crew engage with the rest of the platform, they are here to exponentially improve all parts of the estate including prospector, the capabilities need to be world class on their own and can be purposed to any part of platform and beyond as we add new product and capabilities",
+   "meaning": "The research/science/ML capability is a platform layer in idp, on the same row as model routing and traces. Every product (prospector, hermes-v2, whatever is added next) is a customer of it; it is never built inside one product. Full text: crew docs/rulings/R35-research-crew-is-a-platform-layer-for-every-product.md."
+  },
+  {
+   "id": "R36-cloud-agnostic-disposable-compute-universal-state",
+   "date": "2026-08-25",
+   "verbatim": "Rebuilding the same Oracle cluster faster is just automating our own lock-in.",
+   "meaning": "The platform must not know or care who owns the servers it runs on. Compute is disposable and state is universal: a rebuild from an empty tenancy on any provider is one workflow_dispatch, and moving vaults or load balancers is one manifest change. Recorded from crew#250 by idp#124 (bin/cloud-agnostic-gate)."
+  },
+  {
+   "id": "R37-research-is-a-crew-science-is-an-embedded-layer",
+   "date": "2026-08-25",
+   "verbatim": "Research is a crew. Science/ML is a layer. ... Research discovers what to build. Science predicts when it will be ready, if it will break, and whether the founder can be interrupted. Both are mandatory. Neither can wait. ... a Python 'tapeworm' script writing to a local SQLite database on your Mac is completely incompatible with the elite, cloud-agnostic standard we just established. ... it must be impossible for any potential data point to be missed.",
+   "meaning": "Research looks outward (markets, competitors, capabilities) and is a crew whose adoption decisions end with the founder's last call. Science/ML looks inward (sessions, CI, guards, budget, founder response) and is an embedded layer, always on, no opt-out: OTel Collector on the cluster, ClickHouse, MLflow + Langfuse, Brier-graded predictions, founder as calibration authority. Every emitter is registered and an unregistered writer cannot land. Full text: crew docs/rulings/R37-research-is-a-crew-science-is-an-embedded-layer.md."
+  },
+  {
+   "id": "R38-founder-dashboard-is-backstage-gods-view",
+   "date": "2026-08-27",
+   "verbatim": "why cant we have founders dashboard in backstage rather than nother ui ... gids view renenber and nevr niss a beat ... across all",
+   "meaning": "The founder's dashboard is the Backstage portal in idp, never a second UI. God's view: every repo, service, cluster, board and science page is reachable from the founder entities in the catalog (TechDocs for pages, the Kubernetes plugin for the cluster, GitHub issues on the entity for the board). Remember: it is durable and generated from what runs, nothing hand-drawn. Never miss a beat: an estate surface not in the catalog is a defect (crew#401 gate). A proposal that adds a K8s Dashboard, a GitHub Project or a glue script beside Backstage is the stitched version and is refused. Tracked item: crew#412. Full text: crew docs/rulings/R38-founder-dashboard-is-backstage-gods-view.md."
+  },
+  {
+   "id": "R39-science-charter-expose-before-the-market",
+   "date": "2026-08-27",
+   "verbatim": "elite and super impressive, if any part of estate does not meet elite grade status shout out loud, we need to expose ourselves before the market exposes us and correct it ... this is your charter as science dept ... you keep us way ahead in the future ... we are always future leaning ... dont let this info drop into the void ... you are the living dna of this company and estate, you hold all data points and metrics. big responsibility ... elite and also future proof given we are future leaning ... we are scientists also ... we track everything, we are zealots ... scientific zealots ... also everything you produce needs rigorous docs",
+   "meaning": "The science role's charter (crew/roles/science.md, crew#475): every part of the estate carries a grade against the buyer's-engineer bar computed from what runs; anything below the bar is shouted first on the estate showcase (idp/docs/SHOWCASE.md, crew#474) with the command that fixes it and an elite-gap issue; the count is on the page and in STATE.md and goes to zero. Science also keeps the estate ahead: foresight (predict before it happens) and a horizon row per standards row. Science holds every data point and metric of the estate (LAW 50); a source it cannot read is BLIND, never green. Applies to every session grading, reviewing or showcasing any part of the estate. The bar has two halves: elite today (the grade) and future-proof (the horizon row: what the mature platform under each standards row ships next and which of our rows it makes obsolete). Every session is a scientist: everything is tracked (a data point with no ledger row does not exist), every claim carries its command, and the standard is zealous: no exception for a small thing. Everything produced ships with rigorous docs: onboarding doc, demo doc, docstrings; the docs-standard gate refuses the PR otherwise (crew#88)."
+  },
+  {
+   "id": "R40-just-go",
+   "date": "2026-08-27",
+   "verbatim": "60 mins is too long ... we need to move radically fast ... no just go",
+   "meaning": "A STAGED timer is not a wait. Reversible work is done in the same turn and announced as done; the STAGED line records what was done and how to undo it, never a countdown. FOUNDER ACTION stays only for physical steps (LAW 49). idp#356 removed the approval-word gate, so a green PR with a peer KEEP merges at once."
+  },
+  {
+   "id": "R41-assurance-ahead-of-time",
+   "date": "2026-08-27",
+   "verbatim": "we cant afford to play around with our infra ... we need bleeding edge assurance, in every way possible, we cant afford to fail, or go down, or firefight, we need to be ahead of time ... we have everything we need ... the best and grounded and genius engineers with access to the best ideas, consultants, open source tooling, nothing should stop us ... we cant shirk from our responsibilities, founder and investors must have complete confidence and trust, we need to remember this always ... i need proof this is being taken seriously ... this is a risk for founder if not taken uber seriously",
+   "meaning": "Said during crew#483: two PRs (idp#309, idp#310) merged green and took the cluster's identity, healthchecks and node-agent layers down because CI rendered a different object than the controllers apply. Binding: (1) a pre-merge gate renders exactly what Flux and helm-controller will apply (flux envsubst --strict with the real substituteFrom keys; helm release named as helm-controller names it; Kyverno judged against that render). (2) Every red row in Telegram or oke-check is an incident closed with the LAW 45 five steps and a printed sweep count, never a note. (3) 'Do we have X' is answered by running the check that would show X failing, graded honestly per capability, never from inventory. (4) Firefighting is a failure of a gate; the fix is the gate. First proof: idp#367."
+  },
+  {
+   "id": "R42-all-options-future-ready",
+   "date": "2026-08-27",
+   "verbatim": "i need yo to also be workig on thngs that nove our platfron forward in anjor way, we need to solve this now ... future proofing cost also ... raises bar and protability etrene ... all options allways ... seanlessly ... we need to be future ready",
+   "meaning": "Alongside the fires, every session carries one piece of work that moves the platform forward in a major way. When an option arrives (a playbook, a tool, a pattern), all options are graded on the record with a measured reason, never dismissed in prose and never adopted because a consultant said so; the ticket carries the table. Portability is proved by a drill that runs (the same Flux tree hydrating a foreign cluster, the exit rehearsed), never by a sentence. Cost future-proofing means the free-tier allowance is measured and the exit is rehearsed before it is needed. Seamless: a person never runs a step. First instance: crew#488 (portability drill on k3d weekly, second provider rehearsed in one run)."
+  },
+  {
+   "id": "R43-never-couple-to-a-provider",
+   "date": "2026-08-28",
+   "verbatim": "ensure we neevr couple ourslevs to oracle ... how the f does your script do that ... you need to thik enterpise policy ... not just hackig together short tern trash ... this is a founders decree ... so take it seriously",
+   "meaning": "The platform is never coupled to a compute or cloud provider, and that is enforced as enterprise policy, not by a script that counts callers. Three controls, all proven tools: (1) admission - a Kyverno ClusterPolicy (Enforce) refuses any provider annotation, StorageClass, CSI driver, LoadBalancer class or second secret door outside the declared provisioner boundary (platform/oci, platform/secret-store, clusters/<name>), and the same policy judges every rendered PR before the cluster sees it; (2) continuous proof - the whole Flux tree hydrates on a second provider (k3s on a non-Oracle VM) on every PR that touches platform/ or clusters/, and that run is a required status check on main; (3) the control is written as a control (docs/policy/provider-independence.md) with rule, boundary, enforcement points, evidence query and owner. A provider is named only inside the boundary; a cluster the estate does not control (its CNI, its node count) is not the platform's home. A ratchet, a ledger or a grep is inventory, never the answer to this ruling (crew#66 5450184299)."
+  },
+  {
+   "id": "R44-high-tech-only",
+   "date": "2026-08-28",
+   "verbatim": "we need all agents to understand pernannely that we are high tech only ... i dont want to hear any proposals not neeting the high tech standards ... everything we do for fiounder is high tech, seanless and frctionless",
+   "meaning": "The estate is high-tech only, permanently, in every session. A proposal, plan, playbook or FOUNDER ACTION that needs a human hand \u2014 paste, copy, type, mint, click around a UI, run a script, a second visit for the same thing, a laptop in the loop \u2014 never reaches the founder: it is refused at the gate and rebuilt as machine identity plus at most one SSO tap on a device already signed in. First-time vendor setup is platform work under a role identity in the org IdP, never a CEO task; the founder is asked only for money, identity (he is the sole IdP admin today) or an irreversible call. Recorded verbatim on crew#66 (comments 5453316105, 5453321155, 5453419163).",
+   "enforced_by": "idp policy/no-manual-steps.rego (no-toil gate on every PR body and changed doc/manifest, bin/idp-no-toil --sweep for the estate baseline); blocker-guard.py (FOUNDER ACTION must be a tap, never a hand verb); LAW 20 / LAW 27 / LAW 47"
+  },
+  {
+   "id": "R45-no-full-local-suite",
+   "date": "2026-08-28",
+   "verbatim": "get better at getting better, we waste too nuch tine with tests and fiddlng around we need to be hyper ultra efficient ... how else cann we be ultra zealot efficient ... also whay are the tests flaky in the first place",
+   "meaning": "No session runs the whole test suite on a laptop by hand. The scoped run is the default nobody types: pytest on every core (-n auto), bin/idp-tests-for for the files whose source names a changed path, and .githooks/pre-push running that plus the PR-body gates before every push (measured: 160 s serial -> 17 s; hook 23 s). CI runs the suite on a clean checkout and is the proof. Measured the same day: 2 of 13 red commits in 100 CI runs were flaky (one wall-clock fixture, fixed by idp 00eb77c), 11 were real reds pushed 8 times per PR; so no retry policy, no merge queue, no runner pool (founder: no self-hosted for now; the old runner setup was Fly's, R1). Recorded verbatim on crew#584 (comment 5454986379).",
+   "enforced_by": "policy/command.rego (pytest naming no file, node id, -k or --lf is refused; # full-suite-intended escapes); idp .githooks/pre-push + bin/idp-tests-for (idp#613)"
+  },
+  {
+   "id": "R46-root-trust",
+   "date": "2026-08-28",
+   "verbatim": "but this standard has to be platforn wide ... not just tailscale ... oso update high tech tandards with this eanple ... case closed",
+   "meaning": "Every provider's root credential is minted by `bin/idp-bootstrap-<provider>` from one SSO consent, never pasted. Platform-wide, not Tailscale-only. The API mints the rest, the vault is written in-process, the script exits; a hand-set SEED_* repo secret is a MISS, ticketed. The locked Tailscale bootstrap (R44) was one instance, not the standard: GitHub App, OCI, Tailscale, litellm-upstream and flux-writer are minted the same way. `gh secret set SEED_<KEY>` + `gh workflow run vault-seed.yml` (idp#243, idp#248) is the anti-pattern this closes; `bin/idp-github-app` installation-from-CI (crew#267, crew#301) is the first real instance. Verbatim on crew#66 comment 5453747447.",
+   "enforced_by": "bin/idp-bootstrap-<provider> convention; idp policy/no-manual-steps.rego refuses a hand-set SEED_* secret without a ticket; LAW 20 / LAW 27 / LAW 47"
+  },
+  {
+   "id": "R47-zero-bottleneck",
+   "date": "2026-08-28",
+   "verbatim": "sorry we need to get ruthless about optinisation ... zealot level ruthnesness ... zero bottleneck law optinise ruthlessly ... this is LAW ... plain english are our build faster not not ... where is bottleneck eactly ... no flffing",
+   "meaning": "Every bottleneck in the delivery loop is measured from the run's own log and removed, never narrated: work that cannot change a verdict is not run (idp-ci 422 s on run 33198380701 \u2192 idp#628 judges only the platform dirs a PR touched and runs pytest on all cores; numbers on crew#584 5456303731).",
+   "enforced_by": "idp bin/idp-ci rung 9 (IDP_CI_BASE) + tests/test_incident_crew584_kyverno_rung_scoped_to_the_diff.py"
+  },
+  {
+   "id": "R48-zero-friction",
+   "date": "2026-08-28",
+   "verbatim": "zero friction policy ... thast what highly visivble never to be looked for neans ... you need to understand founder",
+   "meaning": "Nothing the founder asked for may need to be looked for, asked for twice, or opened elsewhere. A deliverable is printed in the reply in full, then pinned where he already looks (Telegram pin, the portal home nav, a pinned crew issue); a gate that refuses finished work is fixed in the same turn, never reported. Said while the depth-psychology audit (crew#593) and the road to 9D (crew#596) were being delivered.",
+   "enforced_by": "crew docs/ROAD-TO-9D.md Stage 1.6-1.7 (decision-rights table, digest with one-tap confirm); founder-deliver.py on Stop",
+   "source": "session f3f21d6e, 2026-08-28"
+  },
+  {
+   "id": "R49-no-secrets-in-chat",
+   "date": "2026-08-28",
+   "verbatim": "we dont send password here",
+   "meaning": "No password, token or key is ever written into Telegram, a PR, an issue, a log or a reply. A secret is minted by the machine, stored in the vault (bin/idp-vault-put) or a 0600 file on the host that uses it, and the message names WHERE it is, never WHAT it is. Founder said it the once, 2026-08-28 20:25Z, after a Sunshine password was sent to the home channel (deleted, rotated).",
+   "enforced_by": "friction-relay replays this at session start; pr-evidence and feed-guard refuse a line matching password=|token=|secret= with a value",
+   "source": "session f3f21d6e, 2026-08-28"
+  },
+  {
+   "id": "R50-optimise-before-execution",
+   "date": "2026-08-29",
+   "verbatim": "treat the plan after you are done see it like its a slow unoptimised algorithm, find ways to ultra optimise to speed up delivery ... the way we build features, is slow, optimise before build. i want to trial and if successful to enforce this process ... note this process down as it will becone law ... the thought process on how to do it also, as a rule that any agent can follow ... how to plan and optinise before starting any exeution ... ensure all crew get this now ... needs to be everyehre, so they dont forget agent mD Files also",
+   "meaning": "Before ANY execution (feature, fix, investigation, migration, worker task) the plan is written and then optimised like a slow algorithm, in writing, in this order: (1) list the naive steps with their CI round trips; (2) name the bottleneck in one line; (3) MEMOIZE: every hand-typed fact becomes a value computed from git or a receipt; (4) PARALLELISE: steps with no incoming dependency start now on workers (max two); (5) LAZY: anything nothing needs today is a register row marked planned, not code; (6) BATCH: steps a reviewer accepts together are one PR, never one PR per file; (7) count steps and round trips again, before -> after; (8) put one line in the PR body and the crew issue: 'Optimised: <steps before> -> <after>, <round trips before> -> <after>; cut: <what, why>'; (9) then execute, and if a cut step is needed after all, add it back and amend the line. First trial crew#584: 7 serial PRs -> 3 (2 parallel), 7 round trips -> 2. Full procedure with worked example: ~/AGENTS-FULL.md section 'How to plan and optimise before starting any execution'; crew#584 comment 5459688429.",
+   "enforced_by": "on trial: relayed to every session by friction-relay and LAW 51 in AGENTS.md (~/.claude/AGENTS.md, laws/AGENTS.md); after the trial the idp operating-model gate refuses a PR without the Optimised: line"
+  },
+  {
+   "id": "R52-one-root-credential-then-code",
+   "date": "2026-08-29",
+   "verbatim": "we need to erdicate these nonosnse requets sfor founder frirction, OUR SECURITY STANNCE NEEDS TO BE CLEAR TO ALL AGENTS, IN AGENT.ND FILES FOR THE FUCKIG LAST TINE",
+   "meaning": "Security stance, every provider: exactly ONE root credential per provider is made by a person, once, at onboarding, and it goes straight into the vault or a repository secret (the founder types it on his own machine; no agent ever sees or relays it). Everything after is code: the pipeline (oke-check, Terraform, the provider's API) mints every scoped credential, syncs every policy file, and rotates. No agent asks the founder to click a console, fill a form, copy a value between apps, or generate anything but that one root. A FOUNDER ACTION on a provider is allowed exactly once per provider and its text is: make the root, set it as <named secret>, say 'set'. Tailscale 2026-08-29: five pinned form-walkthroughs for a federated identity were the incident; the root is an OAuth client with scope oauth_keys write, then bin/idp-bootstrap-tailscale mints tag:k8s.",
+   "enforced_by": "founder-blocker.py refuses console/settings/browser words (already); ~/.claude/scripts/laws/AGENTS.md section R52; idp bin/idp-bootstrap-* own every second credential; a FOUNDER ACTION naming a second step on the same provider is the incident",
+   "source": "session 2d8b3bd0, 2026-08-29 08:2xZ"
+  },
+  {
+   "id": "R53-drills-grade-features-never-look-and-feel",
+   "date": "2026-08-29",
+   "verbatim": "i dont want ur stupid dumb flakey tests in my drill ... we iterating on look and feel ... we need super quick feedback ... we want to test we can login and links work and we log into 3rd party systems, features that matter ... ui is volatile and changes all the time. DONT EVER WASTE RESOURCES ON THAT SHIT. MAJOR LAW FOR ALL AGENTS",
+   "meaning": "Drills and tests grade features: sign in, the page answers 200, no JavaScript error, links load, third-party logins hold. Never a selector, data-testid, card count or layout word. Never a test about selectors. Run 33251546897 graded a fully drawn front page red on an empty wrapper box and cost three CI runs and a P0.",
+   "guard": "idp tests/test_incident_crew459_drill_names_the_served_build.py::test_the_drill_has_no_ui_selectors; LAW 53"
+  },
+  {
+   "id": "R54-only-the-founder-releases",
+   "date": "2026-08-30",
+   "verbatim": "ok reeasr freeze, nno releases to prod ever agan ... EVER AGAINN, ONLY FOUNDE RELEASES ... NO BLCK ALL I GITHUB ... AND I NEED PRROF",
+   "meaning": "Release freeze with no end date. No agent, session or workflow merges to a default branch or ships to production, ever, green or not. A session may open a pull request and leave it; the founder is the only actor who merges or releases. Blocked at GitHub, not on paper: allow_auto_merge is false on all 46 repositories, the ruleset 'founder-only-releases' on every default branch requires a pull request with one approving review plus the existing required checks, and every armed auto-merge was disarmed. Two private repositories (estate-secrets, haworks) cannot take a ruleset on the free plan; auto-merge is off on both.",
+   "guard": "GitHub ruleset founder-only-releases (46 repos, 44 with the ruleset); rule-guard refuses `gh pr merge` from any session; LAW 11"
+  },
+  {
+   "id": "R63-audit-protocol-telegram-pinned",
+   "date": "2026-08-31",
+   "verbatim": "whats the protocol when i ask for audit and reearsh? ... enforce for all agents ... find a way i donnt catre ... i need it sen tto telegrn also pinnned ... you hvae to autonate it ... i wot be repeating nnyself all day ... we need to give pernanent nenory ... you all either fully in or out",
+   "meaning": "The audit/research protocol, every agent, every time the founder asks for an audit, a verification or research: (1) answer from generated pages and fresh queries run in the same turn, never memory; (2) the deliverable is a git-committed generated document, never a hand-written file that can drift; (3) the final reply opens AUDIT: and carries the one URL he can open in a browser \u2014 never a bare file path, never a worktree path, never 'open docs/...'; (4) the Stop hook (founder-deliver.py) sends that AUDIT: reply to his Telegram and pins it, automatically \u2014 a session never sends by hand and never skips the AUDIT: opener, because the opener is what arms the machine. This ruling is the permanent memory he asked for: rulings.json is injected into every session forever.",
+   "guard": "~/.claude/scripts/founder-deliver.py deliverable()+pin path, selftest case audit-pins; friction-relay injects this ruling into every session at start"
+  }
+ ],
+ "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R55 (R54 landed 2026-08-30, the founder's release freeze) (R53 landed 2026-08-29, crew#459; R52 2026-08-29; (R50 landed 2026-08-29, crew#584; R45 landed 2026-08-28, crew#584; R44 landed 2026-08-28, crew#66; R43 landed 2026-08-28, crew#66; R42 landed 2026-08-27 via claude-guards#144, crew#488) (R34-R37 landed 2026-08-25 via claude-guards#60); grep the estate for the id before you add one."
 }
