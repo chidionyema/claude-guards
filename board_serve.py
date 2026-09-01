@@ -49,6 +49,7 @@ AUDIT = os.path.expanduser("~/.claude/state/estate-audit.html")
 AUDIT_JSON = os.path.expanduser("~/.claude/state/estate-audit.json")
 TOKENS = os.path.expanduser("~/.claude/state/audit-tokens.json")
 OPS = os.path.expanduser("~/.claude/state/ops-dashboard.html")
+TODAY = os.path.expanduser("~/.claude/state/founder-today.html")
 ALERTS = os.path.expanduser(os.environ.get("ESTATE_ALERT_INBOX",
                             "~/.estate/alerts/inbox.jsonl"))
 PORT = int(os.environ.get("FOUNDER_BOARD_PORT", "8787"))
@@ -365,6 +366,23 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/alerts":
             self._send(200, _alerts_page(_alert_rows()), "text/html; charset=utf-8")
             return
+        if path == "/today":
+            #: The founder's daily brief (R73, 2026-09-01: business people do not use the
+            #: command line). Written by the session that closes the day; plain business
+            #: English, graded like any founder surface.
+            try:
+                with open(TODAY, "rb") as fh:
+                    body = fh.read()
+            except OSError as e:
+                self._send(503, f"no daily brief on disk at {TODAY}: {e}".encode(), "text/plain")
+                return
+            t_age = time.time() - os.stat(TODAY).st_mtime
+            banner = (f'<div style="font:14px/1.5 -apple-system,sans-serif;'
+                      f'background:{"#14532d" if t_age < 86400 else "#9a3412"};'
+                      f'color:#fff;padding:8px 16px">written '
+                      f'{int(t_age // 3600)} hours ago</div>').encode()
+            self._send(200, banner + body, "text/html; charset=utf-8")
+            return
         if path in ("/ops", "/opsdashboard"):
             #: Every agent session, the GitHub issue it is working under, and its own last status
             #: line. He prompts several tabs at once; this is the page that says which is which.
@@ -396,7 +414,7 @@ class Handler(BaseHTTPRequestHandler):
                        "text/plain")
             return
         if path not in ("/", "/index.html", "/founder-board.html"):
-            self._send(404, b"this server serves: / (board), /ops, /alerts, /admin, /audit?t=TOKEN, /health\n",
+            self._send(404, b"this server serves: / (board), /today, /ops, /alerts, /admin, /audit?t=TOKEN, /health\n",
                        "text/plain")
             return
         try:
