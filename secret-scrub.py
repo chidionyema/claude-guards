@@ -27,11 +27,15 @@ turned off, and a scrubber that is turned off protects nothing.
 
 It only ever removes. It never prints a secret, only its kind and length.
 """
+
 from __future__ import annotations
 
+import fcntl
+import json
 import os
 import pathlib
 import re
+import signal
 import sys
 import tempfile
 
@@ -40,23 +44,26 @@ HOME = pathlib.Path.home()
 # Anchored on a provider prefix and a real length. A bare `sk-[A-Za-z0-9]{40,}` also matches
 # ordinary base64 in a log, and a scrubber with false positives corrupts files.
 PATTERNS: list[tuple[str, re.Pattern[str]]] = [
-    ("ANTHROPIC",   re.compile(r"sk-ant-(?:api|oat)[A-Za-z0-9_\-]{20,}")),
-    ("OPENROUTER",  re.compile(r"sk-or-v1-[A-Za-z0-9_\-]{20,}")),
-    ("CP",          re.compile(r"sk-cp-[A-Za-z0-9_\-]{20,}")),
-    ("OPENAI",      re.compile(r"\bsk-proj-[A-Za-z0-9_\-]{40,}\b")),
+    ("ANTHROPIC", re.compile(r"sk-ant-(?:api|oat)[A-Za-z0-9_\-]{20,}")),
+    ("OPENROUTER", re.compile(r"sk-or-v1-[A-Za-z0-9_\-]{20,}")),
+    ("CP", re.compile(r"sk-cp-[A-Za-z0-9_\-]{20,}")),
+    ("OPENAI", re.compile(r"\bsk-proj-[A-Za-z0-9_\-]{40,}\b")),
     ("HUGGINGFACE", re.compile(r"\bhf_[A-Za-z0-9]{30,}\b")),
-    ("GITHUB",      re.compile(r"\b(?:ghp_[A-Za-z0-9]{34,}|github_pat_[A-Za-z0-9_]{50,})\b")),
-    ("AWS",         re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    ("SLACK",       re.compile(r"\bxox[abprs]-[A-Za-z0-9\-]{20,}\b")),
-    ("GOOGLE",      re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b")),
+    (
+        "GITHUB",
+        re.compile(r"\b(?:ghp_[A-Za-z0-9]{34,}|github_pat_[A-Za-z0-9_]{50,})\b"),
+    ),
+    ("AWS", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
+    ("SLACK", re.compile(r"\bxox[abprs]-[A-Za-z0-9\-]{20,}\b")),
+    ("GOOGLE", re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b")),
     # Added 2026-08-24, after a session ran `docker compose config` on a stack whose
     # `env_file` is the estate .env. Compose expands every value inline, so one command put
     # 63 occurrences of 20 live credentials into the session transcript. Each shape below is
     # one that was in that output and that nothing here matched.
-    ("STRIPE",      re.compile(r"\b[rs]k_(?:live|test)_[A-Za-z0-9]{20,}\b")),
-    ("STRIPE_WH",   re.compile(r"\bwhsec_[A-Za-z0-9]{20,}\b")),
-    ("FLY",         re.compile(r"FlyV1 fm2_[A-Za-z0-9+/=,_\-]{40,}")),
-    ("DEEPSEEK",    re.compile(r"\bsk-[0-9a-f]{32}\b")),
+    ("STRIPE", re.compile(r"\b[rs]k_(?:live|test)_[A-Za-z0-9]{20,}\b")),
+    ("STRIPE_WH", re.compile(r"\bwhsec_[A-Za-z0-9]{20,}\b")),
+    ("FLY", re.compile(r"FlyV1 fm2_[A-Za-z0-9+/=,_\-]{40,}")),
+    ("DEEPSEEK", re.compile(r"\bsk-[0-9a-f]{32}\b")),
 ]
 
 # Files that agents and shells write. Globs are relative to $HOME.
@@ -100,7 +107,15 @@ MIN_VALUE_LEN = 20
 # Publishable by design -- Stripe prints them in its own docs and they ship in web bundles.
 VALUE_SKIP_PREFIXES = ("pk_live_", "pk_test_", "http://", "https://")
 SECRET_KEY_WORDS = (
-    "KEY", "SECRET", "TOKEN", "PASSWORD", "PASSWD", "PEM", "CREDENTIAL", "WEBHOOK", "DSN",
+    "KEY",
+    "SECRET",
+    "TOKEN",
+    "PASSWORD",
+    "PASSWD",
+    "PEM",
+    "CREDENTIAL",
+    "WEBHOOK",
+    "DSN",
 )
 
 # Never rewritten. Order matters only for readability.
@@ -108,6 +123,33 @@ EXCLUDE_PARTS = ("hermes-agent", "node_modules", ".git", "__pycache__", "site-pa
 EXCLUDE_NAMES = ("secrets.sh",)
 
 MAX_BYTES = 200 * 1024 * 1024
+
+# crew#603 CP4: at Stop this runs through the one door, fail-closed, so a scan that outlives
+# its budget refuses the reply. Measured 2026-08-28: a full pass over one 6.6 MB transcript
+# took >300 s, which settings used to kill at 30 s and drop on the floor. So a Stop scans only
+# what grew since the last pass: this ledger holds, per file, the byte count already clean.
+# `--full` ignores it (the weekly pass). OVERLAP re-reads a tail so a secret split across two
+# appends is still seen whole.
+OFFSETS = HOME / ".claude" / "state" / "secret-scrub-offsets.json"
+OVERLAP = 4096
+
+
+def load_offsets() -> dict[str, int]:
+    try:
+        d = json.loads(OFFSETS.read_text())
+        return {k: int(v) for k, v in d.items()} if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def save_offsets(d: dict[str, int]) -> None:
+    try:
+        OFFSETS.parent.mkdir(parents=True, exist_ok=True)
+        tmp = OFFSETS.with_suffix(".tmp")
+        tmp.write_text(json.dumps(d, sort_keys=True))
+        os.replace(tmp, OFFSETS)
+    except OSError:
+        pass
 
 
 def targets() -> list[pathlib.Path]:
@@ -182,26 +224,32 @@ def known_values() -> list[bytes]:
     return sorted(vals, key=len, reverse=True)
 
 
-def patch_in_place(path: pathlib.Path, values: list[bytes], check_only: bool) -> int:
+def patch_in_place(
+    path: pathlib.Path, values: list[bytes], check_only: bool, start_at: int = 0
+) -> int:
     """Overwrite matches with the same number of bytes. Safe on a file being appended to.
 
     Same-length is the whole point: the file's length and every byte offset in it are
     unchanged, so a process holding it open and writing to the end never notices.
+    `start_at` scans from that byte (the incremental Stop pass); spans are file offsets.
     """
     try:
-        data = path.read_bytes()
+        with open(path, "rb") as f:
+            f.seek(start_at)
+            data = f.read()
     except OSError:
         return 0
+    base = start_at
 
     spans: list[tuple[int, int]] = []
     for v in values:
         start = 0
         while (i := data.find(v, start)) >= 0:
-            spans.append((i, len(v)))
+            spans.append((base + i, len(v)))
             start = i + len(v)
     for _name, rx in PATTERNS:
         for m in rx.finditer(data.decode("latin-1")):
-            spans.append((m.start(), m.end() - m.start()))
+            spans.append((base + m.start(), m.end() - m.start()))
 
     # A value match and a shape match can cover the same bytes -- `sk_live_...` is both a
     # known value and the STRIPE pattern. Overwriting twice is harmless, but counting twice is
@@ -260,14 +308,23 @@ def rewrite(path: pathlib.Path, text: str) -> None:
         raise
 
 
-def run(check_only: bool) -> int:
+def run(check_only: bool, full: bool = False) -> int:
     total = 0
     touched = 0
+    offsets = {} if full else load_offsets()
+    new_offsets: dict[str, int] = {}
     for p in targets():
         try:
+            st = p.stat()
+            key = str(p)
+            # Rewritten files: skip one whose size has not moved since it was last clean.
+            if not full and offsets.get(key) == st.st_size:
+                new_offsets[key] = st.st_size
+                continue
             text = p.read_text(errors="surrogateescape")
         except OSError:
             continue
+        new_offsets[key] = st.st_size
         found = scan_text(text)
         if not found:
             continue
@@ -280,8 +337,10 @@ def run(check_only: bool) -> int:
         # A redaction that changes the line count has eaten a newline. Refuse it.
         if new.count("\n") != text.count("\n"):
             print(f"REFUSED {rel}: line count would change", file=sys.stderr)
+            new_offsets.pop(str(p), None)
             continue
         rewrite(p, new)
+        new_offsets[str(p)] = len(new.encode("utf-8", errors="surrogateescape"))
         touched += 1
         print(f"scrubbed {counts} from {rel}")
     # The append-safe half. Separate loop because these are patched in place, not rewritten.
@@ -289,7 +348,14 @@ def run(check_only: bool) -> int:
     live_hits = 0
     live_files = 0
     for p in live_targets():
-        n = patch_in_place(p, values, check_only)
+        try:
+            size = p.stat().st_size
+        except OSError:
+            continue
+        done = offsets.get(str(p), 0)
+        start_at = max(0, min(done, size) - OVERLAP) if done else 0
+        n = patch_in_place(p, values, check_only, start_at)
+        new_offsets[str(p)] = size
         if not n:
             continue
         live_hits += n
@@ -302,6 +368,7 @@ def run(check_only: bool) -> int:
     if check_only:
         print(f"secret-scrub: {total} occurrence(s) in files that should hold none")
         return 1 if total else 0
+    save_offsets(new_offsets)
     if total:
         print(f"secret-scrub: removed {total} occurrence(s) from {touched} file(s)")
     return 0
@@ -339,15 +406,23 @@ def selftest() -> int:
         check(f"{kind} labelled", list(counts), [kind])
 
     # Ordinary text survives untouched. A scrubber with false positives corrupts files.
-    for benign in ("a normal sentence", "sk-something-short", "hf_tooShort",
-                   "commit 8262a28b0f1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e"):
+    for benign in (
+        "a normal sentence",
+        "sk-something-short",
+        "hf_tooShort",
+        "commit 8262a28b0f1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e",
+    ):
         got, counts = redact_text(benign)
         check(f"benign kept: {benign[:22]}", (got, counts), (benign, {}))
 
     # A real file is rewritten in place, line count and mode preserved.
     f = d / "history.jsonl"
-    f.write_text(json.dumps({"display": "export A=sk-ant-api03-" + "Z" * 40}) + "\n"
-                 + json.dumps({"display": "ls -la"}) + "\n")
+    f.write_text(
+        json.dumps({"display": "export A=sk-ant-api03-" + "Z" * 40})
+        + "\n"
+        + json.dumps({"display": "ls -la"})
+        + "\n"
+    )
     os.chmod(f, 0o600)
     before = f.read_text()
     new, counts = redact_text(before)
@@ -357,12 +432,19 @@ def selftest() -> int:
     check("rewrite kept the line count", after.count("\n"), before.count("\n"))
     check("rewrite kept mode 600", oct(f.stat().st_mode & 0o777), "0o600")
     check("rewrite left other lines alone", "ls -la" in after, True)
-    check("every line still parses as json",
-          all(json.loads(l) for l in after.splitlines() if l.strip()), True)
+    check(
+        "every line still parses as json",
+        all(json.loads(ln) for ln in after.splitlines() if ln.strip()),
+        True,
+    )
 
     # The real secret store is never a target.
     names = [p.name for p in targets()]
-    check("secrets.sh is never a target", any(n.startswith("secrets.sh") for n in names), False)
+    check(
+        "secrets.sh is never a target",
+        any(n.startswith("secrets.sh") for n in names),
+        False,
+    )
 
     print("secret-scrub selftest", "PASSED" if ok else "FAILED")
     return 0 if ok else 1
@@ -371,13 +453,47 @@ def selftest() -> int:
 def main() -> int:
     if "--selftest" in sys.argv:
         return selftest()
-    return run(check_only="--check" in sys.argv)
+    return run(check_only="--check" in sys.argv, full="--full" in sys.argv)
+
+
+# 2026-08-31: 38 orphaned copies of this script (ppid 1, hours old) took the founder's Mac
+# to load average 854. The chain: settings' 30 s hook timeout kills hook-run.py but not this
+# child, the orphan keeps scanning gigabytes of transcripts, and every later Stop starts
+# another. Two guards close the class. The lock makes a second copy exit at once: one
+# scrubber machine-wide, ever. The alarm makes an orphan die on its own deadline instead of
+# needing a parent to survive long enough to kill it. Exit 0 on both, same as the exception
+# door below: a Stop hook must never break the session, and the offsets ledger only advances
+# past bytes actually scanned, so whatever a cut-short pass missed is the next pass's work.
+LOCK = HOME / ".claude" / "state" / "secret-scrub.lock"
+DEADLINE = float(
+    os.environ.get("SECRET_SCRUB_DEADLINE") or (1800 if "--full" in sys.argv else 25)
+)
+
+
+def _deadline(signum: int, frame: object) -> None:
+    print(
+        f"[secret-scrub] deadline {DEADLINE:g}s hit; the rest is the next pass's work",
+        file=sys.stderr,
+    )
+    sys.exit(0)
 
 
 if __name__ == "__main__":
     # A Stop hook must never break the session it runs in.
     try:
+        LOCK.parent.mkdir(parents=True, exist_ok=True)
+        lock_fh = open(LOCK, "w")
+        try:
+            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            print(
+                "[secret-scrub] another scrub holds the lock; this one exits",
+                file=sys.stderr,
+            )
+            sys.exit(0)
+        signal.signal(signal.SIGALRM, _deadline)
+        signal.alarm(int(DEADLINE))
         sys.exit(main())
-    except Exception as exc:                                        # noqa: BLE001
+    except Exception as exc:  # noqa: BLE001
         print(f"[secret-scrub] {type(exc).__name__}: {exc}", file=sys.stderr)
         sys.exit(0)

@@ -148,6 +148,12 @@ legacy := {
 	# it comes from git diff/status. conftest has no git and Rego cannot move a checkout.
 	# Tracked at its landing size. Only ever falls.
 	"sync-guard.py": 98,
+	# R61 (founder 2026-08-31): a reply naming a pull-request URL is refused until that
+	# pull request's checks are all green. The verdict itself could be Rego, but the
+	# inputs cannot: a Stop hook must read the session transcript JSONL off stdin and
+	# ask `gh` for the live check rollup, and conftest has neither a transcript nor a
+	# network. Tracked at its landing size. Only ever falls.
+	"pr-green-guard.py": 239,
 }
 
 # How many command refusals each guard still implements in Python. Same direction
