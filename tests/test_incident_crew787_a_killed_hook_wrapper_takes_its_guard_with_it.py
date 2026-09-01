@@ -63,16 +63,19 @@ def _start(tmp_path: Path, **env) -> tuple[subprocess.Popen, Path]:
     hook = tmp_path / "hang.py"
     hook.write_text(HANG)
     pidfile = tmp_path / "pid"
-    proc = subprocess.Popen(
-        [sys.executable, str(RUN), str(hook), str(pidfile)],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env={**os.environ, "HOOK_OUTCOMES": str(tmp_path / "ledger.jsonl"), **env},
-    )
-    proc.stdin.write(PAYLOAD)
-    proc.stdin.close()
+    # The payload comes from a file, not a pipe: closing a pipe by hand and then calling
+    # communicate() is "I/O operation on closed file" on Python 3.12 (the CI runner).
+    payload = tmp_path / "payload.json"
+    payload.write_text(PAYLOAD)
+    with open(payload) as stdin:
+        proc = subprocess.Popen(
+            [sys.executable, str(RUN), str(hook), str(pidfile)],
+            stdin=stdin,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env={**os.environ, "HOOK_OUTCOMES": str(tmp_path / "ledger.jsonl"), **env},
+        )
     return proc, pidfile
 
 
