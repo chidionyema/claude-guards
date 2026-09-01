@@ -372,6 +372,9 @@ def run(check_only: bool, full: bool = False) -> int:
     """
     lock = _hold_lock()
     if lock is None:
+        # Two incident tests watch this refusal from different streams: the
+        # orphan-pileup one reads stderr, the one-copy-at-a-time one reads stdout.
+        print("secret-scrub: another copy is already scanning; leaving it to that one")
         print(
             "secret-scrub: another scrub holds the lock; leaving it to that one",
             file=sys.stderr,
