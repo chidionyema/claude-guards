@@ -5,6 +5,13 @@ crew#391, 2026-08-27: 34 hook commands ran on every session start, prompt, tool 
 stop, and none recorded a verdict. Refusal rate, false refusals (LAW 38) and latency were
 unmeasurable; `science/datamap.py --check` graded `hook/*` NEVER_EMITTED.
 
+Incident 2026-09-01: settings.json ran `hook-run.py secret-scrub.py` with timeout=30s, but
+hook-run's own TIMEOUT defaulted to 120s. When Claude Code killed hook-run at 30s, the grandchild
+(secret-scrub) kept running in nobody's process group, with nobody to read its verdict (LAW 28).
+Four copies of secret-scrub were observed with ppid=1, 28-50 minutes old, 60-70% CPU each, and
+load average hit 41-88 on a 16GB Mac. Rule: a guard runs in its own process group and dies with
+its wrapper.
+
 This wrapper is the one place that measures. It passes stdin through, returns the hook's
 stdout, stderr and exit code untouched, and appends one line per run to the ledger:
 
@@ -21,19 +28,24 @@ hook: every ledger error is swallowed, because a measurement that breaks the thi
 measures is an outage (LAW 38). Ledger path: $HOOK_OUTCOMES or ~/.claude/state/hook-outcomes.jsonl.
 Reader: crew scripts/estate-snapshot hooks(), source `hook_outcomes` in science/sources.json.
 """
+
 from __future__ import annotations
 
+import atexit
 import datetime as dt
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
 
 MARKER = re.compile(r"#\s*([a-z][a-z0-9-]*-intended|main-is-red|in-flight)\b")
 
-LEDGER = os.environ.get("HOOK_OUTCOMES") or os.path.expanduser("~/.claude/state/hook-outcomes.jsonl")
+LEDGER = os.environ.get("HOOK_OUTCOMES") or os.path.expanduser(
+    "~/.claude/state/hook-outcomes.jsonl"
+)
 
 
 def refused(exit_code: int, stdout: bytes) -> bool:
@@ -45,9 +57,16 @@ def refused(exit_code: int, stdout: bytes) -> bool:
         return False
     if not isinstance(out, dict):
         return False
-    hso = out.get("hookSpecificOutput") if isinstance(out.get("hookSpecificOutput"), dict) else {}
-    return (out.get("decision") == "block" or out.get("continue") is False
-            or hso.get("permissionDecision") == "deny")
+    hso = (
+        out.get("hookSpecificOutput")
+        if isinstance(out.get("hookSpecificOutput"), dict)
+        else {}
+    )
+    return (
+        out.get("decision") == "block"
+        or out.get("continue") is False
+        or hso.get("permissionDecision") == "deny"
+    )
 
 
 def waived(payload: dict) -> str | None:
@@ -59,6 +78,40 @@ def waived(payload: dict) -> str | None:
 
 TIMEOUT = float(os.environ.get("HOOK_TIMEOUT") or 120)
 
+# Global to hold the child process for signal handling
+_child_pid = None
+
+
+def _kill_child(signum, _frame):
+    """Signal handler that kills the child process group and exits."""
+    global _child_pid
+    # Re-raise the signal with default handling after we do our cleanup,
+    # but first block it to prevent recursive signals
+    signal.signal(signum, signal.SIG_DFL)
+    if _child_pid is not None:
+        try:
+            os.killpg(_child_pid, signal.SIGKILL)
+        except OSError:
+            pass  # Process already gone
+    sig_name = signal.Signals(signum).name
+    out = refusal("hook-run", f"hook-run was stopped by signal {sig_name}")
+    sys.stdout.buffer.write(out.stdout)
+    sys.stderr.buffer.write(out.stderr)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    # Use os._exit to bypass signal handling - we want exit code 2, not signal death
+    os._exit(2)
+
+
+def _atexit_kill_child():
+    """atexit handler: kill child if still alive."""
+    global _child_pid
+    if _child_pid is not None:
+        try:
+            os.killpg(_child_pid, signal.SIGKILL)
+        except OSError:
+            pass  # Process already gone
+
 
 def refusal(hook: str, why: str) -> subprocess.CompletedProcess:
     """crew#603 (founder 2026-08-28: "If a guard crashes, the answer is 'no'"). A guard that
@@ -66,27 +119,69 @@ def refusal(hook: str, why: str) -> subprocess.CompletedProcess:
     Code treated 1 as a warning: the action went ahead. Now every way a guard fails to reach a
     verdict is a refusal, exit 2 with a block decision, and the reason names the guard."""
     reason = f"{hook} could not reach a verdict, so the answer is no (fail-closed, crew#603): {why}"
-    out = json.dumps({"decision": "block", "reason": reason,
-                      "hookSpecificOutput": {"permissionDecision": "deny",
-                                             "permissionDecisionReason": reason}})
-    return subprocess.CompletedProcess(args=[hook], returncode=2, stdout=out.encode(),
-                                       stderr=(reason + "\n").encode())
+    out = json.dumps(
+        {
+            "decision": "block",
+            "reason": reason,
+            "hookSpecificOutput": {
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            },
+        }
+    )
+    return subprocess.CompletedProcess(
+        args=[hook], returncode=2, stdout=out.encode(), stderr=(reason + "\n").encode()
+    )
 
 
 def run_closed(argv: list[str], stdin: bytes) -> subprocess.CompletedProcess:
+    global _child_pid
     hook = os.path.basename(argv[0])
     if not os.path.isfile(argv[0]):
         return refusal(hook, f"no such file {argv[0]}")
+
+    # Set up environment with deadline and pid for the child
+    env = os.environ.copy()
+    env["HOOK_DEADLINE"] = str(time.time() + TIMEOUT)
+    env["HOOK_RUN_PID"] = str(os.getpid())
+
+    # Register signal handlers
+    signal.signal(signal.SIGTERM, _kill_child)
+    signal.signal(signal.SIGHUP, _kill_child)
+    signal.signal(signal.SIGINT, _kill_child)
+    atexit.register(_atexit_kill_child)
+
     try:
-        proc = subprocess.run([sys.executable, *argv], input=stdin, capture_output=True,
-                              timeout=TIMEOUT)
-    except subprocess.TimeoutExpired:
-        return refusal(hook, f"no verdict inside {TIMEOUT:g}s")
+        proc = subprocess.Popen(
+            [sys.executable, *argv],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            start_new_session=True,
+            env=env,
+        )
+        _child_pid = proc.pid
+        try:
+            stdout, stderr = proc.communicate(input=stdin, timeout=TIMEOUT)
+        except subprocess.TimeoutExpired:
+            # Kill the entire process group
+            os.killpg(proc.pid, signal.SIGKILL)
+            # Reap the process to avoid zombies
+            proc.communicate()
+            return refusal(hook, f"no verdict inside {TIMEOUT:g}s")
+        _child_pid = None
+        proc = subprocess.CompletedProcess(
+            args=proc.args, returncode=proc.returncode, stdout=stdout, stderr=stderr
+        )
     except OSError as e:
         return refusal(hook, f"could not start: {e}")
     if proc.returncode not in (0, 2):
-        tail = (proc.stderr or proc.stdout).decode("utf-8", "replace").strip().splitlines()
-        return refusal(hook, f"exit {proc.returncode}: {tail[-1] if tail else 'no output'}")
+        tail = (
+            (proc.stderr or proc.stdout).decode("utf-8", "replace").strip().splitlines()
+        )
+        return refusal(
+            hook, f"exit {proc.returncode}: {tail[-1] if tail else 'no output'}"
+        )
     return proc
 
 

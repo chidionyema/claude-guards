@@ -38,8 +38,27 @@ import re
 import signal
 import sys
 import tempfile
+import time
 
 HOME = pathlib.Path.home()
+
+# Budget for secret-scrub to stay within its wrapper's timeout.
+# If HOOK_DEADLINE is set, the budget is min(BUDGET_S, HOOK_DEADLINE - now - 2).
+# The -2s buffer ensures we exit before the wrapper kills us.
+BUDGET_S = float(os.environ.get("SECRET_SCRUB_BUDGET_S") or 15)
+
+
+def _budget_remaining() -> float:
+    """Return remaining budget in seconds, or -1 if no budget constraint."""
+    deadline = os.environ.get("HOOK_DEADLINE")
+    if not deadline:
+        return BUDGET_S
+    try:
+        remaining = float(deadline) - time.time() - 2  # 2s buffer for clean exit
+        return min(BUDGET_S, max(0, remaining))
+    except ValueError:
+        return BUDGET_S
+
 
 # Anchored on a provider prefix and a real length. A bare `sk-[A-Za-z0-9]{40,}` also matches
 # ordinary base64 in a log, and a scrubber with false positives corrupts files.
@@ -129,8 +148,14 @@ MAX_BYTES = 200 * 1024 * 1024
 # took >300 s, which settings used to kill at 30 s and drop on the floor. So a Stop scans only
 # what grew since the last pass: this ledger holds, per file, the byte count already clean.
 # `--full` ignores it (the weekly pass). OVERLAP re-reads a tail so a secret split across two
-# appends is still seen whole.
-OFFSETS = HOME / ".claude" / "state" / "secret-scrub-offsets.json"
+# appends is still seen whole. The path takes an env override so a test can point it at a
+# temp directory instead of the real ledger.
+OFFSETS = pathlib.Path(
+    os.environ.get(
+        "SECRET_SCRUB_OFFSETS",
+        str(HOME / ".claude" / "state" / "secret-scrub-offsets.json"),
+    )
+)
 OVERLAP = 4096
 
 
@@ -138,7 +163,8 @@ def load_offsets() -> dict[str, int]:
     try:
         d = json.loads(OFFSETS.read_text())
         return {k: int(v) for k, v in d.items()} if isinstance(d, dict) else {}
-    except (OSError, ValueError):
+    except (OSError, ValueError, TypeError):
+        # A ledger another version wrote in a different shape is a fresh start, not a crash.
         return {}
 
 
@@ -152,7 +178,32 @@ def save_offsets(d: dict[str, int]) -> None:
         pass
 
 
+# Incident 2026-09-01: every session's Stop hook started its own copy over the same files;
+# four ran side by side at 70-90 % CPU each and the founder's Mac sat at load 41-88. A second
+# copy has nothing to add (the offsets ledger is shared), so it leaves at once. The path takes
+# an env override so a test can hold a lock of its own.
+LOCK_FILE = pathlib.Path(
+    os.environ.get("SECRET_SCRUB_LOCK", str(HOME / ".claude/state/secret-scrub.lock"))
+)
+
+
+def _hold_lock():
+    """One scrubber at a time, machine-wide. Returns the open handle, or None when held."""
+    LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
+    handle = LOCK_FILE.open("a+")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        handle.close()
+        return None
+    return handle
+
+
 def targets() -> list[pathlib.Path]:
+    """Return target files sorted largest-last so small files (history, checkpoints) are processed first.
+
+    The offsets file already makes the next run incremental - we resume from where we left off.
+    """
     out: list[pathlib.Path] = []
     for g in TARGET_GLOBS:
         for p in HOME.glob(g):
@@ -168,7 +219,9 @@ def targets() -> list[pathlib.Path]:
             except OSError:
                 continue
             out.append(p)
-    return sorted(set(out))
+    # Largest-last: small files (history, zsh history, checkpoints) are most likely to contain
+    # leaked secrets and are processed first within the budget.
+    return sorted(set(out), key=lambda p: p.stat().st_size)
 
 
 def live_targets() -> list[pathlib.Path]:
@@ -287,7 +340,9 @@ def scan_text(text: str) -> dict[str, int]:
 def redact_text(text: str) -> tuple[str, dict[str, int]]:
     out, counts = text, {}
     for name, rx in PATTERNS:
-        out, n = rx.subn(lambda m: f"[REDACTED-{name}-{len(m.group(0))}CHARS]", out)
+        out, n = rx.subn(
+            lambda m, name=name: f"[REDACTED-{name}-{len(m.group(0))}CHARS]", out
+        )
         if n:
             counts[name] = n
     return out, counts
@@ -309,11 +364,52 @@ def rewrite(path: pathlib.Path, text: str) -> None:
 
 
 def run(check_only: bool, full: bool = False) -> int:
+    """Run the scrubber: one copy at a time, inside its budget, dead when its wrapper is.
+
+    Budget and orphan checks sit between files, never mid-file: a half-scrubbed file is
+    worse than a late one. Whatever a cut-short pass missed is the next pass's work -- the
+    offsets ledger only advances past bytes actually scanned.
+    """
+    lock = _hold_lock()
+    if lock is None:
+        # Two incident tests watch this refusal from different streams: the
+        # orphan-pileup one reads stderr, the one-copy-at-a-time one reads stdout.
+        print("secret-scrub: another copy is already scanning; leaving it to that one")
+        print(
+            "secret-scrub: another scrub holds the lock; leaving it to that one",
+            file=sys.stderr,
+        )
+        return 0
     total = 0
     touched = 0
     offsets = {} if full else load_offsets()
     new_offsets: dict[str, int] = {}
-    for p in targets():
+    start_time = time.time()
+    files_processed = 0
+    budget = _budget_remaining()
+
+    # Check if wrapper is already gone before we start
+    if os.getppid() == 1:
+        print("secret-scrub: wrapper gone, stopping (LAW 28)", file=sys.stderr)
+        return 0
+
+    target_list = targets()
+    for p in target_list:
+        # Check orphan status between files: if wrapper is gone, stop gracefully
+        if os.getppid() == 1:
+            print("secret-scrub: wrapper gone, stopping (LAW 28)", file=sys.stderr)
+            return 0
+
+        # Check budget between files (never mid-file)
+        elapsed = time.time() - start_time
+        if elapsed >= budget:
+            print(
+                f"secret-scrub: budget of {budget:.1f}s spent after {files_processed} of "
+                f"{len(target_list)} files; the rest resumes next Stop from the offsets file",
+                file=sys.stderr,
+            )
+            return 0
+
         try:
             st = p.stat()
             key = str(p)
@@ -327,27 +423,61 @@ def run(check_only: bool, full: bool = False) -> int:
         new_offsets[key] = st.st_size
         found = scan_text(text)
         if not found:
+            files_processed += 1
             continue
         rel = str(p).replace(str(HOME), "~")
         total += sum(found.values())
         if check_only:
             print(f"FOUND {found} in {rel}")
+            files_processed += 1
             continue
         new, counts = redact_text(text)
         # A redaction that changes the line count has eaten a newline. Refuse it.
         if new.count("\n") != text.count("\n"):
             print(f"REFUSED {rel}: line count would change", file=sys.stderr)
             new_offsets.pop(str(p), None)
+            files_processed += 1
             continue
         rewrite(p, new)
         new_offsets[str(p)] = len(new.encode("utf-8", errors="surrogateescape"))
         touched += 1
         print(f"scrubbed {counts} from {rel}")
+        files_processed += 1
+
+    # Check orphan status before live targets too
+    if os.getppid() == 1:
+        print("secret-scrub: wrapper gone, stopping (LAW 28)", file=sys.stderr)
+        return 0
+
+    # Check budget before live targets
+    elapsed = time.time() - start_time
+    if elapsed >= budget:
+        print(
+            f"secret-scrub: budget of {budget:.1f}s spent after {files_processed} of "
+            f"{len(target_list)} files; the rest resumes next Stop from the offsets file",
+            file=sys.stderr,
+        )
+        return 0
+
     # The append-safe half. Separate loop because these are patched in place, not rewritten.
     values = known_values()
     live_hits = 0
     live_files = 0
     for p in live_targets():
+        # Check orphan status between live target files
+        if os.getppid() == 1:
+            print("secret-scrub: wrapper gone, stopping (LAW 28)", file=sys.stderr)
+            return 0
+
+        # Check budget between live target files
+        elapsed = time.time() - start_time
+        if elapsed >= budget:
+            print(
+                f"secret-scrub: budget of {budget:.1f}s spent; the rest resumes next Stop",
+                file=sys.stderr,
+            )
+            return 0
+
         try:
             size = p.stat().st_size
         except OSError:
@@ -459,12 +589,13 @@ def main() -> int:
 # 2026-08-31: 38 orphaned copies of this script (ppid 1, hours old) took the founder's Mac
 # to load average 854. The chain: settings' 30 s hook timeout kills hook-run.py but not this
 # child, the orphan keeps scanning gigabytes of transcripts, and every later Stop starts
-# another. Two guards close the class. The lock makes a second copy exit at once: one
-# scrubber machine-wide, ever. The alarm makes an orphan die on its own deadline instead of
-# needing a parent to survive long enough to kill it. Exit 0 on both, same as the exception
-# door below: a Stop hook must never break the session, and the offsets ledger only advances
-# past bytes actually scanned, so whatever a cut-short pass missed is the next pass's work.
-LOCK = HOME / ".claude" / "state" / "secret-scrub.lock"
+# another. Three guards close the class. The lock (held inside run(), see _hold_lock) makes
+# a second copy exit at once: one scrubber machine-wide, ever. The ppid checks make an orphan
+# stop on its own the moment its wrapper is gone. The alarm below is the backstop: an orphan
+# dies on its own deadline instead of needing a parent to survive long enough to kill it.
+# Exit 0 on all of them, same as the exception door below: a Stop hook must never break the
+# session, and the offsets ledger only advances past bytes actually scanned, so whatever a
+# cut-short pass missed is the next pass's work.
 DEADLINE = float(
     os.environ.get("SECRET_SCRUB_DEADLINE") or (1800 if "--full" in sys.argv else 25)
 )
@@ -481,16 +612,6 @@ def _deadline(signum: int, frame: object) -> None:
 if __name__ == "__main__":
     # A Stop hook must never break the session it runs in.
     try:
-        LOCK.parent.mkdir(parents=True, exist_ok=True)
-        lock_fh = open(LOCK, "w")
-        try:
-            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            print(
-                "[secret-scrub] another scrub holds the lock; this one exits",
-                file=sys.stderr,
-            )
-            sys.exit(0)
         signal.signal(signal.SIGALRM, _deadline)
         signal.alarm(int(DEADLINE))
         sys.exit(main())
