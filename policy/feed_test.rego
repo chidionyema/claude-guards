@@ -78,3 +78,16 @@ test_permits_secret_name if {
 	count(feed.deny) == 0 with input as {"lines": ["🔧 TOUCHES: x", "🔀 OVERLAP: none", "📍 State: token=TELEGRAM_BOT_TOKEN in the vault"]}
 }
 
+# crew#786: must refuse a TOUCHES clash (token touched by another session inside 2h, not named in OVERLAP)
+test_refuses_touches_clash if {
+	d := feed.deny with input as {"lines": good, "clashes": [{"session": "aaaaaaaa", "token": "/home/user/dev/x"}]}
+	count(d) == 1
+	some m in d
+	contains(m, "crew#786")
+}
+
+# crew#786: must permit when clashes is empty
+test_permits_no_clashes if {
+	count(feed.deny) == 0 with input as {"lines": good, "clashes": []}
+}
+
