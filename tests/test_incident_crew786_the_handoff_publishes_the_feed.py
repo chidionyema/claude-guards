@@ -136,6 +136,10 @@ def test_publish_to_local_bare_repo():
         import sys as _sys
 
         fp = _sys.modules["feed_publish"]
+        # This test grades the git plumbing, not the scanner: CI runners carry no
+        # gitleaks, and redaction has its own tests above. Publish nothing changes.
+        original_redact = fp.redact
+        fp.redact = lambda text: text
         publish_clone = Path(td) / "publish"
         original_publish_clone = fp.PUBLISH_CLONE
 
@@ -231,6 +235,7 @@ def test_publish_to_local_bare_repo():
             assert receipt3.startswith("ok    feed-publish:")
         finally:
             fp.PUBLISH_CLONE = original_publish_clone
+            fp.redact = original_redact
 
 
 def subprocess_run(args, check=True, cwd=None):
