@@ -197,15 +197,24 @@ def known_values() -> list[bytes]:
     return sorted(vals, key=len, reverse=True)
 
 
-def load_offsets() -> dict[str, int]:
+def load_offsets() -> dict[str, list[int]]:
+    """path -> [bytes covered, mtime_ns at the time]. An older int-only row still loads."""
     try:
         raw = json.loads(OFFSETS.read_text())
     except (OSError, ValueError):
         return {}
-    return {k: int(v) for k, v in raw.items()} if isinstance(raw, dict) else {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, list[int]] = {}
+    for k, v in raw.items():
+        try:
+            out[k] = [int(v[0]), int(v[1])] if isinstance(v, list) else [int(v), 0]
+        except (TypeError, ValueError, IndexError):
+            continue
+    return out
 
 
-def save_offsets(offsets: dict[str, int]) -> None:
+def save_offsets(offsets: dict[str, list[int]]) -> None:
     try:
         OFFSETS.parent.mkdir(parents=True, exist_ok=True)
         tmp = OFFSETS.with_suffix(".tmp")
@@ -215,16 +224,23 @@ def save_offsets(offsets: dict[str, int]) -> None:
         pass
 
 
-def resume_from(path: pathlib.Path, offsets: dict[str, int]) -> int:
-    """Where the incremental scan of `path` starts: the last scanned length minus OVERLAP, or 0
-    when the file is new, shrank, or was never finished."""
+SKIP = -1
+
+
+def resume_from(path: pathlib.Path, offsets: dict[str, list[int]]) -> int:
+    """Where the incremental scan of `path` starts: SKIP when the file has the size and mtime
+    the last run recorded (it is not even opened: 21,500 tool-result files made a 59 s run of
+    that alone); the last scanned length minus OVERLAP; or 0 when the file is new, shrank, or
+    was never finished."""
     try:
-        size = path.stat().st_size
+        st = path.stat()
     except OSError:
         return 0
-    seen = offsets.get(str(path), 0)
-    if seen <= 0 or seen > size:
+    seen, stamp = offsets.get(str(path), [0, 0])
+    if seen <= 0 or seen > st.st_size:
         return 0
+    if seen == st.st_size and stamp == st.st_mtime_ns:
+        return SKIP
     return max(0, seen - OVERLAP)
 
 
@@ -341,11 +357,17 @@ def run(check_only: bool, full: bool = False) -> int:
     live_files = 0
     incremental = not (check_only or full)
     offsets = load_offsets() if incremental else {}
-    for p in live_targets():
-        n, covered = patch_in_place(p, values, check_only,
-                                    resume_from(p, offsets) if incremental else 0)
+    live = live_targets()
+    for p in live:
+        start_at = resume_from(p, offsets) if incremental else 0
+        if start_at == SKIP:
+            continue
+        n, covered = patch_in_place(p, values, check_only, start_at)
         if incremental and covered:
-            offsets[str(p)] = covered
+            try:
+                offsets[str(p)] = [covered, p.stat().st_mtime_ns]
+            except OSError:
+                pass
         if not n:
             continue
         live_hits += n
@@ -355,8 +377,8 @@ def run(check_only: bool, full: bool = False) -> int:
     total += live_hits
     touched += live_files
     if incremental:
-        live = {str(p) for p in live_targets()}
-        save_offsets({k: v for k, v in offsets.items() if k in live})
+        keep = {str(p) for p in live}
+        save_offsets({k: v for k, v in offsets.items() if k in keep})
 
     if check_only:
         print(f"secret-scrub: {total} occurrence(s) in files that should hold none")

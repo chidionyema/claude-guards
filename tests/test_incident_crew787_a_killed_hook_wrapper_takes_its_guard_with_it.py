@@ -197,7 +197,7 @@ def test_the_second_scrub_reads_only_the_appended_tail(tmp_path):
     )
     assert SECRET not in transcript.read_text()
     offsets = json.loads((home / "offsets.json").read_text())
-    assert offsets[str(transcript)] == transcript.stat().st_size
+    assert offsets[str(transcript)][0] == transcript.stat().st_size
 
     # Plant one before the recorded offset (by hand, as no writer would) and append one.
     # Only the appended one is read: the scrub trusts its own record of what it has covered.
