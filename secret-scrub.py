@@ -372,7 +372,10 @@ def run(check_only: bool, full: bool = False) -> int:
     """
     lock = _hold_lock()
     if lock is None:
-        print("secret-scrub: another copy is already scanning; leaving it to that one")
+        print(
+            "secret-scrub: another scrub holds the lock; leaving it to that one",
+            file=sys.stderr,
+        )
         return 0
     total = 0
     touched = 0
