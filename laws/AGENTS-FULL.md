@@ -2344,3 +2344,54 @@ Five paragraphs of this section (the one-copy topology, the numbering history, t
 # Moved on 2026-08-29 (crew#584)
 
 The compact-instructions measurement and word-budget table, and the 2026-08-27 CP-B move note, live verbatim in `~/AGENTS-FULL.md`.
+
+# OUR SSO POLICY AND STRATEGY (founder, 2026-08-31: emphasised here on his order)
+
+The estate has one identity layer and it is not negotiable. Source of truth: idp
+`docs/decisions/0003-identity-is-oidc-and-the-gateway-enforces-it.md` (the standard) and
+`docs/decisions/0007-the-front-door-is-federated-login-with-no-local-password.md` (the
+implementation). Emphasis, in the founder's terms — "enterprise approach", "seamless and secure":
+
+1. **Identity is OIDC, enforced at the gateway, never inside an application.** Every human-facing
+   surface sits behind the gateway's ForwardAuth (`login-forward-auth` →
+   `oauth2-proxy.identity.svc`); an application consumes `X-Auth-Request-User` /
+   `X-Auth-Request-Email` and keeps NO login of its own. A new surface that ships its own login
+   screen, user table or password is the incident (ADR 0007's class: a password that has to
+   travel leaks).
+2. **The estate never holds a password for a person.** Login federates to the estate's own OCI
+   identity domain (`platform/oci/identity`), MFA enforced at the provider. No user database, no
+   hash, no reset flow, no credential in chat, log or notification — ever (R49).
+3. **The only login secrets are machine-made and machine-held:** one confidential application's
+   OIDC client id and secret plus a cookie secret, minted by Terraform, mounted by ESO
+   (`platform/identity/external-secret.yaml`). One root per provider, code mints the rest (R52).
+   No person and no session sees a value.
+4. **Who may enter is a grant table in git** (`founder_emails`, one grant per address), changed
+   only by pull request. Access review is a diff, not a console.
+5. **Every product onboards onto THIS layer** — a second SSO, a second identity provider, a
+   per-app OAuth stitch-up is platform stitching and gets deleted (THE HEADLINE). Drills grade
+   the door by behaviour: sign-in works, third-party logins hold (R53) — never by selectors.
+
+Before touching any login, auth, session or identity code anywhere in the estate: read the two
+ADRs above in the same turn. A buyer's engineer will test this door first.
+
+# Effective order (moved verbatim from the resident copy, 2026-08-31)
+
+**Effective order, HOW to work.** Read left to right. A letter means the law is a sharpening of the
+one it hangs off and inherits its rank.
+
+    1 · 2 · 2b(29) · 3 · 3b(39) · 3c(45) · 3d(50) · 4 · 4b(33) · 4c(51) · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10
+    5c(47) · 5d(48) · 5e(49) · 11 · 11b(26) · 12 · 13 · 14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
+
+**Effective order, WHAT to build.** A separate axis. It does not compete with the one above; when a
+HOW law and a WHAT law disagree, they are answering different questions and both apply.
+
+    19a(34) · 19 · 19b(43) · 19c(40) · 19d(41) · 19e(46) · 20 · 20b(27) · 20c(31) · 20d(32) · 20e(36)
+    20f(37) · 20g(38) · 21
+
+**Effective order, how the estate IMPROVES.** A third axis, one law long, and it governs the other
+two: LAW 35 is the ethos the HOW and WHAT laws themselves evolve under. It never suspends LAW 1 —
+a fire is still put out first — and it spends nothing past LAW 14 or LAW 21. What it overrides is
+standing still.
+
+    35 · 35b(44)
+
