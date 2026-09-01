@@ -51,6 +51,16 @@ deny contains msg if {
 	msg := sprintf("lane %q is held by session %s (handoff inside 2h); name it on the 🔀 OVERLAP line or write on your own lane (crew#331)", [input.lane, h])
 }
 
+# crew#786: TOUCHES clash refusal. feed-guard.py passes `clashes` as [{"session": s, "token": t}, ...].
+# Default to empty list when absent (same pattern as holders).
+clashes := [c | c := input.clashes[_]]
+
+deny contains msg if {
+	clashes != []
+	some c in clashes
+	msg := sprintf("TOUCHES names %q which session %s touched inside 2h; name it on the 🔀 OVERLAP line or leave it to them (crew#786)", [c.token, c.session])
+}
+
 named_in_overlap(h) if {
 	some l in input.lines
 	startswith(l, "🔀")
