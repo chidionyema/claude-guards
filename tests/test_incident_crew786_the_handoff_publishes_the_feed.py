@@ -102,7 +102,20 @@ def test_publish_to_local_bare_repo():
             ["git", "checkout", "-b", "state/live-diagram"], check=True, cwd=setup_dir
         )
         subprocess_run(["git", "add", "."], check=True, cwd=setup_dir)
-        subprocess_run(["git", "commit", "-m", "initial"], check=True, cwd=setup_dir)
+        subprocess_run(
+            [
+                "git",
+                "-c",
+                "user.name=feed-test",
+                "-c",
+                "user.email=feed-test@example.invalid",
+                "commit",
+                "-m",
+                "initial",
+            ],
+            check=True,
+            cwd=setup_dir,
+        )
         subprocess_run(
             ["git", "push", "origin", "state/live-diagram"], check=True, cwd=setup_dir
         )
@@ -119,9 +132,12 @@ def test_publish_to_local_bare_repo():
             f"# Estate feed\n\n## {t_recent.strftime('%Y-%m-%dT%H:%MZ')} · session test · lane test-lane\n🔴 test\n📍 test\n"
         )
 
-        # Monkeypatch PUBLISH_CLONE to use a temp dir
+        # Monkeypatch PUBLISH_CLONE on the publish library (crew#786: it is feed_publish.py now)
+        import sys as _sys
+
+        fp = _sys.modules["feed_publish"]
         publish_clone = Path(td) / "publish"
-        original_publish_clone = fg.PUBLISH_CLONE
+        original_publish_clone = fp.PUBLISH_CLONE
 
         # Create publish clone manually
         subprocess_run(
@@ -138,9 +154,9 @@ def test_publish_to_local_bare_repo():
             cwd=td,
         )
 
-        # Patch the module's PUBLISH_CLONE
-        fg.PUBLISH_CLONE = publish_clone
-        fg.STATE_BRANCH = "state/live-diagram"
+        # Patch the library's PUBLISH_CLONE
+        fp.PUBLISH_CLONE = publish_clone
+        fp.STATE_BRANCH = "state/live-diagram"
 
         try:
             t = fg.now()
@@ -190,7 +206,20 @@ def test_publish_to_local_bare_repo():
             )
             (other_dir / "docs" / "OTHER.md").write_text("other\n")
             subprocess_run(["git", "add", "."], check=True, cwd=other_dir)
-            subprocess_run(["git", "commit", "-m", "other"], check=True, cwd=other_dir)
+            subprocess_run(
+                [
+                    "git",
+                    "-c",
+                    "user.name=feed-test",
+                    "-c",
+                    "user.email=feed-test@example.invalid",
+                    "commit",
+                    "-m",
+                    "other",
+                ],
+                check=True,
+                cwd=other_dir,
+            )
             subprocess_run(
                 ["git", "push", "origin", "state/live-diagram"],
                 check=True,
@@ -201,7 +230,7 @@ def test_publish_to_local_bare_repo():
             receipt3 = fg.publish(feed, t)
             assert receipt3.startswith("ok    feed-publish:")
         finally:
-            fg.PUBLISH_CLONE = original_publish_clone
+            fp.PUBLISH_CLONE = original_publish_clone
 
 
 def subprocess_run(args, check=True, cwd=None):

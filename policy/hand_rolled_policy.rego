@@ -132,7 +132,14 @@ legacy := {
 	# capabilities, progress or when. It is content, not a decision: OPA cannot read the page
 	# or print it into the prompt. The prompt match (STATUS_RE) is the only rule, and it has
 	# no refusal to migrate; three incident tests prove it both ways.
-	"feed-guard.py": 428, # 270 lines before ruff format; same code, the estate Python standard (crew#620) reflowed it on 2026-08-29
+	# 428 -> 526 on 2026-09-01 (crew#786). No refusal was added in Python: the TOUCHES-clash
+	# refusal is policy/feed.rego with its cases in policy/feed_test.rego. The lines are the
+	# state Rego cannot gather -- touch_clashes() walks feed.md, normalises the touched paths
+	# and hands them to OPA as input.clashes -- plus the publish trigger. Publishing itself
+	# (git clone, gitleaks redaction, push to the state branch) is an action, not a decision,
+	# and moved to the library feed_publish.py, next to feed_meter.py. Adapter gathers, Rego
+	# decides.
+	"feed-guard.py": 526, # 270 lines before ruff format; same code, the estate Python standard (crew#620) reflowed it on 2026-08-29
 	# vendor-lock-guard (crew#273, claude-guards#63): scans PROSE -- markdown, .feature and
 	# the last assistant message -- for a vendor name in the same sentence as a word that
 	# makes it mandatory. conftest has no parser for markdown or free text, so this rule
