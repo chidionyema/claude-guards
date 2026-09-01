@@ -15,7 +15,9 @@ an instrument nobody reads.
 
 This is the remover. It runs on Stop, so a key pasted in a session is gone by the end of it.
 
-    secret-scrub.py            redact, print counts, exit 0
+    secret-scrub.py            redact, print counts, exit 0; live transcripts are read from
+                               where the last run stopped (crew#787)
+    secret-scrub.py --full     the same, reading every live transcript from the start
     secret-scrub.py --check    report only, change nothing, exit 1 if anything is found
     secret-scrub.py --selftest prove the patterns and the rewrite on a temp file
 
@@ -29,6 +31,7 @@ It only ever removes. It never prints a secret, only its kind and length.
 """
 from __future__ import annotations
 
+import json
 import os
 import pathlib
 import re
@@ -36,6 +39,18 @@ import sys
 import tempfile
 
 HOME = pathlib.Path.home()
+
+# crew#787 (2026-09-01): every Stop of every session re-read every transcript under
+# ~/.claude/projects (844 MB, largest 88 MB) through 13 patterns, took minutes, outlived the
+# hook wrapper and piled up as orphans until the Mac's load average was 760. A transcript is only
+# ever appended to, so the scrub remembers how far it has read each live file and scans the new
+# bytes only, with an overlap longer than any credential so a value split across two runs is still
+# seen. A file that shrank was rewritten and is read from the start. `--check` and `--full` read
+# everything. The state file is the only thing this adds; a missing or broken one means a full
+# scan, never a skipped one.
+OFFSETS = pathlib.Path(os.environ.get("SECRET_SCRUB_OFFSETS")
+                       or str(HOME / ".claude" / "state" / "secret-scrub-offsets.json"))
+OVERLAP = 4096
 
 # Anchored on a provider prefix and a real length. A bare `sk-[A-Za-z0-9]{40,}` also matches
 # ordinary base64 in a log, and a scrubber with false positives corrupts files.
@@ -182,26 +197,62 @@ def known_values() -> list[bytes]:
     return sorted(vals, key=len, reverse=True)
 
 
-def patch_in_place(path: pathlib.Path, values: list[bytes], check_only: bool) -> int:
+def load_offsets() -> dict[str, int]:
+    try:
+        raw = json.loads(OFFSETS.read_text())
+    except (OSError, ValueError):
+        return {}
+    return {k: int(v) for k, v in raw.items()} if isinstance(raw, dict) else {}
+
+
+def save_offsets(offsets: dict[str, int]) -> None:
+    try:
+        OFFSETS.parent.mkdir(parents=True, exist_ok=True)
+        tmp = OFFSETS.with_suffix(".tmp")
+        tmp.write_text(json.dumps(offsets, separators=(",", ":")))
+        os.replace(tmp, OFFSETS)
+    except OSError:
+        pass
+
+
+def resume_from(path: pathlib.Path, offsets: dict[str, int]) -> int:
+    """Where the incremental scan of `path` starts: the last scanned length minus OVERLAP, or 0
+    when the file is new, shrank, or was never finished."""
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return 0
+    seen = offsets.get(str(path), 0)
+    if seen <= 0 or seen > size:
+        return 0
+    return max(0, seen - OVERLAP)
+
+
+def patch_in_place(path: pathlib.Path, values: list[bytes], check_only: bool,
+                   start_at: int = 0) -> tuple[int, int]:
     """Overwrite matches with the same number of bytes. Safe on a file being appended to.
 
     Same-length is the whole point: the file's length and every byte offset in it are
     unchanged, so a process holding it open and writing to the end never notices.
+    Reads from `start_at`; answers (matches, bytes of the file covered by this read).
     """
     try:
-        data = path.read_bytes()
+        with open(path, "rb") as fh:
+            fh.seek(start_at)
+            data = fh.read()
     except OSError:
-        return 0
+        return 0, 0
+    end = start_at + len(data)
 
     spans: list[tuple[int, int]] = []
     for v in values:
         start = 0
         while (i := data.find(v, start)) >= 0:
-            spans.append((i, len(v)))
+            spans.append((start_at + i, len(v)))
             start = i + len(v)
     for _name, rx in PATTERNS:
         for m in rx.finditer(data.decode("latin-1")):
-            spans.append((m.start(), m.end() - m.start()))
+            spans.append((start_at + m.start(), m.end() - m.start()))
 
     # A value match and a shape match can cover the same bytes -- `sk_live_...` is both a
     # known value and the STRIPE pattern. Overwriting twice is harmless, but counting twice is
@@ -216,7 +267,7 @@ def patch_in_place(path: pathlib.Path, values: list[bytes], check_only: bool) ->
     spans = merged
 
     if not spans or check_only:
-        return len(spans)
+        return len(spans), end
 
     with open(path, "r+b") as f:
         for off, ln in spans:
@@ -224,7 +275,7 @@ def patch_in_place(path: pathlib.Path, values: list[bytes], check_only: bool) ->
             f.write(b"X" * ln)
         f.flush()
         os.fsync(f.fileno())
-    return len(spans)
+    return len(spans), end
 
 
 def scan_text(text: str) -> dict[str, int]:
@@ -260,7 +311,7 @@ def rewrite(path: pathlib.Path, text: str) -> None:
         raise
 
 
-def run(check_only: bool) -> int:
+def run(check_only: bool, full: bool = False) -> int:
     total = 0
     touched = 0
     for p in targets():
@@ -288,8 +339,13 @@ def run(check_only: bool) -> int:
     values = known_values()
     live_hits = 0
     live_files = 0
+    incremental = not (check_only or full)
+    offsets = load_offsets() if incremental else {}
     for p in live_targets():
-        n = patch_in_place(p, values, check_only)
+        n, covered = patch_in_place(p, values, check_only,
+                                    resume_from(p, offsets) if incremental else 0)
+        if incremental and covered:
+            offsets[str(p)] = covered
         if not n:
             continue
         live_hits += n
@@ -298,6 +354,9 @@ def run(check_only: bool) -> int:
         print(f"{'FOUND' if check_only else 'scrubbed'} {n} occurrence(s) in {rel}")
     total += live_hits
     touched += live_files
+    if incremental:
+        live = {str(p) for p in live_targets()}
+        save_offsets({k: v for k, v in offsets.items() if k in live})
 
     if check_only:
         print(f"secret-scrub: {total} occurrence(s) in files that should hold none")
@@ -358,7 +417,7 @@ def selftest() -> int:
     check("rewrite kept mode 600", oct(f.stat().st_mode & 0o777), "0o600")
     check("rewrite left other lines alone", "ls -la" in after, True)
     check("every line still parses as json",
-          all(json.loads(l) for l in after.splitlines() if l.strip()), True)
+          all(json.loads(line) for line in after.splitlines() if line.strip()), True)
 
     # The real secret store is never a target.
     names = [p.name for p in targets()]
@@ -371,7 +430,7 @@ def selftest() -> int:
 def main() -> int:
     if "--selftest" in sys.argv:
         return selftest()
-    return run(check_only="--check" in sys.argv)
+    return run(check_only="--check" in sys.argv, full="--full" in sys.argv)
 
 
 if __name__ == "__main__":
