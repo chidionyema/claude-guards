@@ -49,24 +49,7 @@ Fifty-three rules, in priority order, numbered to 53. **When two laws want diffe
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
 
-**Effective order, HOW to work.** Read left to right. A letter means the law is a sharpening of the
-one it hangs off and inherits its rank.
-
-    1 · 2 · 2b(29) · 3 · 3b(39) · 3c(45) · 3d(50) · 4 · 4b(33) · 4c(51) · 5 · 5b(23) · 6 · 6b(28) · 7 · 8 · 9 · 10
-    5c(47) · 5d(48) · 5e(49) · 11 · 11b(26) · 12 · 13 · 14 · 15 · 16 · 16b(25) · 16c(30) · 17 · 17b(22) · 18 · 24
-
-**Effective order, WHAT to build.** A separate axis. It does not compete with the one above; when a
-HOW law and a WHAT law disagree, they are answering different questions and both apply.
-
-    19a(34) · 19 · 19b(43) · 19c(40) · 19d(41) · 19e(46) · 20 · 20b(27) · 20c(31) · 20d(32) · 20e(36)
-    20f(37) · 20g(38) · 21
-
-**Effective order, how the estate IMPROVES.** A third axis, one law long, and it governs the other
-two: LAW 35 is the ethos the HOW and WHAT laws themselves evolve under. It never suspends LAW 1 —
-a fire is still put out first — and it spends nothing past LAW 14 or LAW 21. What it overrides is
-standing still.
-
-    35 · 35b(44)
+**Effective order.** Three axes (HOW, WHAT, IMPROVES), mapped in `~/AGENTS-FULL.md`; the tie-break stands: lower number wins.
 
 | # | Law | Fires |
 |---|-----|-------|
@@ -176,6 +159,12 @@ about to write a project's name in this file, it belongs in that project's file.
   change what the founder does next.
 - **No end-of-reply menus.** Open items are one line each, three at most, or a real question.
 - **Corrections are one clause.** No re-litigating, no tallying past errors.
+- **A service has three states and only three (crew#656 phase 0, founder spec 2026-08-29 §2).**
+  `MEASURED_OK`, `MEASURED_FAIL` or `UNKNOWN`; a claim about a service carries one of those and
+  the probe that measured it, inside its freshness window (default 180 seconds). `UNKNOWN` is the
+  default and is not a failure. Never `up`, `down`, `healthy`, `working`, `fine`, `operational`
+  or `broken` as an assertion about a service. A 302 is not evidence; a quiet Flux is not
+  evidence; a peer session's report is a `LEAD (unverified, source: <session>)`, never evidence.
 - **Fix it, do not report it back.** A defect found inside work in progress is fixed in the same
   turn. Surface it unfixed only when you are barred from touching it: a founder decision, a refused
   permission, another session's work.
@@ -196,3 +185,10 @@ output already acted on; any standing directive already in a memory file — cit
 
 **Never drop:** a decision, a file path, a command or an error string.
 
+
+# OUR SSO POLICY (founder 2026-08-31)
+
+One identity layer: OIDC at the gateway, never in an app (idp decision 0003); federated login,
+no password ever held for a person (decision 0007). No surface ships its own login; a second
+SSO is stitching and gets deleted. Full policy: `~/AGENTS-FULL.md`; read both decisions before
+touching any login, auth or identity code.
