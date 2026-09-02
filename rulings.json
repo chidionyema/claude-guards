@@ -359,35 +359,35 @@
       "id": "R67-minimax-is-the-last-executor-planner-and-reviewer-bracket-it",
       "date": "2026-09-01",
       "verbatim": "MiniMax needs to be the last chain of execution really cheap and fast but need planner and reviewer.",
-      "meaning": "Every world-changing agent turn is three router lanes: plan (strong reasoning), execute (MiniMax first, DeepSeek behind, always the last hop), review (strong model grading against the plan). MiniMax is never the planner and never the reviewer.",
+      "meaning": "Every world-changing turn is plan (strong) / execute (MiniMax, always the last hop) / review (strong); MiniMax never plans or reviews.",
       "guard": "router lane config in idp/platform/llm/config.yaml; doc crew docs/rulings/R67-minimax-is-the-last-executor-planner-and-reviewer-bracket-it.md"
     },
     {
       "id": "R71-ceo-charter-daily-proof-fractal-decisions",
       "date": "2026-09-01",
       "verbatim": "Founder's dream is a fully autonomous AI company with human founder in the loop.",
-      "meaning": "The company is an AI research and tooling company; the CEO owns the charter end to end, reports daily with receipts (a report with no receipt is not a report), and decisions are fractal: consultant rounds standing, every department shows proof.",
+      "meaning": "AI research and tooling company; the CEO owns the charter, reports daily with receipts, decisions are fractal.",
       "guard": "record ~/.claude/docs/founder/2026-09-01T2007Z-first-of-all-this-is-what-we-have-c88b745c.md; doc crew docs/rulings/R71-ceo-charter-daily-proof-fractal-decisions.md"
     },
     {
       "id": "R72-two-harnesses-goose-and-our-own-bake-off",
       "date": "2026-09-01",
       "verbatim": "I like the idea of goose and also like the idea of our own harness ... I think we adopt both and see what wins out in the long term.",
-      "meaning": "Goose (Apache-2.0) is the off-the-shelf harness lane; our own harness is the verified router model (R67 made runnable as a DSPy program on the LiteLLM router). Claude Code stays but is one harness among several, watched for provider tie-in.",
+      "meaning": "Goose and our own harness both adopted; the long term decides; Claude Code is one harness among several.",
       "guard": "doc crew docs/rulings/R72-two-harnesses-goose-and-our-own-bake-off.md"
     },
     {
       "id": "R73-business-interfaces-eject-from-the-terminal",
       "date": "2026-09-01",
       "verbatim": "BUSINESS PEOPLE DO NOT USE COMMAND LINE.",
-      "meaning": "The terminal is a workshop tool, never the founder's surface. Business conversations happen on visual pages, voice and connected apps; cryptic talk to the founder (check names, hashes, tool words) is a defect every time. First deliverable: the founder's own daily surface.",
+      "meaning": "The terminal is never the founder's surface; business talk happens on visual pages, voice and apps, in plain language.",
       "guard": "record crew docs/founder/2026-09-01T2100Z-eject-from-the-harness-business-interfaces.md; doc crew docs/rulings/R73-business-interfaces-eject-from-the-terminal.md"
     },
     {
       "id": "R74-all-seeing-eye-boardroom-observability",
       "date": "2026-09-01",
       "verbatim": "Yes. ... see why the claude harness limits us.",
-      "meaning": "Boardroom observability: the whole agent workforce at a glance without typing a command; mobile Approve/Deny; durable execution that pauses and resumes; a spend-velocity circuit breaker; every agent thought and tool call stored as structured data; investor-grade visuals.",
+      "meaning": "Boardroom observability: workforce at a glance, mobile Approve/Deny, durable execution, spend circuit breaker, every agent step stored.",
       "guard": "records crew docs/founder/2026-09-01T2052Z-all-seeing-eye-external-consultant-founder-yes.md and 2026-09-01T2053Z-digital-twin-uber-elite-spec-founder-verbatim.md; doc crew docs/rulings/R74-all-seeing-eye-boardroom-observability.md"
     }
   ],
