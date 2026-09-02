@@ -354,6 +354,41 @@
       "verbatim": "we never cleannup every pr nust have cleanup section nandatory ... and i will defie what it says",
       "meaning": "Every pull request body carries a Cleanup section naming what the change removes or leaves behind. Said while 13 leftover worktrees sat inside the idp folder and 325 were registered. The founder defines the section's required content; until his definition lands the gate checks presence only.",
       "guard": "idp policy/operating_model.rego (operating-model gate) — presence rule, graded against every open PR before it merges."
+    },
+    {
+      "id": "R67-minimax-is-the-last-executor-planner-and-reviewer-bracket-it",
+      "date": "2026-09-01",
+      "verbatim": "MiniMax needs to be the last chain of execution really cheap and fast but need planner and reviewer.",
+      "meaning": "Every world-changing turn is plan (strong) / execute (MiniMax, always the last hop) / review (strong); MiniMax never plans or reviews.",
+      "guard": "router lane config in idp/platform/llm/config.yaml; doc crew docs/rulings/R67-minimax-is-the-last-executor-planner-and-reviewer-bracket-it.md"
+    },
+    {
+      "id": "R71-ceo-charter-daily-proof-fractal-decisions",
+      "date": "2026-09-01",
+      "verbatim": "Founder's dream is a fully autonomous AI company with human founder in the loop.",
+      "meaning": "AI research and tooling company; the CEO owns the charter, reports daily with receipts, decisions are fractal.",
+      "guard": "record ~/.claude/docs/founder/2026-09-01T2007Z-first-of-all-this-is-what-we-have-c88b745c.md; doc crew docs/rulings/R71-ceo-charter-daily-proof-fractal-decisions.md"
+    },
+    {
+      "id": "R72-two-harnesses-goose-and-our-own-bake-off",
+      "date": "2026-09-01",
+      "verbatim": "I like the idea of goose and also like the idea of our own harness ... I think we adopt both and see what wins out in the long term.",
+      "meaning": "Goose and our own harness both adopted; the long term decides; Claude Code is one harness among several.",
+      "guard": "doc crew docs/rulings/R72-two-harnesses-goose-and-our-own-bake-off.md"
+    },
+    {
+      "id": "R73-business-interfaces-eject-from-the-terminal",
+      "date": "2026-09-01",
+      "verbatim": "BUSINESS PEOPLE DO NOT USE COMMAND LINE.",
+      "meaning": "The terminal is never the founder's surface; business talk happens on visual pages, voice and apps, in plain language.",
+      "guard": "record crew docs/founder/2026-09-01T2100Z-eject-from-the-harness-business-interfaces.md; doc crew docs/rulings/R73-business-interfaces-eject-from-the-terminal.md"
+    },
+    {
+      "id": "R74-all-seeing-eye-boardroom-observability",
+      "date": "2026-09-01",
+      "verbatim": "Yes. ... see why the claude harness limits us.",
+      "meaning": "Boardroom observability: workforce at a glance, mobile Approve/Deny, durable execution, spend circuit breaker, every agent step stored.",
+      "guard": "records crew docs/founder/2026-09-01T2052Z-all-seeing-eye-external-consultant-founder-yes.md and 2026-09-01T2053Z-digital-twin-uber-elite-spec-founder-verbatim.md; doc crew docs/rulings/R74-all-seeing-eye-boardroom-observability.md"
     }
   ],
   "_numbering": "R19 and R20 are SKIPPED on purpose. R20 was already in use across idp/bin/port-gate, idp-ci and idp-verify for the loopback-bind ruling (only the gateway binds a non-loopback address) before this file existed, and two rulings sharing an id is the drift R12 forbids. Next free id is R54 (R53 landed 2026-08-29, crew#459; R52 2026-08-29; (R50 landed 2026-08-29, crew#584; R45 landed 2026-08-28, crew#584; R44 landed 2026-08-28, crew#66; R43 landed 2026-08-28, crew#66; R42 landed 2026-08-27 via claude-guards#144, crew#488) (R34-R37 landed 2026-08-25 via claude-guards#60); grep the estate for the id before you add one."
