@@ -45,7 +45,7 @@ how you build it; this is what you are building.
 
 # The laws
 
-Fifty-three rules, in priority order, numbered to 53. **When two laws want different things, the lower number wins.**
+Fifty-five rules, in priority order, numbered to 55. **When two laws want different things, the lower number wins.**
 That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
 kept firing while LAW 1 was still open.
 
@@ -80,12 +80,12 @@ kept firing while LAW 1 was still open.
 | 25 | Checkpoint before you switch | the moment you leave one issue for another |
 | 26 | Crew is the sync layer | before touching anything another agent depends on |
 | 27 | Make the setup need you once, then never again | before you ask the founder for any hand |
-| 28 | An instrument nobody reads is not an instrument | whenever you add a log, a metric, an alert or a receipt |
+| 28 | An instrument nobody reads is not an instrument | whenever you add an instrument |
 | 29 | Attribute before you repair | before every fix that claims to know why |
 | 30 | Experience accumulates, or it is not research | every time a run produces something worth knowing |
 | 31 | The founder does not run scripts | every time you build something a person has to invoke |
 | 32 | A feature ships with a demo and an onboarding | before any new feature is pushed |
-| 33 | Define done before you start, in commands | before the first edit, and before any word of status |
+| 33 | Define done before you start, in commands | before the first edit |
 | 34 | Provider agnostic from day 0, Claude included | before the first line of anything new |
 | 35 | Get better at getting better | every improvement, and once a week on the loop itself |
 | 36 | Know who the platform is for | before you call any platform work finished |
@@ -95,17 +95,19 @@ kept firing while LAW 1 was still open.
 | 40 | Build it so it could be sold | every module, before you call it finished |
 | 41 | Build for the buyer arriving tomorrow | every surface, and the risk register, continuously |
 | 42 | The most capable agent works only multipliers | before the top-tier session accepts any task |
-| 43 | Never reinvent the wheel and do a worse job | before the first line of anything a mature tool already does; the research is online, autonomous, and on the record |
+| 43 | Never reinvent the wheel and do a worse job | before the first line of anything a mature tool already does |
 | 44 | A law without a protocol is a wish | every law, and the moment the founder repeats any instruction |
-| 45 | Your mistake ends as a guard no session can walk past, proved over every instance | the moment any mistake is found; the mistake is not closed until the sweep is clean |
+| 45 | Your mistake ends as a guard no session can walk past, proved over every instance | the moment any mistake is found |
 | 46 | No hardcoding: a file never names where the checkout, the home directory or the machine lives | before any path, host, port, account or credential is typed as a literal |
-| 47 | A founder blocker is loud, visible and one action: push notification plus a `FOUNDER ACTION:` line with the exact URL or word | the moment any step depends on the founder |
-| 48 | Continuous execution: a broken state found while answering a question is fixed in the same turn, never reported and parked | the moment a status check, a question or an investigation turns up a P1, a broken state or an easy bug |
+| 47 | A founder blocker is loud and one action: push notification plus a `FOUNDER ACTION:` line with the exact URL or word | the moment any step depends on the founder |
+| 48 | Continuous execution: a broken state found while answering is fixed in the same turn, never reported and parked (full text `~/AGENTS-FULL.md`) | the moment any check, question or investigation turns up a broken state |
 | 49 | Lazy consensus: a safe or reversible action is done and announced `STAGED:` with a 60-minute timer, never asked | before any action that can be defaulted or reversed |
-| 50 | Every workload emits to the central collector, and coverage is proved by querying the backend, never by scanning files; admission refuses a workload that does not emit | every workload admitted to a cluster, every Mac and cloud surface, and every coverage query the snapshot runs |
-| 51 | Plan, then optimise the plan like a slow algorithm, before any execution: naive steps and round trips counted, bottleneck named, memoize / parallelise / lazy / batch, count again, `Optimised:` line in the PR body and on the board, then execute (founder 2026-08-29, crew#584; ruling R50; procedure in `~/AGENTS-FULL.md`) | before any execution: a feature, a fix, an investigation, a migration, a worker task |
+| 50 | Every workload emits to the central collector; coverage is proved by querying the backend, never by scanning files; admission refuses a workload that does not emit (full text `~/AGENTS-FULL.md`) | every workload and every coverage query |
+| 51 | Plan, then optimise the plan before any execution: steps and round trips counted, bottleneck named, batch / parallelise, count again, `Optimised:` line in the PR body (R50; procedure in `~/AGENTS-FULL.md`) | before any execution |
 | 52 | One root per provider, set once; code mints the rest; never a console step (R52, full text `~/AGENTS-FULL.md`) | every credential |
 | 53 | Drills and tests grade features, never look and feel: sign in, pages answer, links work, third-party logins hold; no selector, test id or layout word in any drill or test (R53) | before a drill or test touches a page |
+| 54 | The founder is enterprise client zero: graded as a paying client — no terminal, no repo secret, no fresh key while one exists; across the board (R75, full text `~/AGENTS-FULL.md`) | every founder-facing step |
+| 55 | Shell discipline: pipefail on every pipe; bulk runs emit only a summary, raw logs never read into context; atomic commands (full text `~/AGENTS-FULL.md`) | every shell command |
 
 Law prose, history and move notes: `~/AGENTS-FULL.md`; incidents: `~/.claude/LAWS-INCIDENTS.md`.
 

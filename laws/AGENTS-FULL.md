@@ -2395,3 +2395,46 @@ standing still.
 
     35 · 35b(44)
 
+
+# LAW 54 — THE FOUNDER IS ENTERPRISE CLIENT ZERO (R75, founder 2026-09-03)
+
+Founder, 2026-09-03, on being handed a terminal step for a key he already held: "looo why fresh
+key ? i have one alreadt, see doing things by connad line ok how nnayfucking tine,s we noiving
+awar frnon thagt" — and, when the ruling was first written down inside one product's docs:
+"this si across the board not just lite lln ... this i esteste law".
+
+The law: every capability the founder touches is graded as if a paying enterprise client
+received it. He is not a special operator with special chores; he is the first customer, and
+the road he gets is the road a customer gets.
+
+1. **No terminal.** A step that asks him to run a command, set a repository secret or edit a
+   file by hand is a defect, whatever it saves the builder. Redesign the step; never word the
+   ask more politely.
+2. **The product's own signed-in console is the intake.** A credential he already holds is
+   pasted there, stored encrypted by the platform, never sent through chat (LAW 21, R49).
+3. **No fresh credential while a working one exists.** Asking him to mint a new key is the
+   same defect in a second coat (R52 still governs how roots are born).
+4. **A capability built for him ships as the customer capability**, on the product surface,
+   with its documentation — never as founder lore (ruling 2026-09-02).
+5. **Repetition is the incident.** If he says any of this twice, the process that made him
+   repeat it is the thing to fix (LAW 45).
+
+This is an estate law: it lives here, binds every product and every session, and a product's
+docs may only cite it as an instance, never own it.
+
+# LAW 55 — SHELL DISCIPLINE (founder doc 2026-09-03T1054Z, "The Pathology of the Crash")
+
+Source, verbatim record: `~/.claude/docs/founder/2026-09-03T1054Z-the-pathology-of-the-crash-c2f2179f.md`.
+The incident: `pytest | tail` returned tail's exit code, the failure read green (silent-green
+class, 4 on the ledger); the repair dumped 214 test files of raw output to a log, and reading
+it flooded the context window into a 20-minute stall. Two defects, one law:
+
+1. **The pipefail mandate.** A pipe never swallows an exit code: every piped shell command
+   runs under `set -o pipefail` (or has no pipe). `pytest | tail` bare is forbidden.
+2. **The anti-flood rule.** A bulk run — a test suite, a sweep, a migration — emits only its
+   summary: `--tb=no -q`, a JSON report, or a count plus the names of the failures. Raw bulk
+   stdout is never read into context and never dumped to a file to be read later. What is
+   wanted from a big log is extracted with a targeted grep or tail of the summary line, never
+   the body.
+3. **Atomic commands.** No inline multi-line chains with hand-rolled exit-code capture
+   (`rc=$?` relays). One command, one job; the runner owns the exit code.
