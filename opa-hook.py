@@ -136,18 +136,91 @@ def standing_focus() -> str:
         return ""
 
 
+BLIND_BACKOFF_S = 60  # a blind session's refusals must stay under the hook's 15 s budget
+REFETCH_TIMEOUT_S = 3  # three posts per fetch at most, so one re-fetch is under 10 s
+
+
+def _relay():
+    """estate-state-relay.py loaded by path (the file name has a hyphen). The hook re-uses the
+    relay's fetch so there is one MCP client, not a second copy of it."""
+    import importlib.machinery
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "estate-state-relay.py")
+    loader = importlib.machinery.SourceFileLoader("estate_state_relay", path)
+    mod = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    loader.exec_module(mod)
+    return mod
+
+
+def _read_cache(path: str) -> tuple[dict, float]:
+    with open(path, encoding="utf-8") as fh:
+        state = json.load(fh)
+    fetched = calendar.timegm(time.strptime(state["fetched_at"], "%Y-%m-%dT%H:%M:%SZ"))  # UTC in, UTC out; the Mac clock is BST
+    return state, (time.time() - fetched) / 60
+
+
+def _refetch(path: str, marker: str) -> str:
+    """One re-fetch through the relay (the call SessionStart makes). Returns '' on success and
+    the reason on failure; a failure is remembered in `marker` for BLIND_BACKOFF_S so a blind
+    session is refused quickly rather than re-dialling the MCP on every tool call."""
+    try:
+        with open(marker, encoding="utf-8") as fh:
+            last = json.load(fh)
+        if time.time() - float(last.get("at", 0)) < BLIND_BACKOFF_S:
+            return str(last.get("reason") or "the last fetch failed")
+    except (OSError, ValueError, TypeError):
+        pass
+    try:
+        relay = _relay()
+        relay.TIMEOUT = REFETCH_TIMEOUT_S
+        state = relay.fetch()
+        state["fetched_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(state, fh)
+        try:
+            os.remove(marker)
+        except OSError:
+            pass
+        return ""
+    except Exception as e:  # noqa: BLE001 - every failure is one blind reason, never a crash
+        detail = str(getattr(e, "filename", None) or e)  # a missing file names the file, not a cut-off path
+        if len(detail) > 160:
+            detail = detail[:80] + " ... " + detail[-75:]
+        reason = f"{type(e).__name__}: {detail}"
+        try:
+            os.makedirs(os.path.dirname(marker), exist_ok=True)
+            with open(marker, "w", encoding="utf-8") as fh:
+                json.dump({"at": time.time(), "reason": reason}, fh)
+        except OSError:
+            pass
+        return reason
+
+
 def estate_snapshot() -> dict:
     """The cached estate state document (written by estate-state-relay.py at SessionStart), handed
     to the policies as input.estate. `fresh` is the one derived field: available, not stale, and
-    fetched under 30 minutes ago. Everything else is the document, verbatim (crew#648 CP4)."""
+    fetched under 30 minutes ago. Everything else is the document, verbatim (crew#648 CP4).
+
+    Founder, 2026-09-03: "no agent can proceed without it." When the cache is missing, unavailable
+    or older than 30 minutes, one re-fetch runs through the relay. If there is still no document
+    the result is `blind`, with the reason; policy/hooks.rego and policy/reply.rego decide what a
+    blind session may do (fetch, or reply BLOCKED:). This function decides nothing."""
     path = os.path.expanduser("~/.estate/estate-state.json")
+    marker = os.path.expanduser("~/.estate/estate-state.blind.json")
     try:
-        with open(path, encoding="utf-8") as fh:
-            state = json.load(fh)
-        fetched = calendar.timegm(time.strptime(state["fetched_at"], "%Y-%m-%dT%H:%M:%SZ"))  # UTC in, UTC out; the Mac clock is BST
-        age_min = (time.time() - fetched) / 60
+        state, age_min = _read_cache(path)
     except (OSError, ValueError, KeyError, TypeError):
-        return {"fresh": False}
+        state, age_min = {}, None
+    if not state.get("available") or age_min is None or age_min >= 30:
+        fetch_error = _refetch(path, marker)
+        try:
+            state, age_min = _read_cache(path)
+        except (OSError, ValueError, KeyError, TypeError):
+            state, age_min = {}, None
+        if not state.get("available") or age_min is None:
+            reason = fetch_error or str(state.get("reason") or "the estate MCP answered available=false")
+            return {"fresh": False, "blind": True, "blind_reason": reason}
     fresh = bool(state.get("available")) and not state.get("stale") and age_min < 30
     return {"fresh": fresh, "age_minutes": round(age_min, 1), "document": state.get("document") or {}}
 

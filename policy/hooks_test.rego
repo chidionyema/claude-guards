@@ -211,3 +211,23 @@ test_a_read_the_document_does_not_hold_passes if {
 test_snapshot_override_passes if {
 	count(hooks.deny) == 0 with input as bash_with_estate("flux get kustomizations -A  # snapshot-refresh-intended", fresh_estate)
 }
+
+blind_estate := {"fresh": false, "blind": true, "blind_reason": "LookupError: no mcpServers.estate.url in ~/.claude.json"}
+
+test_a_blind_session_is_refused_every_tool_call_and_told_the_fetch if {
+	some m in hooks.deny with input as bash_with_estate("ls", blind_estate)
+	contains(m, "estate-state-relay.py --fetch")
+	contains(m, "mcpServers.estate.url")
+	count(hooks.deny) == 1 with input as {"tool_name": "Write", "tool_input": {"file_path": "/Users/x/dev/code/idp/NOTES.md", "content": "# docs-path-intended: fixture for a test\n"}, "estate": blind_estate}
+}
+
+test_a_blind_session_may_fetch_the_document if {
+	count(hooks.deny) == 0 with input as bash_with_estate("python3 ~/.claude/scripts/estate-state-relay.py --fetch", blind_estate)
+	count(hooks.deny) == 0 with input as {"tool_name": "mcp__estate__get_estate_state", "tool_input": {}, "estate": blind_estate}
+}
+
+test_a_session_with_a_document_is_not_blind if {
+	count(hooks.deny) == 0 with input as bash_with_estate("ls", fresh_estate)
+	count(hooks.deny) == 0 with input as bash_with_estate("ls", {"fresh": false, "age_minutes": 41, "document": {}})
+	count(hooks.deny) == 0 with input as bash_with_estate("ls", {})
+}

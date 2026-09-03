@@ -230,3 +230,17 @@ deny contains msg if {
 		[concat("\n  ", sort(estate_red_rows))],
 	)
 }
+
+# The estate snapshot is mandatory (founder 2026-09-03). A session whose input.estate.blind is
+# true never read the state document, so nothing it reports about the estate is grounded. Its
+# reply may only be a `BLOCKED:` naming that the estate MCP could not be read; any other first
+# line is refused. (hooks.rego refuses the tool calls; this rule refuses the report.)
+deny contains msg if {
+	input.event == "Stop"
+	object.get(input, ["estate", "blind"], false) == true
+	not startswith(trim_space(input.reply), "BLOCKED:")
+	msg := sprintf(
+		"BLOCKED (the estate snapshot is mandatory, founder 2026-09-03): this session has no estate state document (%s), so nothing it says about the estate is grounded. The first line of the reply must be `BLOCKED:` naming that the estate MCP could not be read, after `python3 ~/.claude/scripts/estate-state-relay.py --fetch` was tried; nothing else is reported from a blind session.",
+		[object.get(input, ["estate", "blind_reason"], "reason not recorded")],
+	)
+}

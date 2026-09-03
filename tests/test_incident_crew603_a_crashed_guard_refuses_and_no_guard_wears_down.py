@@ -122,16 +122,25 @@ def test_opa_hook_unreadable_payload_refuses():
     assert proc.returncode == 2 and "payload is not JSON" in json.loads(proc.stdout)["reason"]
 
 
-def test_opa_hook_refuses_a_rogue_markdown_and_allows_an_explanation_doc():
+def test_opa_hook_refuses_a_rogue_markdown_and_allows_an_explanation_doc(tmp_path):
     import shutil
+    import time
     if not shutil.which("opa"):
         import pytest
         pytest.skip("opa not installed here; the rego suite covers the rule")
+    # A seeing session: the estate snapshot is mandatory (founder 2026-09-03), so a HOME with no
+    # state document is refused on every call before this rule is ever reached. Give the hook a
+    # fresh cache so what is graded here is the docs-path rule and nothing else.
+    (tmp_path / ".estate").mkdir()
+    (tmp_path / ".estate" / "estate-state.json").write_text(json.dumps({
+        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "available": True,
+        "stale": False, "document": {}}))
+    home = {"HOME": str(tmp_path)}
     rogue = _opa({"hook_event_name": "PreToolUse", "tool_name": "Write",
-                  "tool_input": {"file_path": "/Users/x/dev/code/idp/RESEARCH.md", "content": "# r"}})
+                  "tool_input": {"file_path": "/Users/x/dev/code/idp/RESEARCH.md", "content": "# r"}}, **home)
     assert rogue.returncode == 2 and "ADR 0002" in rogue.stderr
     fine = _opa({"hook_event_name": "PreToolUse", "tool_name": "Write",
-                 "tool_input": {"file_path": "/Users/x/dev/code/idp/docs/explanation/r.md", "content": "# r"}})
+                 "tool_input": {"file_path": "/Users/x/dev/code/idp/docs/explanation/r.md", "content": "# r"}}, **home)
     assert fine.returncode == 0, fine.stderr
 
 

@@ -171,3 +171,16 @@ test_a_stale_or_missing_document_refuses_nothing if {
 	count(deny) == 0 with input as {"event": "Stop", "reply": "DONE: estate is green", "estate": {"fresh": false}}
 	count(deny) == 0 with input as {"event": "Stop", "reply": "DONE: estate is green"}
 }
+
+blind_estate := {"fresh": false, "blind": true, "blind_reason": "HTTPError: HTTP Error 503: Service Unavailable"}
+
+test_a_blind_session_may_only_reply_blocked if {
+	some m in deny with input as {"event": "Stop", "reply": "INVENTORY: the relay change is pushed.\n", "estate": blind_estate}
+	contains(m, "503")
+	count(deny) == 0 with input as {"event": "Stop", "reply": "BLOCKED: the estate MCP could not be read (HTTP 503) after estate-state-relay.py --fetch; nothing here is grounded.\n", "estate": blind_estate}
+}
+
+test_a_session_with_a_document_reports_as_usual if {
+	count(deny) == 0 with input as {"event": "Stop", "reply": "INVENTORY: the relay change is pushed.\n", "estate": {"fresh": true, "age_minutes": 2, "document": {"runtime": {"clusters": [], "surfaces": []}}}}
+	count(deny) == 0 with input as {"event": "Stop", "reply": "INVENTORY: the relay change is pushed.\n"}
+}

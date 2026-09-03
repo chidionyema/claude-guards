@@ -248,3 +248,26 @@ deny contains msg if {
 		[section, object.get(input, ["estate", "age_minutes"], 0), snapshot_override],
 	)
 }
+
+# ---------------------------------------------------------------------------
+# The estate snapshot is mandatory (founder 2026-09-03: "no agent can proceed without it,
+# furthermore I need to know exactly what it contains"). opa-hook.py hands input.estate.blind ==
+# true when the state document could not be read from the cache nor from the estate MCP after
+# one re-fetch. A blind session may do exactly two things: fetch the document (the relay, or the
+# MCP tool itself) and reply `BLOCKED:` naming the blindness (policy/reply.rego). Everything else
+# is refused, with the one command that ends the blindness.
+blind_exempt if input.tool_name == "mcp__estate__get_estate_state"
+
+blind_exempt if {
+	input.tool_name == "Bash"
+	regex.match(`estate-state-relay\.py`, object.get(input, ["tool_input", "command"], ""))
+}
+
+deny contains msg if {
+	object.get(input, ["estate", "blind"], false) == true
+	not blind_exempt
+	msg := sprintf(
+		"BLOCKED (the estate snapshot is mandatory, founder 2026-09-03): this session has no estate state document (%s), and no agent proceeds without it. Run `python3 ~/.claude/scripts/estate-state-relay.py --fetch` and read what it prints. If it still reads BLIND, reply `BLOCKED:` naming the estate MCP as unreadable, and do nothing else.",
+		[object.get(input, ["estate", "blind_reason"], "reason not recorded")],
+	)
+}
