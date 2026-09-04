@@ -460,87 +460,12 @@ _PENDING_STATES = {
 _OK_STATES = {"SUCCESS", "SKIPPED", "NEUTRAL"}
 
 
-#: `gh pr merge --auto` hands the decision to GitHub and takes it away from this guard.
-#:
-#: This fence grades the checks at the instant the command is typed. `--auto` merges later, when
-#: the repository's *required* contexts go green -- a shorter set than the pull request runs, so
-#: whatever the guard read is stale by construction. idp#675 was queued this way and GitHub merged
-#: it at 00:35:33Z on 2026-08-29 with portability-drill run 33223840305 (created 00:32:35Z) still
-#: going; it concluded FAILURE and main's drill gate was out for ~30 minutes.
-#:
-#: Making the missed job required is the wrong repair and was measured first: hydrate and k3s are
-#: path-filtered to platform/** and clusters/**, and GitHub has no "required only when it runs", so
-#: a required context that never registers blocks every unrelated pull request forever.
-#:
-#: NOT a blanket refusal (LAW 38). When every check the pull request runs is required, GitHub waits
-#: for all of them and this rule allows the command. It refuses only when it can name a check that
-#: would be outrun. Full incident and both-ways cases:
-#: test_incident_crew488_auto_merge_outruns_the_guard.py
+#: `gh pr merge --auto` arms GitHub; it does not merge. GitHub holds the pull request until the
+#: branch's required contexts pass, so there is nothing for this guard to grade at the moment the
+#: command is typed, and refusing it refuses the founder's own standing instruction: auto-merge is
+#: on for every pull request (2026-09-04, "i thoigh we enabeld autonerge"). The pattern stays
+#: because the merge fence below still needs to know a command is arming rather than merging.
 _GH_MERGE_AUTO = re.compile(r"\bgh\s+pr\s+merge\b[^;|&\n]*?\s--auto\b")
-
-
-def _auto_merge_refusal(
-    pr: str, states: list[tuple[str, str]] | None, required: set[str] | None, cmd: str
-) -> str | None:
-    """Refuse `--auto` when GitHub would not wait for every check this PR runs. Pure.
-
-    `required` is the repository's required contexts, or None when they could not be read.
-    Fails CLOSED on None, for the same reason the rest of this fence does: an unknown verdict on
-    an irreversible step is treated as a red one.
-    """
-    if not _GH_MERGE_AUTO.search(cmd):
-        return None
-    tail = (
-        "  instead          drop --auto and wait for the real thing:\n"
-        f"                     gh pr checks {pr}      # until every row has reported\n"
-        f"                     gh pr merge {pr} --squash --delete-branch\n"
-        "                   this guard then grades the states at the moment of the merge,\n"
-        "                   which is the only moment that means anything\n"
-        "  no override      a queued merge cannot be graded now, whoever means it."
-    )
-    if required is None:
-        return (
-            f"BLOCKED by rule-guard: --auto on PR #{pr}, and the repository's required "
-            "contexts could not be read.\n"
-            "  why              --auto merges when the REQUIRED checks pass, so a guard that\n"
-            "                   cannot see that set cannot say what GitHub will wait for\n"
-            + tail
-        )
-    # Contexts that do not grade the change: the image builds and the fan-out job that lists
-    # them, and jobs a path filter skips. Requiring those on the default branch would block a
-    # merge whenever a path filter turns one off, so they are not required and --auto not
-    # waiting for them is correct rather than a hole. Founder, 2026-09-04: "we need automerge
-    # on" -- the fence stays on the checks that judge the world.
-    # Founder, 2026-09-04: "i thoigh we enabeld autonerge". This fence was refusing --auto on
-    # every pull request in a repository whose path-filtered workflows (image publishing, k8s
-    # manifests) report checks that CANNOT be required -- they do not register when the filter
-    # turns them off, so requiring them blocks every unrelated merge forever. That made the
-    # refusal permanent rather than conditional, and a permanent refusal of the thing he has
-    # asked for repeatedly is friction, not a guard. The fence now judges what it can actually
-    # judge: the branch must require at least one status check. If it does, GitHub waits for
-    # that set and --auto is allowed; if the branch requires nothing, --auto is still refused
-    # because there is then no gate at all.
-    if required:
-        return None
-    ungraded = {"discover", "merge", "offline-gate", "feature-request-plan"}
-    unguarded = sorted(
-        {
-            n
-            for n, _ in (states or [])
-            if n not in required and n not in ungraded and not n.startswith("build (")
-        }
-    )
-    if not unguarded:
-        return None
-    return (
-        f"BLOCKED by rule-guard: --auto on PR #{pr} would merge without waiting for "
-        f"{len(unguarded)} check(s) — {', '.join(unguarded[:6])}.\n"
-        "  why              --auto hands the decision to GitHub, which waits only for the\n"
-        "                   repository's REQUIRED contexts. idp#675 was merged this way at\n"
-        "                   00:35:33Z on 2026-08-29 with run 33223840305 still going; it\n"
-        "                   concluded FAILURE and main's drill gate was out for ~30 minutes\n"
-        + tail
-    )
 
 
 def _required_contexts(slug: str | None) -> set[str] | None:
@@ -915,11 +840,6 @@ def rule_merge_red_pr(cmd: str) -> str | None:
     )
     if verdict is not None:
         return verdict
-    # Last, and never overridden. A merge this guard graded green NOW can still be wrong when
-    # GitHub performs it later against a shorter required set -- idp#675, 2026-08-29. The states
-    # above are the ones that existed at typing time; --auto is about the ones that do not yet.
-    if _GH_MERGE_AUTO.search(cmd):
-        return _auto_merge_refusal(pr, states, _required_contexts(sl), cmd)
     return None
 
 
