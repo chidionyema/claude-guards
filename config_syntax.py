@@ -154,9 +154,20 @@ def _check_xml(src: str) -> None:
     ET.fromstring(src)
 
 
+#: Directories whose contents are templates rendered before anything parses them.
+#: A Backstage scaffolder skeleton is Jinja source -- `tenant_id: {{ values.slug }}`
+#: is not YAML and is never meant to be, because the scaffolder substitutes the
+#: values and only the rendered result is read as config. Judging the unrendered
+#: source refuses a correct file, and a guard that refuses correct work is an
+#: outage (LAW 38). Added 2026-09-04 when it blocked crew#819's template.
+TEMPLATE_DIRS = {"skeleton"}
+
+
 def checker_for(file_path: str | Path):
     """Return the parse function for this path, or None if it is not a config file."""
     path = Path(file_path)
+    if TEMPLATE_DIRS & set(path.parts):
+        return None
     suffix = path.suffix.lower()
     if suffix in (".yml", ".yaml"):
         return _check_yaml
