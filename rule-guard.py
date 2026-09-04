@@ -484,7 +484,7 @@ def _required_contexts(slug: str | None) -> set[str] | None:
     return out
 
 
-def _merge_refusal(pr: str, states: list[tuple[str, str]] | None) -> str | None:
+def _merge_refusal(pr: str, states: list[tuple[str, str]] | None, auto: bool = False) -> str | None:
     """Refuse `gh pr merge <pr>`? Pure, given the checks, so the decision is testable offline.
 
     `states` is (check name, state) pairs, or None when they could not be read at all.
@@ -513,7 +513,11 @@ def _merge_refusal(pr: str, states: list[tuple[str, str]] | None) -> str | None:
                 "                   read the states, never the exit code\n"
                 "  no override      `merge-red-intended` does not open this one. A check that\n"
                 "                   finished and did not pass is an answer, not an outage.")
-    if waiting:
+    # `--auto` does not merge now. GitHub holds the pull request until its checks pass and
+    # merges it itself, so the harm this fence names -- evicting main's queued run by merging
+    # while checks are in flight -- cannot happen. Refusing it made auto-merge unusable and
+    # turned every merge into a poll, which is what it exists to avoid (2026-09-04).
+    if waiting and not auto:
         return (f"BLOCKED by rule-guard: PR #{pr} still has {len(waiting)} check(s) running — "
                 f"{', '.join(waiting[:6])}.\n"
                 "  why              merging now cancels main's queued run: GitHub keeps one\n"
@@ -593,7 +597,8 @@ def _main_red_refusal(slug: str | None = None) -> str | None:
 
 
 def _merge_verdict(pr: str, states: list[tuple[str, str]] | None,
-                   escaped: bool, main_red: str | None, fixing_main: bool) -> str | None:
+                   escaped: bool, main_red: str | None, fixing_main: bool,
+                   auto: bool = False) -> str | None:
     """The whole merge decision, pure, so every branch of it is tested offline.
 
     Two fences, in order. The PR's own checks decide first, and `merge-red-intended` opens
@@ -605,7 +610,7 @@ def _merge_verdict(pr: str, states: list[tuple[str, str]] | None,
     own red, so nobody can tell whose fault it is. `main-is-red` is the marker for the merge that
     fixes it, and it says out loud what is being done.
     """
-    refusal = _merge_refusal(pr, states)
+    refusal = _merge_refusal(pr, states, auto)
     if refusal is not None:
         if escaped and states is None:
             return None    # the outage case, deliberately overridden
@@ -695,7 +700,8 @@ def rule_merge_red_pr(cmd: str) -> str | None:
     states = _pr_check_states(pr, cmd)
     verdict = _merge_verdict(pr, states, escaped,
                              _main_red_refusal(sl) if sl else _main_red_refusal(),
-                             "main-is-red" in cmd)
+                             "main-is-red" in cmd,
+                             _GH_MERGE_AUTO.search(cmd) is not None)
     if verdict is not None:
         return verdict
     # Last, and never overridden. A merge this guard graded green NOW can still be wrong when
