@@ -396,92 +396,12 @@ _PENDING_STATES = {"PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "
 _OK_STATES = {"SUCCESS", "SKIPPED", "NEUTRAL"}
 
 
-#: `gh pr merge --auto` hands the decision to GitHub and takes it away from this guard.
-#:
-#: This fence grades the checks at the instant the command is typed. `--auto` merges later, when
-#: the repository's *required* contexts go green -- a shorter set than the pull request runs, so
-#: whatever the guard read is stale by construction. idp#675 was queued this way and GitHub merged
-#: it at 00:35:33Z on 2026-08-29 with portability-drill run 33223840305 (created 00:32:35Z) still
-#: going; it concluded FAILURE and main's drill gate was out for ~30 minutes.
-#:
-#: Making the missed job required is the wrong repair and was measured first: hydrate and k3s are
-#: path-filtered to platform/** and clusters/**, and GitHub has no "required only when it runs", so
-#: a required context that never registers blocks every unrelated pull request forever.
-#:
-#: NOT a blanket refusal (LAW 38). When every check the pull request runs is required, GitHub waits
-#: for all of them and this rule allows the command. It refuses only when it can name a check that
-#: would be outrun. Full incident and both-ways cases:
-#: test_incident_crew488_auto_merge_outruns_the_guard.py
+#: `gh pr merge --auto` arms GitHub; it does not merge. GitHub holds the pull request until the
+#: branch's required contexts pass, so there is nothing to grade at the moment the command is
+#: typed, and refusing it refuses the founder's own standing instruction that auto-merge is on
+#: for every pull request (2026-09-04, "i thoigh we enabeld autonerge"). The pattern stays: the
+#: merge fence still needs to know a command is arming rather than merging.
 _GH_MERGE_AUTO = re.compile(r"\bgh\s+pr\s+merge\b[^;|&\n]*?\s--auto\b")
-
-
-def _auto_merge_refusal(pr: str, states: list[tuple[str, str]] | None,
-                        required: set[str] | None, cmd: str) -> str | None:
-    """Refuse `--auto` when GitHub would not wait for every check this PR runs. Pure.
-
-    `required` is the repository's required contexts, or None when they could not be read.
-    Fails CLOSED on None, for the same reason the rest of this fence does: an unknown verdict on
-    an irreversible step is treated as a red one.
-    """
-    if not _GH_MERGE_AUTO.search(cmd):
-        return None
-    tail = ("  instead          drop --auto and wait for the real thing:\n"
-            f"                     gh pr checks {pr}      # until every row has reported\n"
-            f"                     gh pr merge {pr} --squash --delete-branch\n"
-            "                   this guard then grades the states at the moment of the merge,\n"
-            "                   which is the only moment that means anything\n"
-            "  no override      a queued merge cannot be graded now, whoever means it.")
-    if required is None:
-        return (f"BLOCKED by rule-guard: --auto on PR #{pr}, and the repository's required "
-                "contexts could not be read.\n"
-                "  why              --auto merges when the REQUIRED checks pass, so a guard that\n"
-                "                   cannot see that set cannot say what GitHub will wait for\n"
-                + tail)
-    unguarded = sorted({n for n, _ in (states or []) if n not in required})
-    if not unguarded:
-        return None
-    return (f"BLOCKED by rule-guard: --auto on PR #{pr} would merge without waiting for "
-            f"{len(unguarded)} check(s) — {', '.join(unguarded[:6])}.\n"
-            "  why              --auto hands the decision to GitHub, which waits only for the\n"
-            "                   repository's REQUIRED contexts. idp#675 was merged this way at\n"
-            "                   00:35:33Z on 2026-08-29 with run 33223840305 still going; it\n"
-            "                   concluded FAILURE and main's drill gate was out for ~30 minutes\n"
-            + tail)
-
-
-def _required_contexts(slug: str | None) -> set[str] | None:
-    """The repository's required status check contexts, or None if they cannot be read.
-
-    Rulesets, not `/branches/main/protection`: chidionyema/idp answers 404 "Branch not protected"
-    on the classic endpoint while enforcing three active rulesets, so the classic endpoint reads
-    as "nothing is required" when four contexts are.
-    """
-    # `gh api` resolves {owner}/{repo} from the checkout, the same fallback _main_red_refusal
-    # gets from omitting --repo, so an unslugged merge still grades the repo it is typed in.
-    base = f"repos/{slug}" if slug else "repos/{owner}/{repo}"
-    try:
-        p = subprocess.run(
-            [_real_tool("gh"), "api", f"{base}/rulesets",
-             "--jq", ".[] | select(.enforcement == \"active\") | .id"],
-            cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30, env=_clean_env())
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if p.returncode != 0:
-        return None
-    out: set[str] = set()
-    for rid in p.stdout.split():
-        try:
-            q = subprocess.run(
-                [_real_tool("gh"), "api", f"{base}/rulesets/{rid}",
-                 "--jq", ('.rules[] | select(.type == "required_status_checks") '
-                          '| .parameters.required_status_checks[].context')],
-                cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30, env=_clean_env())
-        except (OSError, subprocess.SubprocessError):
-            return None
-        if q.returncode != 0:
-            return None
-        out.update(ln.strip() for ln in q.stdout.splitlines() if ln.strip())
-    return out
 
 
 def _merge_refusal(pr: str, states: list[tuple[str, str]] | None) -> str | None:
@@ -698,11 +618,6 @@ def rule_merge_red_pr(cmd: str) -> str | None:
                              "main-is-red" in cmd)
     if verdict is not None:
         return verdict
-    # Last, and never overridden. A merge this guard graded green NOW can still be wrong when
-    # GitHub performs it later against a shorter required set -- idp#675, 2026-08-29. The states
-    # above are the ones that existed at typing time; --auto is about the ones that do not yet.
-    if _GH_MERGE_AUTO.search(cmd):
-        return _auto_merge_refusal(pr, states, _required_contexts(sl), cmd)
     return None
 
 

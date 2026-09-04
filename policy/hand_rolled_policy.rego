@@ -78,7 +78,14 @@ legacy := {
 	# WHY: idp#675 was merged by --auto at 00:35:33Z with portability-drill run 33223840305 still
 	# going; it concluded FAILURE and main's gate was out ~30 min. Adapter gathers, Rego decides is
 	# the shape this becomes when a runner can hand OPA the check names and the required set.
-	"rule-guard.py": 1452,
+	# 1452 -> 1367 on 2026-09-04 (session 5f6f4e72). A fall. rules_count is unchanged at 7: what
+	# goes is a dimension inside rule_merge_red_pr, not a rule function. The --auto refusal and
+	# the required-context lookup that fed it are deleted. Arming
+	# auto-merge is not a merge -- GitHub holds the pull request until the branch's required
+	# contexts pass -- so there was nothing to grade at the moment the command was typed, and
+	# the rule was refusing the founder's own standing instruction that auto-merge is on for
+	# every pull request.
+	"rule-guard.py": 1367,
 	# crew#407 (claude-guards#118): the credential shapes use lookarounds ((?!...), (?<!...)) that
 	# RE2, and so OPA, cannot run, and the one definition is estate_alert.credential_shape, shared
 	# with the Telegram senders (#113). The hook is the adapter for two events (Stop reply text,
