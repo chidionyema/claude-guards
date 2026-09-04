@@ -9,6 +9,7 @@ merge landed, and the qa check concluded FAILURE on code already on main.
 The rule: a `gh pr merge` whose PR the guard cannot attribute is refused, never waved
 through. Rung 4, incident test, named for the bug.
 """
+
 import importlib.machinery
 import importlib.util
 import os
@@ -20,7 +21,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 def _load():
     loader = importlib.machinery.SourceFileLoader(
-        "rule_guard", os.path.join(HERE, "rule-guard.py"))
+        "rule_guard", os.path.join(HERE, "rule-guard.py")
+    )
     spec = importlib.util.spec_from_loader("rule_guard", loader)
     mod = importlib.util.module_from_spec(spec)
     loader.exec_module(mod)
@@ -29,9 +31,12 @@ def _load():
 
 def test_a_merge_with_no_literal_number_outside_any_repo_is_refused(tmp_path):
     mod = _load()
-    mod._ACTIVE_REPO = str(tmp_path)   # empty dir: rev-parse fails, gh has nothing to view
+    mod._ACTIVE_REPO = str(
+        tmp_path
+    )  # empty dir: rev-parse fails, gh has nothing to view
     verdict = mod.rule_merge_red_pr(
-        'gh pr merge --repo o/r --squash --delete-branch "$PR"')
+        'gh pr merge --repo o/r --squash --delete-branch "$PR"'
+    )
     assert verdict is not None and "no literal PR number" in verdict
 
 
@@ -39,12 +44,14 @@ def test_a_merge_naming_its_number_still_takes_the_graded_path(monkeypatch):
     mod = _load()
     seen = {}
 
-    def fake_verdict(pr, states, escaped, main_red, main_red_marker):
+    def fake_verdict(pr, states, escaped, main_red, main_red_marker, auto=False):
         seen["pr"] = pr
         return None
 
     monkeypatch.setattr(mod, "_merge_verdict", fake_verdict)
-    monkeypatch.setattr(mod, "_pr_check_states", lambda pr, cmd=None: [("qa", "SUCCESS")])
+    monkeypatch.setattr(
+        mod, "_pr_check_states", lambda pr, cmd=None: [("qa", "SUCCESS")]
+    )
     monkeypatch.setattr(mod, "_main_red_refusal", lambda: None)
     assert mod.rule_merge_red_pr("gh pr merge 100 --squash") is None
     assert seen["pr"] == "100"
