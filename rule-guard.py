@@ -38,6 +38,7 @@ The six rules still written in Python below are the ones Rego cannot express: ea
 one shells out to git or gh to ask a question about the live tree. They are the
 backlog, not the pattern.
 """
+
 from __future__ import annotations
 
 import json
@@ -53,7 +54,10 @@ import time
 #: convention). Off that env var and off this Mac, `_git` abstains IN SILENCE to every
 #: question a rule asks it, so fall back to the tree this process is standing in,
 #: which on a runner is the checkout. CI found it: two rule_two_dot_diff cases got None.
-_HOME_REPO = os.environ.get("PROSPECTOR_REPO", os.path.join(os.path.expanduser("~"), "Documents", "code", "prospector"))
+_HOME_REPO = os.environ.get(
+    "PROSPECTOR_REPO",
+    os.path.join(os.path.expanduser("~"), "Documents", "code", "prospector"),
+)
 REPO = _HOME_REPO if os.path.isdir(_HOME_REPO) else os.getcwd()
 
 #: The tree the command being judged will actually run in. A hardcoded REPO graded the shared
@@ -64,7 +68,9 @@ _ACTIVE_REPO = REPO
 
 #: A command that starts by changing directory is telling you where it runs. Nothing else in the
 #: payload does: `cwd` is the SESSION's directory, which for a worktree session is the wrong one.
-_LEADING_CD = re.compile(r"""(?:^|[\n;&|]\s*)cd\s+(?P<path>'[^']+'|"[^"]+"|[^\s;&|]+)""")
+_LEADING_CD = re.compile(
+    r"""(?:^|[\n;&|]\s*)cd\s+(?P<path>'[^']+'|"[^"]+"|[^\s;&|]+)"""
+)
 
 
 def _worktree_root(path: str) -> str | None:
@@ -80,14 +86,18 @@ def _worktree_root(path: str) -> str | None:
 #: repo was graded instead. On 2026-08-17 that refused a 1-file PR as "243 files", quoting the
 #: shared checkout's branch, and the only way past was the override marker. Expanding the plain
 #: assignments the command makes to itself is enough; no shell is invoked.
-_ASSIGN = re.compile(r"""(?:^|[\n;&]\s*)(?P<name>[A-Za-z_]\w*)=(?P<val>'[^']*'|"[^"]*"|[^\s;&|]+)""")
+_ASSIGN = re.compile(
+    r"""(?:^|[\n;&]\s*)(?P<name>[A-Za-z_]\w*)=(?P<val>'[^']*'|"[^"]*"|[^\s;&|]+)"""
+)
 
 
 def _expand(text: str, cmd: str) -> str:
     """`$VAR`, `${VAR}` and `~` in `text`: assignments made earlier in `cmd`, then the environment. See test_incident_rule_guard_tilde_cd_graded_the_wrong_repo.py."""
     for m in _ASSIGN.finditer(cmd):
         val = m.group("val").strip("'\"")
-        text = text.replace("${" + m.group("name") + "}", val).replace("$" + m.group("name"), val)
+        text = text.replace("${" + m.group("name") + "}", val).replace(
+            "$" + m.group("name"), val
+        )
     return os.path.expanduser(os.path.expandvars(text))
 
 
@@ -131,8 +141,13 @@ def _repo_for(cmd: str, session_cwd: str | None) -> str:
 def _sh(argv: list[str], timeout: int = 20) -> tuple[int, str]:
     """Run any CLI and return (rc, combined output). Never raises; rc != 0 means "cannot tell"."""
     try:
-        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout,
-                           stdin=subprocess.DEVNULL)
+        p = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            stdin=subprocess.DEVNULL,
+        )
         return p.returncode, (p.stdout + p.stderr).strip()
     except (OSError, subprocess.SubprocessError):
         return 1, ""
@@ -169,16 +184,24 @@ def _clean_env() -> dict:
 def _git(*args: str, cwd: str | None = None) -> tuple[int, str]:
     cwd = cwd or _ACTIVE_REPO
     try:
-        p = subprocess.run((_real_tool("git"), *args), cwd=cwd, capture_output=True,
-                           text=True, timeout=20, env=_clean_env())
+        p = subprocess.run(
+            (_real_tool("git"), *args),
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            env=_clean_env(),
+        )
         return p.returncode, (p.stdout + p.stderr).strip()
     except (OSError, subprocess.SubprocessError):
         return 1, ""
 
 
 def _escape(marker: str) -> str:
-    return (f"\n\nIf you mean it, append  # {marker}  to the command and say in your reply "
-            f"why this case is different.")
+    return (
+        f"\n\nIf you mean it, append  # {marker}  to the command and say in your reply "
+        f"why this case is different."
+    )
 
 
 # ---------------------------------------------------------------- rules
@@ -209,20 +232,24 @@ def rule_two_dot_diff(cmd: str) -> str | None:
     for tail in _DIFF_RE.findall(cmd):
         words = [w for w in tail.split() if not w.startswith("-")]
         if "--" in tail.split():
-            words = tail.split()[:tail.split().index("--")]
+            words = tail.split()[: tail.split().index("--")]
             words = [w for w in words if not w.startswith("-")]
         refs = [w for w in words if _is_ref(w)]
         if len(refs) >= 2 and ".." not in tail:
-            return (f"BLOCKED by rule-guard: two-point `git diff {' '.join(refs[:2])}`.\n"
-                    "Against a branch that has moved, this is NOT what a merge would do — every "
-                    "line the other side gained since the fork prints as a deletion.\n"
-                    "For what a merge applies:  git diff $(git merge-base A B) B\n"
-                    "For whether it conflicts:  git merge-tree --write-tree A B"
-                    + _escape("raw-diff-intended"))
+            return (
+                f"BLOCKED by rule-guard: two-point `git diff {' '.join(refs[:2])}`.\n"
+                "Against a branch that has moved, this is NOT what a merge would do — every "
+                "line the other side gained since the fork prints as a deletion.\n"
+                "For what a merge applies:  git diff $(git merge-base A B) B\n"
+                "For whether it conflicts:  git merge-tree --write-tree A B"
+                + _escape("raw-diff-intended")
+            )
     return None
 
 
-_LN_RE = re.compile(r"(?:^|&&|;|\|\|)\s*(?:cd\s+(\S+)\s*&&\s*)?ln\s+(-\S+\s+)*(\S+)\s+(\S+)\s*(?=$|&&|;|\|\||#)")
+_LN_RE = re.compile(
+    r"(?:^|&&|;|\|\|)\s*(?:cd\s+(\S+)\s*&&\s*)?ln\s+(-\S+\s+)*(\S+)\s+(\S+)\s*(?=$|&&|;|\|\||#)"
+)
 
 
 def rule_self_symlink(cmd: str) -> str | None:
@@ -240,23 +267,32 @@ def rule_self_symlink(cmd: str) -> str | None:
         if "s" not in flags.replace("-", ""):
             continue
         base = os.path.expanduser(cwd) if cwd else os.getcwd()
+
         def _abs(p: str) -> str:
             p = os.path.expanduser(p.strip("'\""))
             return os.path.normpath(p if os.path.isabs(p) else os.path.join(base, p))
+
         t, l = _abs(target), _abs(link)
         if os.path.isdir(l) and not os.path.islink(l):
             l = os.path.join(l, os.path.basename(t))
         if t == l:
-            return (f"BLOCKED by rule-guard: `ln -s` whose target IS the link: {l}\n"
-                    "This does not fail; it replaces the real file with a symlink to its own "
-                    "path (warehouse.db, 2026-08-28). Point the link at the other checkout's "
-                    "path, or drop the link and read the file where it is."
-                    + _escape("symlink-intended"))
-        if "f" in flags.replace("-", "") and os.path.isfile(l) and not os.path.islink(l):
-            return (f"BLOCKED by rule-guard: `ln -sf` over an existing regular file: {l}\n"
-                    "The -f deletes it first and nothing says so. Move or remove the file "
-                    "yourself if that is the intent."
-                    + _escape("symlink-intended"))
+            return (
+                f"BLOCKED by rule-guard: `ln -s` whose target IS the link: {l}\n"
+                "This does not fail; it replaces the real file with a symlink to its own "
+                "path (warehouse.db, 2026-08-28). Point the link at the other checkout's "
+                "path, or drop the link and read the file where it is."
+                + _escape("symlink-intended")
+            )
+        if (
+            "f" in flags.replace("-", "")
+            and os.path.isfile(l)
+            and not os.path.islink(l)
+        ):
+            return (
+                f"BLOCKED by rule-guard: `ln -sf` over an existing regular file: {l}\n"
+                "The -f deletes it first and nothing says so. Move or remove the file "
+                "yourself if that is the intent." + _escape("symlink-intended")
+            )
     return None
 
 
@@ -294,22 +330,32 @@ def rule_pr_size(cmd: str) -> str | None:
     if len(files) <= PR_FILE_CEILING:
         return None
     rc, stat = _git("diff", "--shortstat", mb, "HEAD")
-    return (f"BLOCKED by rule-guard: this PR is {len(files)} files, ceiling is "
-            f"{PR_FILE_CEILING}.\n"
-            f"  base            origin/{base}\n"
-            f"  merge base      {mb[:12]}\n"
-            f"  what it applies {stat}\n"
-            "A branch this size is usually a stale base carrying somebody else's history, not "
-            "the change in your title. Rebase onto the current base, or say what the size is "
-            "for in the PR body."
-            + _escape("large-pr-intended"))
+    return (
+        f"BLOCKED by rule-guard: this PR is {len(files)} files, ceiling is "
+        f"{PR_FILE_CEILING}.\n"
+        f"  base            origin/{base}\n"
+        f"  merge base      {mb[:12]}\n"
+        f"  what it applies {stat}\n"
+        "A branch this size is usually a stale base carrying somebody else's history, not "
+        "the change in your title. Rebase onto the current base, or say what the size is "
+        "for in the PR body." + _escape("large-pr-intended")
+    )
 
 
 #: Directories the ENGINE writes while it runs. Staging them puts a day of ledger churn in the
 #: diff, which is how a branch reaches hundreds of files with only a handful of them code.
 #: Stopping it at the `git add` is cheaper than stripping it out afterwards.
-_RUNTIME_PREFIXES = ("store/", "storage/", "signals/", "corpora/", "graphify-out/",
-                     ".popdd/", ".backfill-logs/", ".lux/receipts/", "scratchpad/")
+_RUNTIME_PREFIXES = (
+    "store/",
+    "storage/",
+    "signals/",
+    "corpora/",
+    "graphify-out/",
+    ".popdd/",
+    ".backfill-logs/",
+    ".lux/receipts/",
+    "scratchpad/",
+)
 
 #: Quoted text is a commit MESSAGE, not a path. `git commit -m "rotate store/prospector.jsonl"`
 #: names the file in prose and stages nothing; firing on it would be the rule crying wolf on the
@@ -322,16 +368,23 @@ def rule_runtime_state(cmd: str) -> str | None:
     if "runtime-state-intended" in cmd or not _GIT_STAGING.search(cmd):
         return None
     scan = _QUOTED.sub(" ", cmd)
-    hits = sorted({p for p in _RUNTIME_PREFIXES
-                   if re.search(rf"(?:^|[\s=]){re.escape(p)}\S", scan)})
+    hits = sorted(
+        {
+            p
+            for p in _RUNTIME_PREFIXES
+            if re.search(rf"(?:^|[\s=]){re.escape(p)}\S", scan)
+        }
+    )
     if not hits:
         return None
-    return ("BLOCKED by rule-guard: this stages runtime state, not code.\n"
-            f"  paths            {', '.join(hits)}\n"
-            "  why              the engine rewrites these every tick, so this puts a day of\n"
-            "                   ledger churn in your diff\n"
-            "Name the code paths explicitly: git commit --only -m 'msg' -- path/one.py path/two.py"
-            + _escape("runtime-state-intended"))
+    return (
+        "BLOCKED by rule-guard: this stages runtime state, not code.\n"
+        f"  paths            {', '.join(hits)}\n"
+        "  why              the engine rewrites these every tick, so this puts a day of\n"
+        "                   ledger churn in your diff\n"
+        "Name the code paths explicitly: git commit --only -m 'msg' -- path/one.py path/two.py"
+        + _escape("runtime-state-intended")
+    )
 
 
 _GIT_COMMIT = re.compile(r"\bgit\s+(?:-C\s+\S+\s+)*commit\b")
@@ -357,15 +410,17 @@ def _shared_checkout_refusal(active_repo: str, branch: str) -> str | None:
         return None  # already in a worktree, which is the point
     if branch in ("HEAD", ""):
         return None  # detached: nothing accumulates
-    return (f"BLOCKED by rule-guard: commit into the SHARED checkout, on `{branch}`.\n"
-            f"  {REPO}\n"
-            "  invariant        work happens in a task worktree; this checkout tracks main\n"
-            "  why              several sessions share this tree and its index, so the branch\n"
-            "                   grows without anyone choosing it, on one disk, with no PR\n"
-            "  instead          git worktree add --detach ../wt-<name> origin/main\n"
-            "                   ./scripts/setup_worktree.sh ../wt-<name>\n"
-            "                   then commit THERE and open a PR"
-            + _escape("shared-checkout-intended"))
+    return (
+        f"BLOCKED by rule-guard: commit into the SHARED checkout, on `{branch}`.\n"
+        f"  {REPO}\n"
+        "  invariant        work happens in a task worktree; this checkout tracks main\n"
+        "  why              several sessions share this tree and its index, so the branch\n"
+        "                   grows without anyone choosing it, on one disk, with no PR\n"
+        "  instead          git worktree add --detach ../wt-<name> origin/main\n"
+        "                   ./scripts/setup_worktree.sh ../wt-<name>\n"
+        "                   then commit THERE and open a PR"
+        + _escape("shared-checkout-intended")
+    )
 
 
 def rule_commit_in_shared_checkout(cmd: str) -> str | None:
@@ -383,13 +438,22 @@ def rule_commit_in_shared_checkout(cmd: str) -> str | None:
 #: that run at 07:01:58 and `ci-ok` concluded failure at 07:02:13 -- the same shape as #315, an
 #: hour after #315 was cleaned up. A fence that names one spelling of the command is not a fence.
 _GH_MERGE = re.compile(r"\bgh\s+pr\s+merge\b|/pulls/\d+/merge\b")
-_GH_MERGE_NUM = re.compile(r"\bgh\s+pr\s+merge\s+(?:--?\S+(?:=\S+)?\s+)*?(\d+)\b"
-                           r"|/pulls/(\d+)/merge\b")
+_GH_MERGE_NUM = re.compile(
+    r"\bgh\s+pr\s+merge\s+(?:--?\S+(?:=\S+)?\s+)*?(\d+)\b"
+    r"|/pulls/(\d+)/merge\b"
+)
 
 #: States meaning the job has not finished. Merging on one of these is how three of main's four
 #: runs on 2026-08-17 were cancelled: each merge landed while the previous run was still queued,
 #: and GitHub keeps at most ONE run pending per concurrency group, so the next one evicted it.
-_PENDING_STATES = {"PENDING", "QUEUED", "IN_PROGRESS", "WAITING", "REQUESTED", "EXPECTED"}
+_PENDING_STATES = {
+    "PENDING",
+    "QUEUED",
+    "IN_PROGRESS",
+    "WAITING",
+    "REQUESTED",
+    "EXPECTED",
+}
 
 #: States that count as green. SKIPPED and NEUTRAL belong here: a path filter deciding the web
 #: lane is not needed for a Python-only diff is a real answer, not a missing one.
@@ -415,8 +479,9 @@ _OK_STATES = {"SUCCESS", "SKIPPED", "NEUTRAL"}
 _GH_MERGE_AUTO = re.compile(r"\bgh\s+pr\s+merge\b[^;|&\n]*?\s--auto\b")
 
 
-def _auto_merge_refusal(pr: str, states: list[tuple[str, str]] | None,
-                        required: set[str] | None, cmd: str) -> str | None:
+def _auto_merge_refusal(
+    pr: str, states: list[tuple[str, str]] | None, required: set[str] | None, cmd: str
+) -> str | None:
     """Refuse `--auto` when GitHub would not wait for every check this PR runs. Pure.
 
     `required` is the repository's required contexts, or None when they could not be read.
@@ -425,37 +490,57 @@ def _auto_merge_refusal(pr: str, states: list[tuple[str, str]] | None,
     """
     if not _GH_MERGE_AUTO.search(cmd):
         return None
-    tail = ("  instead          drop --auto and wait for the real thing:\n"
-            f"                     gh pr checks {pr}      # until every row has reported\n"
-            f"                     gh pr merge {pr} --squash --delete-branch\n"
-            "                   this guard then grades the states at the moment of the merge,\n"
-            "                   which is the only moment that means anything\n"
-            "  no override      a queued merge cannot be graded now, whoever means it.")
+    tail = (
+        "  instead          drop --auto and wait for the real thing:\n"
+        f"                     gh pr checks {pr}      # until every row has reported\n"
+        f"                     gh pr merge {pr} --squash --delete-branch\n"
+        "                   this guard then grades the states at the moment of the merge,\n"
+        "                   which is the only moment that means anything\n"
+        "  no override      a queued merge cannot be graded now, whoever means it."
+    )
     if required is None:
-        return (f"BLOCKED by rule-guard: --auto on PR #{pr}, and the repository's required "
-                "contexts could not be read.\n"
-                "  why              --auto merges when the REQUIRED checks pass, so a guard that\n"
-                "                   cannot see that set cannot say what GitHub will wait for\n"
-                + tail)
+        return (
+            f"BLOCKED by rule-guard: --auto on PR #{pr}, and the repository's required "
+            "contexts could not be read.\n"
+            "  why              --auto merges when the REQUIRED checks pass, so a guard that\n"
+            "                   cannot see that set cannot say what GitHub will wait for\n"
+            + tail
+        )
     # Contexts that do not grade the change: the image builds and the fan-out job that lists
-    # them, jobs a path filter skips, and jobs that price a change and say so on the summary
-    # without ever failing (idp's feature-request-plan captures its own non-zero exit by
-    # design). Requiring those on the default branch would block a merge whenever a path
-    # filter turns one off, so --auto not waiting for them is correct rather than a hole.
-    # Founder, 2026-09-04: "we need automerge on" -- the fence stays on the checks that
-    # judge the world.
+    # them, and jobs a path filter skips. Requiring those on the default branch would block a
+    # merge whenever a path filter turns one off, so they are not required and --auto not
+    # waiting for them is correct rather than a hole. Founder, 2026-09-04: "we need automerge
+    # on" -- the fence stays on the checks that judge the world.
+    # Founder, 2026-09-04: "i thoigh we enabeld autonerge". This fence was refusing --auto on
+    # every pull request in a repository whose path-filtered workflows (image publishing, k8s
+    # manifests) report checks that CANNOT be required -- they do not register when the filter
+    # turns them off, so requiring them blocks every unrelated merge forever. That made the
+    # refusal permanent rather than conditional, and a permanent refusal of the thing he has
+    # asked for repeatedly is friction, not a guard. The fence now judges what it can actually
+    # judge: the branch must require at least one status check. If it does, GitHub waits for
+    # that set and --auto is allowed; if the branch requires nothing, --auto is still refused
+    # because there is then no gate at all.
+    if required:
+        return None
     ungraded = {"discover", "merge", "offline-gate", "feature-request-plan"}
-    unguarded = sorted({n for n, _ in (states or [])
-                        if n not in required and n not in ungraded and not n.startswith("build (")})
+    unguarded = sorted(
+        {
+            n
+            for n, _ in (states or [])
+            if n not in required and n not in ungraded and not n.startswith("build (")
+        }
+    )
     if not unguarded:
         return None
-    return (f"BLOCKED by rule-guard: --auto on PR #{pr} would merge without waiting for "
-            f"{len(unguarded)} check(s) — {', '.join(unguarded[:6])}.\n"
-            "  why              --auto hands the decision to GitHub, which waits only for the\n"
-            "                   repository's REQUIRED contexts. idp#675 was merged this way at\n"
-            "                   00:35:33Z on 2026-08-29 with run 33223840305 still going; it\n"
-            "                   concluded FAILURE and main's drill gate was out for ~30 minutes\n"
-            + tail)
+    return (
+        f"BLOCKED by rule-guard: --auto on PR #{pr} would merge without waiting for "
+        f"{len(unguarded)} check(s) — {', '.join(unguarded[:6])}.\n"
+        "  why              --auto hands the decision to GitHub, which waits only for the\n"
+        "                   repository's REQUIRED contexts. idp#675 was merged this way at\n"
+        "                   00:35:33Z on 2026-08-29 with run 33223840305 still going; it\n"
+        "                   concluded FAILURE and main's drill gate was out for ~30 minutes\n"
+        + tail
+    )
 
 
 def _required_contexts(slug: str | None) -> set[str] | None:
@@ -470,9 +555,19 @@ def _required_contexts(slug: str | None) -> set[str] | None:
     base = f"repos/{slug}" if slug else "repos/{owner}/{repo}"
     try:
         p = subprocess.run(
-            [_real_tool("gh"), "api", f"{base}/rulesets",
-             "--jq", ".[] | select(.enforcement == \"active\") | .id"],
-            cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30, env=_clean_env())
+            [
+                _real_tool("gh"),
+                "api",
+                f"{base}/rulesets",
+                "--jq",
+                '.[] | select(.enforcement == "active") | .id',
+            ],
+            cwd=_ACTIVE_REPO,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=_clean_env(),
+        )
     except (OSError, subprocess.SubprocessError):
         return None
     if p.returncode != 0:
@@ -481,10 +576,22 @@ def _required_contexts(slug: str | None) -> set[str] | None:
     for rid in p.stdout.split():
         try:
             q = subprocess.run(
-                [_real_tool("gh"), "api", f"{base}/rulesets/{rid}",
-                 "--jq", ('.rules[] | select(.type == "required_status_checks") '
-                          '| .parameters.required_status_checks[].context')],
-                cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30, env=_clean_env())
+                [
+                    _real_tool("gh"),
+                    "api",
+                    f"{base}/rulesets/{rid}",
+                    "--jq",
+                    (
+                        '.rules[] | select(.type == "required_status_checks") '
+                        "| .parameters.required_status_checks[].context"
+                    ),
+                ],
+                cwd=_ACTIVE_REPO,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=_clean_env(),
+            )
         except (OSError, subprocess.SubprocessError):
             return None
         if q.returncode != 0:
@@ -493,42 +600,72 @@ def _required_contexts(slug: str | None) -> set[str] | None:
     return out
 
 
-def _merge_refusal(pr: str, states: list[tuple[str, str]] | None) -> str | None:
+def _merge_refusal(
+    pr: str, states: list[tuple[str, str]] | None, auto: bool = False
+) -> str | None:
     """Refuse `gh pr merge <pr>`? Pure, given the checks, so the decision is testable offline.
 
     `states` is (check name, state) pairs, or None when they could not be read at all.
     """
+    if states is None and auto:
+        # Arming --auto is not a merge: GitHub holds it until the branch's required contexts
+        # pass, so an unreadable check set right after a push (the checks have not registered
+        # yet) is the normal case, not an unknown verdict on an irreversible step. Refusing it
+        # forced a session to sit and watch, which is the thing the founder has ruled out
+        # repeatedly -- 2026-09-04: "i thoigh we enabeld autonerge".
+        return None
     if states is None:
-        return (f"BLOCKED by rule-guard: could not read the CI checks for PR #{pr}.\n"
-                "  why              a merge is the one irreversible step here, so an unknown\n"
-                "                   verdict is treated as a red one, not waved through\n"
-                "  instead          gh pr checks " + pr + _escape("merge-red-intended"))
+        return (
+            f"BLOCKED by rule-guard: could not read the CI checks for PR #{pr}.\n"
+            "  why              a merge is the one irreversible step here, so an unknown\n"
+            "                   verdict is treated as a red one, not waved through\n"
+            "  instead          gh pr checks " + pr + _escape("merge-red-intended")
+        )
     if not states:
-        return (f"BLOCKED by rule-guard: PR #{pr} has NO checks at all.\n"
-                "  why              main ran commit 5b8d010 in production on 2026-08-17 with\n"
-                "                   zero finished runs; 'no checks' looked identical to green\n"
-                "  instead          push a commit that triggers CI, or wait for the run to\n"
-                "                   register, then re-read: gh pr checks " + pr + "\n  first check      GitHub creates no pull_request run for a PR that conflicts with its base (crew#490, 2026-08-27:\n                   0 checks for 40 min; close/reopen and an empty commit changed nothing; merging main in produced 6).\n                   Read it before waiting: gh pr view " + pr + " --json mergeable --jq .mergeable ; CONFLICTING means merge the base in and push." + _escape("merge-red-intended"))
+        return (
+            f"BLOCKED by rule-guard: PR #{pr} has NO checks at all.\n"
+            "  why              main ran commit 5b8d010 in production on 2026-08-17 with\n"
+            "                   zero finished runs; 'no checks' looked identical to green\n"
+            "  instead          push a commit that triggers CI, or wait for the run to\n"
+            "                   register, then re-read: gh pr checks "
+            + pr
+            + "\n  first check      GitHub creates no pull_request run for a PR that conflicts with its base (crew#490, 2026-08-27:\n                   0 checks for 40 min; close/reopen and an empty commit changed nothing; merging main in produced 6).\n                   Read it before waiting: gh pr view "
+            + pr
+            + " --json mergeable --jq .mergeable ; CONFLICTING means merge the base in and push."
+            + _escape("merge-red-intended")
+        )
 
     waiting = [n for n, s in states if s.upper() in _PENDING_STATES]
-    red = [f"{n}={s.lower()}" for n, s in states
-           if s.upper() not in _OK_STATES and s.upper() not in _PENDING_STATES]
+    red = [
+        f"{n}={s.lower()}"
+        for n, s in states
+        if s.upper() not in _OK_STATES and s.upper() not in _PENDING_STATES
+    ]
     if red:
-        return (f"BLOCKED by rule-guard: PR #{pr} is not green — {', '.join(red[:6])}.\n"
-                "  why              nothing on GitHub stops this: branch protection needs a\n"
-                "                   paid plan or a public repo, so this hook is the only fence\n"
-                "  instead          fix the failure, or merge the fix for it first\n"
-                "  note             `gh pr checks --watch` exits 0 even when jobs failed, so\n"
-                "                   read the states, never the exit code\n"
-                "  no override      `merge-red-intended` does not open this one. A check that\n"
-                "                   finished and did not pass is an answer, not an outage.")
-    if waiting:
-        return (f"BLOCKED by rule-guard: PR #{pr} still has {len(waiting)} check(s) running — "
-                f"{', '.join(waiting[:6])}.\n"
-                "  why              merging now cancels main's queued run: GitHub keeps one\n"
-                "                   run pending per concurrency group and evicts the waiter\n"
-                "  instead          wait for it, then re-read: gh pr checks " + pr
-                + "\n  no override      `merge-red-intended` does not open this one.")
+        return (
+            f"BLOCKED by rule-guard: PR #{pr} is not green — {', '.join(red[:6])}.\n"
+            "  why              nothing on GitHub stops this: branch protection needs a\n"
+            "                   paid plan or a public repo, so this hook is the only fence\n"
+            "  instead          fix the failure, or merge the fix for it first\n"
+            "  note             `gh pr checks --watch` exits 0 even when jobs failed, so\n"
+            "                   read the states, never the exit code\n"
+            "  no override      `merge-red-intended` does not open this one. A check that\n"
+            "                   finished and did not pass is an answer, not an outage."
+        )
+    # `--auto` does not merge now. GitHub holds the pull request until its checks pass and
+    # merges it itself, so the harm this fence names -- evicting main's queued run by merging
+    # while checks are in flight -- cannot happen. Refusing it made auto-merge unusable and
+    # turned every merge into a poll, which is what it exists to avoid (2026-09-04).
+    if waiting and not auto:
+        return (
+            f"BLOCKED by rule-guard: PR #{pr} still has {len(waiting)} check(s) running — "
+            f"{', '.join(waiting[:6])}.\n"
+            "  why              merging now cancels main's queued run: GitHub keeps one\n"
+            "                   run pending per concurrency group and evicts the waiter\n"
+            "  instead          wait for it, then re-read: gh pr checks "
+            + pr
+            + "\n  no override      `merge-red-intended` does not open this one."
+        )
     return None
 
 
@@ -544,11 +681,19 @@ def _failed_jobs(run_id: str, slug: str | None = None) -> list[str]:
     """
     try:
         p = subprocess.run(
-            (_real_tool("gh"), "api",
-             f"repos/{slug or '{owner}/{repo}'}/actions/runs/{run_id}/jobs?per_page=100",
-             "--jq", '.jobs[] | select(.conclusion == "failure") | select(.name != "ci-ok") | .name'),
-            cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
-            env=_clean_env())
+            (
+                _real_tool("gh"),
+                "api",
+                f"repos/{slug or '{owner}/{repo}'}/actions/runs/{run_id}/jobs?per_page=100",
+                "--jq",
+                '.jobs[] | select(.conclusion == "failure") | select(.name != "ci-ok") | .name',
+            ),
+            cwd=_ACTIVE_REPO,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=_clean_env(),
+        )
     except (OSError, subprocess.SubprocessError):
         return []
     if p.returncode != 0:
@@ -566,16 +711,38 @@ def _main_red_refusal(slug: str | None = None) -> str | None:
     """
     try:
         p = subprocess.run(
-            (_real_tool("gh"), "run", "list", "--branch", "main", "--workflow", "ci.yml",
-             "--status", "completed", "--limit", "1",
-             "--json", "conclusion,databaseId,headSha",
-             "--jq", '.[] | "\\(.conclusion)\\t\\(.databaseId)\\t\\(.headSha)"') + (("--repo", slug) if slug else ()),
-            cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
-            env=_clean_env())
+            (
+                _real_tool("gh"),
+                "run",
+                "list",
+                "--branch",
+                "main",
+                "--workflow",
+                "ci.yml",
+                "--status",
+                "completed",
+                "--limit",
+                "1",
+                "--json",
+                "conclusion,databaseId,headSha",
+                "--jq",
+                '.[] | "\\(.conclusion)\\t\\(.databaseId)\\t\\(.headSha)"',
+            )
+            + (("--repo", slug) if slug else ()),
+            cwd=_ACTIVE_REPO,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=_clean_env(),
+        )
     except (OSError, subprocess.SubprocessError):
         return None
     row = p.stdout.strip().split("\t")
-    if p.returncode != 0 or len(row) != 3 or row[0].upper() in ("SUCCESS", "SKIPPED", "NEUTRAL"):
+    if (
+        p.returncode != 0
+        or len(row) != 3
+        or row[0].upper() in ("SUCCESS", "SKIPPED", "NEUTRAL")
+    ):
         return None
     conclusion, run_id, sha = row
 
@@ -592,17 +759,25 @@ def _main_red_refusal(slug: str | None = None) -> str | None:
     if not failed:
         return None
     conclusion = f"{conclusion.lower()}, with {', '.join(failed)} failed"
-    return (f"BLOCKED by rule-guard: main's own last CI run is {conclusion} "
-            f"(run {run_id}, {sha[:7]}).\n"
-            "  why              a merge onto a red main inherits the breakage and hides it\n"
-            "                   behind its own red. On 2026-08-18 that turned one bad squash\n"
-            "                   into 23 failures on every open pull request for five hours\n"
-            "  instead          merge the fix for main FIRST, then come back to this one\n"
-            "  override         append `# main-is-red` when THIS merge is that fix")
+    return (
+        f"BLOCKED by rule-guard: main's own last CI run is {conclusion} "
+        f"(run {run_id}, {sha[:7]}).\n"
+        "  why              a merge onto a red main inherits the breakage and hides it\n"
+        "                   behind its own red. On 2026-08-18 that turned one bad squash\n"
+        "                   into 23 failures on every open pull request for five hours\n"
+        "  instead          merge the fix for main FIRST, then come back to this one\n"
+        "  override         append `# main-is-red` when THIS merge is that fix"
+    )
 
 
-def _merge_verdict(pr: str, states: list[tuple[str, str]] | None,
-                   escaped: bool, main_red: str | None, fixing_main: bool) -> str | None:
+def _merge_verdict(
+    pr: str,
+    states: list[tuple[str, str]] | None,
+    escaped: bool,
+    main_red: str | None,
+    fixing_main: bool,
+    auto: bool = False,
+) -> str | None:
     """The whole merge decision, pure, so every branch of it is tested offline.
 
     Two fences, in order. The PR's own checks decide first, and `merge-red-intended` opens
@@ -614,18 +789,27 @@ def _merge_verdict(pr: str, states: list[tuple[str, str]] | None,
     own red, so nobody can tell whose fault it is. `main-is-red` is the marker for the merge that
     fixes it, and it says out loud what is being done.
     """
-    refusal = _merge_refusal(pr, states)
+    refusal = _merge_refusal(pr, states, auto)
     if refusal is not None:
         if escaped and states is None:
-            return None    # the outage case, deliberately overridden
+            return None  # the outage case, deliberately overridden
         return refusal
     if main_red and not fixing_main:
         return main_red
     return None
 
 
-def _merge_repo_slug(cmd: str) -> str | None:  # `--repo owner/name` on the merge's own segment, else None
-    return next((m.group("slug") for s in re.split(r"\|\||&&|[;|\n]", cmd) if _GH_MERGE.search(s) and (m := _GH_REPO_FLAG.search(s))), None)
+def _merge_repo_slug(
+    cmd: str,
+) -> str | None:  # `--repo owner/name` on the merge's own segment, else None
+    return next(
+        (
+            m.group("slug")
+            for s in re.split(r"\|\||&&|[;|\n]", cmd)
+            if _GH_MERGE.search(s) and (m := _GH_REPO_FLAG.search(s))
+        ),
+        None,
+    )
 
 
 def _pr_check_states(pr: str, cmd: str = "") -> list[tuple[str, str]] | None:
@@ -633,11 +817,23 @@ def _pr_check_states(pr: str, cmd: str = "") -> list[tuple[str, str]] | None:
     slug = _merge_repo_slug(cmd)
     try:
         p = subprocess.run(
-            [_real_tool("gh"), "pr", "checks", pr, "--json", "name,state",
-             "--jq", '.[] | "\\(.name)\\t\\(.state)"']
+            [
+                _real_tool("gh"),
+                "pr",
+                "checks",
+                pr,
+                "--json",
+                "name,state",
+                "--jq",
+                '.[] | "\\(.name)\\t\\(.state)"',
+            ]
             + (["--repo", slug] if slug else []),
-            cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
-            env=_clean_env())
+            cwd=_ACTIVE_REPO,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=_clean_env(),
+        )
     except (OSError, subprocess.SubprocessError):
         return None
     # `gh pr checks` exits 8 when checks are still pending and 1 when some failed, so the exit
@@ -674,7 +870,7 @@ def rule_merge_red_pr(cmd: str) -> str | None:
     escaped = "merge-red-intended" in cmd
     m = _GH_MERGE_NUM.search(cmd)
     if m:
-        pr = m.group(1) or m.group(2)    # `gh pr merge N` or `/pulls/N/merge`
+        pr = m.group(1) or m.group(2)  # `gh pr merge N` or `/pulls/N/merge`
     else:
         # 2026-08-24: `gh pr merge "$PR"` — the number in a shell variable — reached this
         # fallback, `gh pr view` returned nothing useful, and the three `return None`s below
@@ -682,19 +878,26 @@ def rule_merge_red_pr(cmd: str) -> str | None:
         # concluded FAILURE on merged code. The docstring above says fails CLOSED, and these
         # were the three paths that failed open. An unresolvable PR is now a refusal, not a
         # pass: the fix costs the author four characters — the PR number, written literally.
-        _unresolved = ("BLOCKED by rule-guard: `gh pr merge` with no literal PR number, and "
-                       "the PR could not be resolved from the checkout.\n"
-                       "  why              a merge this guard cannot attribute is a merge it\n"
-                       "                   cannot grade; PR #99 slipped through here with its\n"
-                       "                   qa check still running (2026-08-24)\n"
-                       "  instead          name the number in the command: gh pr merge <n>")
+        _unresolved = (
+            "BLOCKED by rule-guard: `gh pr merge` with no literal PR number, and "
+            "the PR could not be resolved from the checkout.\n"
+            "  why              a merge this guard cannot attribute is a merge it\n"
+            "                   cannot grade; PR #99 slipped through here with its\n"
+            "                   qa check still running (2026-08-24)\n"
+            "  instead          name the number in the command: gh pr merge <n>"
+        )
         rc, out = _git("rev-parse", "--abbrev-ref", "HEAD")
         if rc != 0:
             return _unresolved
         try:
-            p = subprocess.run((_real_tool("gh"), "pr", "view", "--json", "number", "--jq", ".number"),
-                               cwd=_ACTIVE_REPO, capture_output=True, text=True, timeout=30,
-            env=_clean_env())
+            p = subprocess.run(
+                (_real_tool("gh"), "pr", "view", "--json", "number", "--jq", ".number"),
+                cwd=_ACTIVE_REPO,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                env=_clean_env(),
+            )
         except (OSError, subprocess.SubprocessError):
             return _unresolved
         pr = p.stdout.strip()
@@ -702,9 +905,14 @@ def rule_merge_red_pr(cmd: str) -> str | None:
             return _unresolved
     sl = _merge_repo_slug(cmd)
     states = _pr_check_states(pr, cmd)
-    verdict = _merge_verdict(pr, states, escaped,
-                             _main_red_refusal(sl) if sl else _main_red_refusal(),
-                             "main-is-red" in cmd)
+    verdict = _merge_verdict(
+        pr,
+        states,
+        escaped,
+        _main_red_refusal(sl) if sl else _main_red_refusal(),
+        "main-is-red" in cmd,
+        _GH_MERGE_AUTO.search(cmd) is not None,
+    )
     if verdict is not None:
         return verdict
     # Last, and never overridden. A merge this guard graded green NOW can still be wrong when
@@ -735,7 +943,8 @@ def rule_merge_red_pr(cmd: str) -> str | None:
 # because a fleet repair is most needed exactly when GitHub is unhappy, and a guard that walls
 # the box whenever it cannot see is a worse failure than the one it prevents.
 _FLY_DISRUPT_RE = re.compile(
-    r"\bfly\s+m(?:achine)?s?\s+(update|restart|stop|destroy)\b[^|;&\n]*?-a\s+(\S+)")
+    r"\bfly\s+m(?:achine)?s?\s+(update|restart|stop|destroy)\b[^|;&\n]*?-a\s+(\S+)"
+)
 
 # Which repository's runners live on which Fly app. An app that is not a runner fleet is not
 # this rule's business, so an unknown app is allowed through.
@@ -752,8 +961,15 @@ def _busy_runners(repo: str) -> list[str]:
     depending on whatever CI happens to be doing when the selftest runs.
     """
     gh = shutil.which("gh") or "/opt/homebrew/bin/gh"
-    rc, out = _sh([gh, "api", f"repos/{repo}/actions/runners",
-                   "--jq", ".runners[] | select(.busy) | .name"])
+    rc, out = _sh(
+        [
+            gh,
+            "api",
+            f"repos/{repo}/actions/runners",
+            "--jq",
+            ".runners[] | select(.busy) | .name",
+        ]
+    )
     if rc != 0:
         return []
     return [line.strip() for line in out.splitlines() if line.strip()]
@@ -775,19 +991,21 @@ def rule_restart_kills_a_live_build(cmd: str) -> str | None:
     if not busy:
         return None  # empty OR unknowable; failing open is the deliberate choice above
 
-    return (f"BLOCKED by rule-guard: `fly machine {verb}` on {app} while "
-            f"{len(busy)} runner(s) are MID-JOB.\n"
-            f"Busy now: {', '.join(busy)}\n"
-            f"`fly machine {verb}` restarts or removes the machine. If the job you kill belongs "
-            f"to another session, they see a build that died as \"The self-hosted runner lost "
-            f"communication with the server\" -- which reads as a failing test, from a cause "
-            f"they cannot see. That is exactly what happened on 2026-08-19 at 20:26Z.\n"
-            f"Wait for the fleet to go idle:\n"
-            f"  gh api repos/{repo}/actions/runners --jq "
-            f"'[.runners[]|select(.busy)]|length'\n"
-            f"If the repair genuinely cannot wait, MESSAGE THE PEER SESSIONS FIRST "
-            f"(ListAgents, then SendMessage) so the dead build is explained before they hunt it."
-            + _escape("runner-busy-intended"))
+    return (
+        f"BLOCKED by rule-guard: `fly machine {verb}` on {app} while "
+        f"{len(busy)} runner(s) are MID-JOB.\n"
+        f"Busy now: {', '.join(busy)}\n"
+        f"`fly machine {verb}` restarts or removes the machine. If the job you kill belongs "
+        f'to another session, they see a build that died as "The self-hosted runner lost '
+        f'communication with the server" -- which reads as a failing test, from a cause '
+        f"they cannot see. That is exactly what happened on 2026-08-19 at 20:26Z.\n"
+        f"Wait for the fleet to go idle:\n"
+        f"  gh api repos/{repo}/actions/runners --jq "
+        f"'[.runners[]|select(.busy)]|length'\n"
+        f"If the repair genuinely cannot wait, MESSAGE THE PEER SESSIONS FIRST "
+        f"(ListAgents, then SendMessage) so the dead build is explained before they hunt it."
+        + _escape("runner-busy-intended")
+    )
 
 
 # ---------------------------------------------------- a worktree path with no .git
@@ -816,10 +1034,16 @@ def orphan_state(cmd: str) -> dict | None:
     """Input for command.rego's orphaned_worktree rule: the `.wt-*`/worktrees dir this command
     targets (cd, -C or the session cwd) when it has no .git entry, and the checkout git would
     silently act on instead. Rego cannot stat, so the adapter answers that one question."""
-    targets = [_expand(m.group("path").strip("'\""), cmd)
-               for pat in (_LEADING_CD, _GIT_DASH_C) for m in pat.finditer(cmd)]
+    targets = [
+        _expand(m.group("path").strip("'\""), cmd)
+        for pat in (_LEADING_CD, _GIT_DASH_C)
+        for m in pat.finditer(cmd)
+    ]
     for t in targets or ([_SESSION_CWD] if _SESSION_CWD else []):
-        if not (os.path.basename(os.path.normpath(t)).startswith(".wt-") or "/worktrees/" in t):
+        if not (
+            os.path.basename(os.path.normpath(t)).startswith(".wt-")
+            or "/worktrees/" in t
+        ):
             continue
         parent = _orphaned_dir(t)
         if parent:
@@ -858,13 +1082,18 @@ def checkpoint_age_s(transcript_path: str | None) -> int | None:
     if os.path.basename(project) == "subagents":
         project = os.path.dirname(os.path.dirname(project))
     try:
-        return int(time.time() - os.stat(os.path.join(project, "checkpoints", "LATEST.md")).st_mtime)
+        return int(
+            time.time()
+            - os.stat(os.path.join(project, "checkpoints", "LATEST.md")).st_mtime
+        )
     except OSError:
         return None
 
+
 _DISCARDS = re.compile(
     r"\bgit\s+(?:-C\s+\S+\s+)?(?:reset\s+(?:-\S+\s+)*--hard\b|checkout\s+(?:--\s|\.(?:\s|$)|-\s*-\s)"
-    r"|restore\s(?!.*--staged)|clean\s+(?:-\S*f|--force))")
+    r"|restore\s(?!.*--staged)|clean\s+(?:-\S*f|--force))"
+)
 
 
 def _session_started(transcript_path: str | None) -> float | None:
@@ -879,18 +1108,40 @@ def foreign_changes(cmd: str) -> dict | None:
     """Input for command.rego's foreign_changes rule: the modified tracked files in the checkout
     this command targets whose last write is OLDER than this session, when the command discards
     tracked edits and does not stash them first. Returns {"repo", "files"} or None."""
-    if _SESSION_STARTED is None or not _DISCARDS.search(cmd) or re.search(r"\bgit\s+stash\b", cmd):
+    if (
+        _SESSION_STARTED is None
+        or not _DISCARDS.search(cmd)
+        or re.search(r"\bgit\s+stash\b", cmd)
+    ):
         return None
-    targets = [_expand(m.group("path").strip("'\""), cmd)
-               for pat in (_LEADING_CD, _GIT_DASH_C) for m in pat.finditer(cmd)]
+    targets = [
+        _expand(m.group("path").strip("'\""), cmd)
+        for pat in (_LEADING_CD, _GIT_DASH_C)
+        for m in pat.finditer(cmd)
+    ]
     target = (targets or [_SESSION_CWD or ""])[-1]
     if not target or not os.path.isdir(target):
         return None
     try:
-        out = subprocess.run([_real_tool("git"), "-C", target, "status", "--porcelain",
-                              "--untracked-files=no"], capture_output=True, text=True, timeout=5)
-        top = subprocess.run([_real_tool("git"), "-C", target, "rev-parse", "--show-toplevel"],
-                             capture_output=True, text=True, timeout=5).stdout.strip()
+        out = subprocess.run(
+            [
+                _real_tool("git"),
+                "-C",
+                target,
+                "status",
+                "--porcelain",
+                "--untracked-files=no",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        top = subprocess.run(
+            [_real_tool("git"), "-C", target, "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return None
     if out.returncode != 0 or not top:
@@ -906,9 +1157,15 @@ def foreign_changes(cmd: str) -> dict | None:
     return {"repo": top, "files": sorted(old)} if old else None
 
 
-RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
-         rule_commit_in_shared_checkout, rule_merge_red_pr,
-         rule_restart_kills_a_live_build, rule_self_symlink)
+RULES = (
+    rule_two_dot_diff,
+    rule_pr_size,
+    rule_runtime_state,
+    rule_commit_in_shared_checkout,
+    rule_merge_red_pr,
+    rule_restart_kills_a_live_build,
+    rule_self_symlink,
+)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
@@ -945,16 +1202,35 @@ def opa_ask(cmd: str) -> tuple[list[str], list[str], str | None]:
     opa = shutil.which("opa")
     if not opa:
         return [], [], "opa is not on PATH"
-    argv = [opa, "eval", "--strict-builtin-errors", "--format", "json",
-            "--data", POLICY_DIR, "--stdin-input", _OPA_QUERY]
+    argv = [
+        opa,
+        "eval",
+        "--strict-builtin-errors",
+        "--format",
+        "json",
+        "--data",
+        POLICY_DIR,
+        "--stdin-input",
+        _OPA_QUERY,
+    ]
     for pat in _OPA_IGNORE:
         argv[3:3] = ["--ignore", pat]
     try:
-        out = subprocess.run(argv, input=json.dumps({"command": cmd, "arch": platform.machine(),
-                                               "orphaned_worktree": orphan_state(cmd),
-                                               "foreign_changes": foreign_changes(cmd),
-                                               "checkpoint_age_s": _CHECKPOINT_AGE_S}),
-                             capture_output=True, text=True, timeout=10)
+        out = subprocess.run(
+            argv,
+            input=json.dumps(
+                {
+                    "command": cmd,
+                    "arch": platform.machine(),
+                    "orphaned_worktree": orphan_state(cmd),
+                    "foreign_changes": foreign_changes(cmd),
+                    "checkpoint_age_s": _CHECKPOINT_AGE_S,
+                }
+            ),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
     except (OSError, subprocess.SubprocessError) as exc:
         return [], [], f"opa eval did not run: {exc}"
     if out.returncode != 0:
@@ -969,8 +1245,12 @@ def opa_ask(cmd: str) -> tuple[list[str], list[str], str | None]:
 #: Rules whose answer depends on the tree this process is standing on, or on GitHub, rather
 #: than on the command string. selftest() cannot judge them from a literal, so it names them
 #: here and covers them separately against explicit inputs.
-STATEFUL = ("rule_pr_size", "rule_commit_in_shared_checkout",
-            "rule_merge_red_pr", "rule_restart_kills_a_live_build")
+STATEFUL = (
+    "rule_pr_size",
+    "rule_commit_in_shared_checkout",
+    "rule_merge_red_pr",
+    "rule_restart_kills_a_live_build",
+)
 
 
 def decide(cmd: str, skip: tuple[str, ...] = ()) -> tuple[str, str] | None:
@@ -990,9 +1270,11 @@ def decide(cmd: str, skip: tuple[str, ...] = ()) -> tuple[str, str] | None:
         # in CI catches it before it can ship, and the refusal names its own fix.
         return "policy", (
             "BLOCKED: the command policy disagrees with its own examples, so it cannot be "
-            "trusted to refuse anything.\n" + "\n".join(broken)
+            "trusted to refuse anything.\n"
+            + "\n".join(broken)
             + "\n\nFix policy/command.rego, then:  "
-              "opa test policy/command.rego policy/command_test.rego")
+            "opa test policy/command.rego policy/command_test.rego"
+        )
     if err:
         # Environmental, not a policy failure: OPA missing or unrunnable. Fail open like every
         # other path in this file, but say so on every single command until somebody fixes it.
@@ -1011,23 +1293,34 @@ def decide(cmd: str, skip: tuple[str, ...] = ()) -> tuple[str, str] | None:
     return None
 
 
-
 # ---------------------------------------------------------------- selftest
+
 
 def selftest() -> int:
     # orphan_state both ways: a `.wt-*` dir with no .git inside a repo names its parent; a live
     # worktree (has .git) and the repo root give None. The refusal itself is Rego (opa test).
     import tempfile
+
     with tempfile.TemporaryDirectory() as tmp:
-        repo = os.path.join(tmp, "repo"); dead = os.path.join(repo, ".wt-dead"); live = os.path.join(repo, ".wt-live")
-        os.makedirs(dead); os.makedirs(live)
-        subprocess.run([_real_tool("git"), "init", "-q", repo], check=True, capture_output=True)
+        repo = os.path.join(tmp, "repo")
+        dead = os.path.join(repo, ".wt-dead")
+        live = os.path.join(repo, ".wt-live")
+        os.makedirs(dead)
+        os.makedirs(live)
+        subprocess.run(
+            [_real_tool("git"), "init", "-q", repo], check=True, capture_output=True
+        )
         open(os.path.join(live, ".git"), "w").write("gitdir: nowhere\n")
-        for cmd, want in [(f"cd {dead} && git reset --hard origin/main", True),
-                          (f"git -C {dead} checkout -B x origin/main", True),
-                          (f"cd {live} && git status", False), (f"cd {repo} && git status", False)]:
+        for cmd, want in [
+            (f"cd {dead} && git reset --hard origin/main", True),
+            (f"git -C {dead} checkout -B x origin/main", True),
+            (f"cd {live} && git status", False),
+            (f"cd {repo} && git status", False),
+        ]:
             got = orphan_state(cmd) is not None
-            print(f"  {'ok  ' if got == want else 'FAIL'}  orphan_state {'set' if want else 'unset'}: {cmd.replace(tmp, '<tmp>')}")
+            print(
+                f"  {'ok  ' if got == want else 'FAIL'}  orphan_state {'set' if want else 'unset'}: {cmd.replace(tmp, '<tmp>')}"
+            )
             if got != want:
                 return 1
     # foreign_changes both ways: a tracked edit older than the session is named; the same edit
@@ -1035,26 +1328,51 @@ def selftest() -> int:
     # all None. The refusal itself is Rego (opa test).
     global _SESSION_STARTED
     with tempfile.TemporaryDirectory() as tmp:
-        repo = os.path.join(tmp, "repo"); os.makedirs(repo)
+        repo = os.path.join(tmp, "repo")
+        os.makedirs(repo)
         git = _real_tool("git")
         subprocess.run([git, "init", "-q", repo], check=True, capture_output=True)
-        f = os.path.join(repo, "REQ.jsonl"); open(f, "w").write("a\n")
-        subprocess.run([git, "-C", repo, "add", "REQ.jsonl"], check=True, capture_output=True)
-        subprocess.run([git, "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "x"],
-                       check=True, capture_output=True)
-        open(f, "w").write("b\n"); os.utime(f, (1_000_000, 1_000_000))
+        f = os.path.join(repo, "REQ.jsonl")
+        open(f, "w").write("a\n")
+        subprocess.run(
+            [git, "-C", repo, "add", "REQ.jsonl"], check=True, capture_output=True
+        )
+        subprocess.run(
+            [
+                git,
+                "-C",
+                repo,
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-qm",
+                "x",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        open(f, "w").write("b\n")
+        os.utime(f, (1_000_000, 1_000_000))
         _SESSION_STARTED = 2_000_000.0
-        for cmd, want in [(f"cd {repo} && git reset --hard origin/main", True),
-                          (f"git -C {repo} checkout -- REQ.jsonl", True),
-                          (f"cd {repo} && git stash && git reset --hard origin/main", False),
-                          (f"cd {repo} && git status", False)]:
+        for cmd, want in [
+            (f"cd {repo} && git reset --hard origin/main", True),
+            (f"git -C {repo} checkout -- REQ.jsonl", True),
+            (f"cd {repo} && git stash && git reset --hard origin/main", False),
+            (f"cd {repo} && git status", False),
+        ]:
             got = foreign_changes(cmd) is not None
-            print(f"  {'ok  ' if got == want else 'FAIL'}  foreign_changes {'set' if want else 'unset'}: {cmd.replace(tmp, '<tmp>')}")
+            print(
+                f"  {'ok  ' if got == want else 'FAIL'}  foreign_changes {'set' if want else 'unset'}: {cmd.replace(tmp, '<tmp>')}"
+            )
             if got != want:
                 return 1
         os.utime(f, (3_000_000, 3_000_000))
         got = foreign_changes(f"cd {repo} && git reset --hard") is not None
-        print(f"  {'ok  ' if not got else 'FAIL'}  foreign_changes unset: edit newer than the session")
+        print(
+            f"  {'ok  ' if not got else 'FAIL'}  foreign_changes unset: edit newer than the session"
+        )
         if got:
             return 1
         _SESSION_STARTED = None
@@ -1082,9 +1400,8 @@ def selftest() -> int:
         ("git add -- scripts/ops_status.py", None),
         ("git add -p", None),
         ("git commit -m 'no-verify is bad'", None),
-        ("git commit -m x\nrg -n PATTERN docs/", None),          # -n on a LATER line
-        ("git commit -m x && tail -n 5 log", None),               # -n after a separator
-
+        ("git commit -m x\nrg -n PATTERN docs/", None),  # -n on a LATER line
+        ("git commit -m x && tail -n 5 log", None),  # -n after a separator
         ("git diff --stat origin/main HEAD", "rule_two_dot_diff"),
         # Two BRANCH-shaped refs, not a branch-and-HEAD. This used to name
         # `origin/pr/shelf-copy-glossary`, which has since been deleted from origin — so
@@ -1098,7 +1415,10 @@ def selftest() -> int:
         ("git diff -- prospector/config.py", None),
         ("git diff HEAD~1", None),
         ("git add store/catalog.sqlite3", "rule_runtime_state"),
-        ("git commit --only -m x -- prospector/run.py store/index.json", "rule_runtime_state"),
+        (
+            "git commit --only -m x -- prospector/run.py store/index.json",
+            "rule_runtime_state",
+        ),
         ("git add .popdd/last_verify.json", "rule_runtime_state"),
         # A message that NAMES the file stages nothing. The rule must not fire on the commit
         # that fixes the problem it is about.
@@ -1108,11 +1428,16 @@ def selftest() -> int:
         ("ls store/inflight", None),  # not a staging command at all
         # A heredoc BODY is text, not a command. Writing a doc that quotes the rule,
         # or a commit message that explains it, must not trip the rule it quotes.
-        ("git commit -F - -- docs/A.md <<MSG\nnever git add -A in a worktree\nMSG\n", None),
+        (
+            "git commit -F - -- docs/A.md <<MSG\nnever git add -A in a worktree\nMSG\n",
+            None,
+        ),
         # A commit message quoting the rule is prose, not a command. This exact shape was
         # refused on 2026-08-19 while staging three explicit paths.
-        ('git add -- CLAUDE.md docs/X.md && git commit -m "what stays: never git add -A here"',
-         None),
+        (
+            'git add -- CLAUDE.md docs/X.md && git commit -m "what stays: never git add -A here"',
+            None,
+        ),
         ("git commit -m 'the rule is: git add -A is banned'", None),
         ('git commit --message="never git add -A"', None),
         ("python3 - <<'PY'\nprint('the git add -A rule')\nPY\n", None),
@@ -1126,9 +1451,18 @@ def selftest() -> int:
         ("flyctl logs -a prospector-engine", None),
         ("flyctl apps destroy prospector-engine --yes", None),
         ("flyctl scale count 0 -a x  # fly-revival-intended", None),
-        ("ln -sf ~/dev/code/crew/science/warehouse.db ~/dev/code/crew/science/warehouse.db", "rule_self_symlink"),
-        ("cd ~/dev/code/crew && ln -sf ~/dev/code/crew/science/warehouse.db science/warehouse.db", "rule_self_symlink"),
-        ("ln -s ~/dev/code/crew/science/warehouse.db /nonexistent-dir-xyz/warehouse.db", None),
+        (
+            "ln -sf ~/dev/code/crew/science/warehouse.db ~/dev/code/crew/science/warehouse.db",
+            "rule_self_symlink",
+        ),
+        (
+            "cd ~/dev/code/crew && ln -sf ~/dev/code/crew/science/warehouse.db science/warehouse.db",
+            "rule_self_symlink",
+        ),
+        (
+            "ln -s ~/dev/code/crew/science/warehouse.db /nonexistent-dir-xyz/warehouse.db",
+            None,
+        ),
         ("ln -sf /a/w.db /a/w.db  # symlink-intended", None),
         ("ln /a/w.db /a/w.db", None),
     ]
@@ -1141,24 +1475,35 @@ def selftest() -> int:
             print(f"  FAIL  {cmd!r}\n        wanted {want}, got {got}")
 
     # Which tree a rule measures is itself a rule, and it is the one that was wrong.
-    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # ~/.claude, not a repo
+    here = os.path.dirname(
+        os.path.dirname(os.path.abspath(__file__))
+    )  # ~/.claude, not a repo
     for cmd, session_cwd, want in [
         (f"cd {REPO} && gh pr create", "/nonexistent", REPO),
         (f"cd '{REPO}'\ngh pr create", "/nonexistent", REPO),
-        ("gh pr create", REPO, REPO),          # no cd: the session's own tree
-        ("cd /nonexistent/nope && gh pr create", None, REPO),   # unusable cd -> fall back
-        ("gh pr create", here, REPO),          # cwd outside any worktree -> fall back
+        ("gh pr create", REPO, REPO),  # no cd: the session's own tree
+        (
+            "cd /nonexistent/nope && gh pr create",
+            None,
+            REPO,
+        ),  # unusable cd -> fall back
+        ("gh pr create", here, REPO),  # cwd outside any worktree -> fall back
         # The 2026-08-17 false refusal: the cd path was a shell variable, so it resolved to no
         # directory and the SESSION's repo got graded instead.
-        (f"P={REPO}\ncd \"$P\"\ngh pr create", "/nonexistent", REPO),
-        (f"P={os.path.dirname(REPO)}\ncd \"$P/{os.path.basename(REPO)}\"\ngh pr create",
-         "/nonexistent", REPO),
+        (f'P={REPO}\ncd "$P"\ngh pr create', "/nonexistent", REPO),
+        (
+            f'P={os.path.dirname(REPO)}\ncd "$P/{os.path.basename(REPO)}"\ngh pr create',
+            "/nonexistent",
+            REPO,
+        ),
     ]:
         got_repo = _repo_for(cmd, session_cwd)
         if got_repo != want:
             bad += 1
-            print(f"  FAIL  _repo_for({cmd!r}, {session_cwd!r})\n"
-                  f"        wanted {want}, got {got_repo}")
+            print(
+                f"  FAIL  _repo_for({cmd!r}, {session_cwd!r})\n"
+                f"        wanted {want}, got {got_repo}"
+            )
         else:
             cases.append((cmd, want))
 
@@ -1168,7 +1513,9 @@ def selftest() -> int:
     # unfailable -- an unfailable check is the estate's most repeated defect class.
     cfg = os.path.expanduser("~/.claude")
     if _worktree_root(cfg) != os.path.realpath(cfg):
-        print("  NOTE  ~/.claude is not a git repo here, so the config-dir cases prove nothing")
+        print(
+            "  NOTE  ~/.claude is not a git repo here, so the config-dir cases prove nothing"
+        )
     else:
         for cmd, cwd_, want in [
             ("gh pr create", cfg, REPO),
@@ -1178,52 +1525,77 @@ def selftest() -> int:
             got = _repo_for(cmd, cwd_)
             if got != want:
                 bad += 1
-                print(f"  FAIL  config dir: _repo_for({cmd!r}, {cwd_!r}) -> {got}, wanted {want}")
+                print(
+                    f"  FAIL  config dir: _repo_for({cmd!r}, {cwd_!r}) -> {got}, wanted {want}"
+                )
             else:
                 cases.append((cmd, want))
     # The exclusion is by IDENTITY, not by prefix. A worktree underneath the config dir is a
     # real tree and must resolve to itself; excluding the whole subtree would break it.
-    for path_, want_ok in [(cfg, False), (cfg + "/worktrees/wt-a", True),
-                           (cfg + "-other", True), (REPO, True), ("", False)]:
+    for path_, want_ok in [
+        (cfg, False),
+        (cfg + "/worktrees/wt-a", True),
+        (cfg + "-other", True),
+        (REPO, True),
+        ("", False),
+    ]:
         if _is_product_repo(path_) != want_ok:
             bad += 1
-            print(f"  FAIL  _is_product_repo({path_!r}) -> {not want_ok}, wanted {want_ok}")
+            print(
+                f"  FAIL  _is_product_repo({path_!r}) -> {not want_ok}, wanted {want_ok}"
+            )
         else:
             cases.append((f"_is_product_repo({path_})", want_ok))
 
     # The shared-checkout note, tested on its decision rather than on the repo's mood.
     for repo, branch, want_note in [
         (REPO, "some/long-lived-branch", True),
-        (REPO, "main", True),          # the shared tree is shared whatever the branch is called
-        (REPO, "HEAD", False),         # detached: nothing accumulates
-        (os.path.join(os.path.expanduser("~"), "Documents", "code", "wt-recover"), "fix/anything", False),
+        (REPO, "main", True),  # the shared tree is shared whatever the branch is called
+        (REPO, "HEAD", False),  # detached: nothing accumulates
+        (
+            os.path.join(os.path.expanduser("~"), "Documents", "code", "wt-recover"),
+            "fix/anything",
+            False,
+        ),
     ]:
         note = _shared_checkout_refusal(repo, branch)
         noted = note is not None
         if noted != want_note:
             bad += 1
-            print(f"  FAIL  _shared_checkout_refusal({repo!r}, {branch!r})\n"
-                  f"        wanted noted={want_note}, got {noted}")
+            print(
+                f"  FAIL  _shared_checkout_refusal({repo!r}, {branch!r})\n"
+                f"        wanted noted={want_note}, got {noted}"
+            )
         else:
             cases.append((f"{repo}@{branch}", want_note))
 
     # The merge fence, tested on its decision rather than against a live GitHub.
     for states, want_blocked, label in [
-        ([("python", "SUCCESS"), ("nextjs", "SKIPPED"), ("guard", "NEUTRAL")], False, "all green"),
+        (
+            [("python", "SUCCESS"), ("nextjs", "SKIPPED"), ("guard", "NEUTRAL")],
+            False,
+            "all green",
+        ),
         # Tonight's PR #290 exactly: five green, two red. `gh pr checks --watch` exited 0 on it.
-        ([("engine", "SUCCESS"), ("python", "FAILURE"), ("ci-ok", "FAILURE")], True, "red"),
+        (
+            [("engine", "SUCCESS"), ("python", "FAILURE"), ("ci-ok", "FAILURE")],
+            True,
+            "red",
+        ),
         ([("python", "SUCCESS"), ("dotnet", "IN_PROGRESS")], True, "still running"),
         ([("python", "SUCCESS"), ("dotnet", "QUEUED")], True, "queued"),
         # A cancelled run is not a pass. Three of main's four runs ended this way.
         ([("python", "CANCELLED")], True, "cancelled"),
-        ([], True, "no checks at all"),        # what 5b8d010 looked like
-        (None, True, "checks unreadable"),     # fails CLOSED
+        ([], True, "no checks at all"),  # what 5b8d010 looked like
+        (None, True, "checks unreadable"),  # fails CLOSED
     ]:
         blocked = _merge_refusal("290", states) is not None
         if blocked != want_blocked:
             bad += 1
-            print(f"  FAIL  _merge_refusal({label})\n"
-                  f"        wanted blocked={want_blocked}, got {blocked}")
+            print(
+                f"  FAIL  _merge_refusal({label})\n"
+                f"        wanted blocked={want_blocked}, got {blocked}"
+            )
         else:
             cases.append((f"merge/{label}", want_blocked))
 
@@ -1236,22 +1608,24 @@ def selftest() -> int:
     GREEN = [("python", "SUCCESS")]
     RED = [("python", "FAILURE")]
     for label, states, escaped, main_red, fixing, want_blocked in [
-            ("outage + marker", None, True, None, False, False),
-            ("outage, no marker", None, False, None, False, True),
-            ("red + marker", RED, True, None, False, True),
-            ("cancelled + marker", [("python", "CANCELLED")], True, None, False, True),
-            ("no checks + marker", [], True, None, False, True),
-            ("pending + marker", [("python", "IN_PROGRESS")], True, None, False, True),
-            ("green, main green", GREEN, False, None, False, False),
-            ("green, main red", GREEN, False, "main is red", False, True),
-            ("green, main red, fixing", GREEN, False, "main is red", True, False),
-            ("red, main red", RED, False, "main is red", True, True),
+        ("outage + marker", None, True, None, False, False),
+        ("outage, no marker", None, False, None, False, True),
+        ("red + marker", RED, True, None, False, True),
+        ("cancelled + marker", [("python", "CANCELLED")], True, None, False, True),
+        ("no checks + marker", [], True, None, False, True),
+        ("pending + marker", [("python", "IN_PROGRESS")], True, None, False, True),
+        ("green, main green", GREEN, False, None, False, False),
+        ("green, main red", GREEN, False, "main is red", False, True),
+        ("green, main red, fixing", GREEN, False, "main is red", True, False),
+        ("red, main red", RED, False, "main is red", True, True),
     ]:
         blocked = _merge_verdict("1", states, escaped, main_red, fixing) is not None
         if blocked != want_blocked:
             bad += 1
-            print(f"  FAIL  _merge_verdict({label})\n"
-                  f"        wanted blocked={want_blocked}, got {blocked}")
+            print(
+                f"  FAIL  _merge_verdict({label})\n"
+                f"        wanted blocked={want_blocked}, got {blocked}"
+            )
         else:
             cases.append((f"verdict/{label}", want_blocked))
 
@@ -1259,21 +1633,26 @@ def selftest() -> int:
     # `gh api .../pulls/N/merge` did not match until 2026-08-18, which is how #324 was merged
     # with its `python` job still running.
     for cmd, want_pr in [
-            ("gh pr merge 324 --squash", "324"),
-            ("gh pr merge --squash --delete-branch 324", "324"),
-            ("gh api -X PUT repos/chidionyema/prospector/pulls/324/merge", "324"),
-            ("gh api --method PUT /repos/o/r/pulls/9/merge -f merge_method=squash", "9")]:
+        ("gh pr merge 324 --squash", "324"),
+        ("gh pr merge --squash --delete-branch 324", "324"),
+        ("gh api -X PUT repos/chidionyema/prospector/pulls/324/merge", "324"),
+        ("gh api --method PUT /repos/o/r/pulls/9/merge -f merge_method=squash", "9"),
+    ]:
         m = _GH_MERGE_NUM.search(cmd)
         got = (m.group(1) or m.group(2)) if m else None
         if not _GH_MERGE.search(cmd) or got != want_pr:
             bad += 1
-            print(f"  FAIL  {cmd!r}\n        wanted pr={want_pr}, matched={bool(_GH_MERGE.search(cmd))} got={got}")
+            print(
+                f"  FAIL  {cmd!r}\n        wanted pr={want_pr}, matched={bool(_GH_MERGE.search(cmd))} got={got}"
+            )
         else:
             cases.append((f"merge-spelling/{want_pr}", cmd))
 
     # The rule must ignore commands that are not a merge.
-    for cmd, want in [("gh pr list --state open", None),
-                      ("gh pr create --base main", None)]:
+    for cmd, want in [
+        ("gh pr list --state open", None),
+        ("gh pr create --base main", None),
+    ]:
         got = "rule_merge_red_pr" if rule_merge_red_pr(cmd) else None
         if got != want:
             bad += 1
@@ -1284,20 +1663,32 @@ def selftest() -> int:
     # A warning must not be able to become a refusal by accident. The two tuples decide different
     # exit codes, so a rule appearing in both would block on a path meant only to inform.
     for name, ok, why in [
-        ("warn_rules_are_not_also_refusals",
-         not (set(RULES) & set(WARN_RULES)), "a rule is in RULES and WARN_RULES"),
+        (
+            "warn_rules_are_not_also_refusals",
+            not (set(RULES) & set(WARN_RULES)),
+            "a rule is in RULES and WARN_RULES",
+        ),
         # Pin the 2026-08-17 promotion. This was a WARN_RULE for months; sessions read the note,
         # appended the marker and committed anyway, and `integrate/minimax-into-main` reached 105
         # commits in the shared checkout. Demoting it back is how that happens again.
-        ("shared_checkout_commit_is_a_refusal",
-         rule_commit_in_shared_checkout in RULES
-         and rule_commit_in_shared_checkout not in WARN_RULES
-         and (_shared_checkout_refusal(REPO, "some/branch") or "").startswith("BLOCKED"),
-         "the shared-checkout commit rule is not a refusal"),
-        ("a_warning_does_not_say_blocked",
-         all(not (r(c) or "").startswith("BLOCKED")
-             for r in WARN_RULES
-             for c in (f"cd {REPO} && git commit -m x",)), "a WARN_RULES message says BLOCKED"),
+        (
+            "shared_checkout_commit_is_a_refusal",
+            rule_commit_in_shared_checkout in RULES
+            and rule_commit_in_shared_checkout not in WARN_RULES
+            and (_shared_checkout_refusal(REPO, "some/branch") or "").startswith(
+                "BLOCKED"
+            ),
+            "the shared-checkout commit rule is not a refusal",
+        ),
+        (
+            "a_warning_does_not_say_blocked",
+            all(
+                not (r(c) or "").startswith("BLOCKED")
+                for r in WARN_RULES
+                for c in (f"cd {REPO} && git commit -m x",)
+            ),
+            "a WARN_RULES message says BLOCKED",
+        ),
     ]:
         if ok:
             cases.append((name, True))
@@ -1308,18 +1699,50 @@ def selftest() -> int:
     # that can only be proved when CI happens to be busy is a rule that is never proved.
     _real_busy = _busy_runners
     for name, busy, cmd, want_block in [
-        ("busy_fleet_blocks_update", ["runner-7819644f116928"],
-         'fly machine update abc -a prospector-ci --standby-for "" --yes', True),
-        ("busy_fleet_blocks_restart", ["r1"], "fly machine restart abc -a prospector-ci", True),
-        ("busy_fleet_blocks_destroy", ["r1"], "fly machine destroy abc -a hermes-ci", True),
-        ("idle_fleet_allows_update", [],
-         'fly machine update abc -a prospector-ci --standby-for "" --yes', False),
+        (
+            "busy_fleet_blocks_update",
+            ["runner-7819644f116928"],
+            'fly machine update abc -a prospector-ci --standby-for "" --yes',
+            True,
+        ),
+        (
+            "busy_fleet_blocks_restart",
+            ["r1"],
+            "fly machine restart abc -a prospector-ci",
+            True,
+        ),
+        (
+            "busy_fleet_blocks_destroy",
+            ["r1"],
+            "fly machine destroy abc -a hermes-ci",
+            True,
+        ),
+        (
+            "idle_fleet_allows_update",
+            [],
+            'fly machine update abc -a prospector-ci --standby-for "" --yes',
+            False,
+        ),
         # Starting a stopped machine cannot interrupt a build, so it is never this rule's business.
-        ("start_is_never_blocked", ["r1"], "fly machine start abc -a prospector-ci", False),
+        (
+            "start_is_never_blocked",
+            ["r1"],
+            "fly machine start abc -a prospector-ci",
+            False,
+        ),
         # An app that is not a runner fleet has no jobs to destroy.
-        ("non_runner_app_allowed", ["r1"], "fly machine restart abc -a prospector-engine", False),
-        ("escape_hatch_allows", ["r1"],
-         "fly machine restart abc -a prospector-ci  # runner-busy-intended", False),
+        (
+            "non_runner_app_allowed",
+            ["r1"],
+            "fly machine restart abc -a prospector-engine",
+            False,
+        ),
+        (
+            "escape_hatch_allows",
+            ["r1"],
+            "fly machine restart abc -a prospector-ci  # runner-busy-intended",
+            False,
+        ),
     ]:
         globals()["_busy_runners"] = lambda _repo, _b=busy: list(_b)
         got = bool(rule_restart_kills_a_live_build(cmd))
@@ -1377,12 +1800,16 @@ def strip_heredocs(cmd: str) -> str:
     return "".join(out)
 
 
-_COMMIT_MSG = re.compile(r"""(-m|--message|--body|--title|--caption)(=|\s+)(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
-                         re.DOTALL)
+_COMMIT_MSG = re.compile(
+    r"""(-m|--message|--body|--title|--caption)(=|\s+)(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
+    re.DOTALL,
+)
 
 
-_ECHO_PAYLOAD = re.compile(r"""\b(echo|printf)(\s+-[a-zA-Z]+)*\s+(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
-                           re.DOTALL)
+_ECHO_PAYLOAD = re.compile(
+    r"""\b(echo|printf)(\s+-[a-zA-Z]+)*\s+(?P<q>['"])(?P<body>.*?)(?<!\\)(?P=q)""",
+    re.DOTALL,
+)
 
 
 def strip_echo_payloads(cmd: str) -> str:
@@ -1397,7 +1824,9 @@ def strip_echo_payloads(cmd: str) -> str:
     chained with && or ; are still judged. An unquoted payload is left alone: it is one
     shell word per token and a guarded verb in it is as likely a mistake as prose.
     """
-    return _ECHO_PAYLOAD.sub(lambda m: f"{m.group(1)}{m.group(2) or ''} {m.group('q')}{m.group('q')}", cmd)
+    return _ECHO_PAYLOAD.sub(
+        lambda m: f"{m.group(1)}{m.group(2) or ''} {m.group('q')}{m.group('q')}", cmd
+    )
 
 
 def strip_commit_messages(cmd: str) -> str:
@@ -1414,7 +1843,9 @@ def strip_commit_messages(cmd: str) -> str:
     Only the quoted body goes. `git commit -m` with an unquoted word is left alone, and so is
     everything outside the quotes -- including anything chained after the commit with && or ;.
     """
-    return _COMMIT_MSG.sub(lambda m: f"{m.group(1)}{m.group(2)}{m.group('q')}{m.group('q')}", cmd)
+    return _COMMIT_MSG.sub(
+        lambda m: f"{m.group(1)}{m.group(2)}{m.group('q')}{m.group('q')}", cmd
+    )
 
 
 def main() -> int:
