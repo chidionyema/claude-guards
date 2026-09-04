@@ -39,7 +39,7 @@ def test_a_merge_naming_its_number_still_takes_the_graded_path(monkeypatch):
     mod = _load()
     seen = {}
 
-    def fake_verdict(pr, states, escaped, main_red, main_red_marker):
+    def fake_verdict(pr, states, escaped, main_red, main_red_marker, auto=False):
         seen["pr"] = pr
         return None
 
