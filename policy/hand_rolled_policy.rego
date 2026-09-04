@@ -78,7 +78,13 @@ legacy := {
 	# WHY: idp#675 was merged by --auto at 00:35:33Z with portability-drill run 33223840305 still
 	# going; it concluded FAILURE and main's gate was out ~30 min. Adapter gathers, Rego decides is
 	# the shape this becomes when a runner can hand OPA the check names and the required set.
-	"rule-guard.py": 1452,
+	# 1452 -> 1461 on 2026-09-04 (session 5f6f4e72). No refusal was added: rules_count is still
+	# 7. The nine lines are the set of check names --auto does not need to wait for (the image
+	# builds, the fan-out job that lists them, offline-gate, and idp's feature-request-plan,
+	# which prices a change on the step summary and captures its own non-zero exit). They live
+	# beside the gh calls in rule_merge_red_pr, which this file's header already names as unable
+	# to move to Rego because it asks GitHub a live question.
+	"rule-guard.py": 1461,
 	# crew#407 (claude-guards#118): the credential shapes use lookarounds ((?!...), (?<!...)) that
 	# RE2, and so OPA, cannot run, and the one definition is estate_alert.credential_shape, shared
 	# with the Telegram senders (#113). The hook is the adapter for two events (Stop reply text,

@@ -437,7 +437,16 @@ def _auto_merge_refusal(pr: str, states: list[tuple[str, str]] | None,
                 "  why              --auto merges when the REQUIRED checks pass, so a guard that\n"
                 "                   cannot see that set cannot say what GitHub will wait for\n"
                 + tail)
-    unguarded = sorted({n for n, _ in (states or []) if n not in required})
+    # Contexts that do not grade the change: the image builds and the fan-out job that lists
+    # them, jobs a path filter skips, and jobs that price a change and say so on the summary
+    # without ever failing (idp's feature-request-plan captures its own non-zero exit by
+    # design). Requiring those on the default branch would block a merge whenever a path
+    # filter turns one off, so --auto not waiting for them is correct rather than a hole.
+    # Founder, 2026-09-04: "we need automerge on" -- the fence stays on the checks that
+    # judge the world.
+    ungraded = {"discover", "merge", "offline-gate", "feature-request-plan"}
+    unguarded = sorted({n for n, _ in (states or [])
+                        if n not in required and n not in ungraded and not n.startswith("build (")})
     if not unguarded:
         return None
     return (f"BLOCKED by rule-guard: --auto on PR #{pr} would merge without waiting for "
