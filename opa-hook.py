@@ -74,8 +74,8 @@ def denials(payload: dict, query: str = QUERY) -> list[str]:
         raise NoVerdict(f"opa answered in a shape this adapter cannot read: {e}") from e
 
 
-def last_reply_above_fold(transcript_path: str) -> str:
-    """Text of the last assistant message, cut at the first --- line, code fences blanked."""
+def _above_fold(transcript_path: str) -> str:
+    """Text of the last assistant message, cut at the first --- line. Nothing removed."""
     text = ""
     try:
         with open(transcript_path, encoding="utf-8", errors="replace") as fh:
@@ -100,7 +100,37 @@ def last_reply_above_fold(transcript_path: str) -> str:
         if re.fullmatch(r"\s*-{3,}\s*", line):
             break
         kept.append(line)
-    return re.sub(r"```.*?```", "", "\n".join(kept), flags=re.S)
+    return "\n".join(kept)
+
+
+def last_reply_above_fold(transcript_path: str) -> str:
+    """The above-fold text with code fences blanked, which is what policy/reply.rego reads."""
+    return re.sub(r"```.*?```", "", _above_fold(transcript_path), flags=re.S)
+
+
+def reply_evidence(transcript_path: str) -> dict:
+    """What Rego cannot see about the reply, measured here so the policy can decide.
+
+    THE EMPIRICAL PROOF RULE (founder 2026-09-05). A MEASURED_OK claim has to carry a line the
+    running system printed. Two facts are needed and neither survives into `reply`:
+
+    - `reply_has_quote`: last_reply_above_fold() deletes fenced blocks outright, so by the time
+      Rego sees the text every quoted log line is gone. The presence of a fence or a `> ` line is
+      measured on the raw text instead.
+    - `reply_asserted`: the reply's own voice, with backticks and quotations removed. A reply that
+      writes MEASURED_OK inside backticks is naming the word, not claiming it -- the rule's first
+      victim was the reply announcing the rule. Stripping those spans is what separates a claim
+      from a mention.
+
+    The adapter measures; policy/reply.rego decides.
+    """
+    raw = _above_fold(transcript_path)
+    return {
+        "reply_has_quote": bool(re.search(r"^\s*(?:```|>\s\S)", raw, re.M)),
+        "reply_asserted": re.sub(
+            r"^\s*>.*$", "", re.sub(r"`[^`]*`", "", re.sub(r"```.*?```", "", raw, flags=re.S)), flags=re.M
+        ),
+    }
 
 
 def checkpoint_age_s(transcript_path):
@@ -184,6 +214,7 @@ def decide(payload: dict, event: str) -> int:
             return 0
         reply = last_reply_above_fold(str(payload.get("transcript_path", "")))
         payload_in = {"event": "Stop", "reply": reply, "focus": standing_focus(), "estate": estate_snapshot()}
+        payload_in.update(reply_evidence(str(payload.get("transcript_path", ""))))
         age = checkpoint_age_s(str(payload.get("transcript_path", "")))
         if age is not None:
             payload_in["checkpoint_age_s"] = age

@@ -6,18 +6,13 @@ Founder, 2026-08-24, verbatim: "FOR THE LAST TINE WE NEED A NATURE, PLATFRON WE 
 BUYER AND NEED INDUSTRY AND ENTERPRISE APPROCACH NOT HALF STICHED TOGETHER SOLUTIONS THAT BREAK
 DAILY. HEADLINE FOR CREW ABOVE ALL LAWS."
 
-He put it above the laws because he has now said it five times — R4 (2026-08-23), R6, R7, R11 and
-this one — and each time it was recorded as prose and ignored. A law nobody can be stopped by is a
-wish (LAW 44). This headline is the thing you check before you write anything.
-
 **One platform, and it has a name: `~/dev/code/idp`.** Backstage for the catalog and the portal,
 and the rows of `crew/docs/STANDARDS.md` for every layer under it.
 
 **Platform is not product, and this distinction is load-bearing.** `prospector` is the product and
 stays the product. `hermes-v2` is a product. Products are what a buyer is buying; the platform is
 what they run on. Nothing here says a product must live inside `idp`, and no product is ever
-deleted for sitting outside it. Founder, 2026-08-24, correcting exactly this sentence: "careful ...
-prospector is still our product."
+deleted for sitting outside it.
 
 What the one-platform rule binds is the **layers underneath**: model routing, traces and audit,
 identity, secrets, scheduling, the service catalog, CI. There is one of each, it is the row on the
@@ -38,18 +33,33 @@ stitching, and that is what gets deleted. "We could also use X" is not a deliver
    Default passwords, a service with no config, a claim the file does not support, a stack that
    has never been booted. Assume the diligence is next week and it is adversarial.
 
-The buyer is not reading this file. He is reading what runs, and what breaks. Everything below is
-how you build it; this is what you are building.
+---
+
+# HYPER EFFICIENCY
+
+**Token cost is a primary constraint.** It ranks with correctness and above thoroughness,
+reporting and process hygiene. Fewest probes that settle the question; never feed paperwork, delete
+the gate; batch or do not start; no narration; fewest words that carry the fact; read the running
+thing before touching the pipeline. Full text and the founder's words: `~/AGENTS-FULL.md`.
+
+---
+
+# THE EMPIRICAL PROOF RULE (founder 2026-09-05, verbatim; record: `~/.claude/docs/founder/2026-09-05T1415Z-he-generalized-rule-empirical-proof-over-synthetic-probes-a79801e5.md`)
+
+NEVER declare a system "WORKING" or "MEASURED_OK" based solely on synthetic probes, CI gates, or HTTP 200 health checks. Synthetic checks lie.
+
+Before claiming a fix is successful, you MUST prove it empirically:
+1. **Read live traffic:** Fetch the actual pod logs (`kubectl logs --tail=100`) and quote a real, end-to-end user transaction completing successfully.
+2. **Check for silent failures:** Look at the most recent cluster events (`kubectl get events`) to ensure the pod isn't crashing or OOMing immediately after answering a probe.
+3. **Verify the critical path:** If it's a bot, verify the upstream webhook and LLM generation path. If it's a database, verify a real row was written.
+
+If you cannot quote a successful production log line, the system is NOT working.
 
 ---
 
 # The laws
 
 Fifty-five rules, in priority order, numbered to 55. **When two laws want different things, the lower number wins.**
-That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
-kept firing while LAW 1 was still open.
-
-**Effective order.** Three axes (HOW, WHAT, IMPROVES), mapped in `~/AGENTS-FULL.md`; the tie-break stands: lower number wins.
 
 | # | Law | Fires |
 |---|-----|-------|
@@ -113,8 +123,6 @@ Law prose, history and move notes: `~/AGENTS-FULL.md`; incidents: `~/.claude/LAW
 
 # THE FOUR HARD RULES
 
-The preamble (why these four exist) was moved verbatim to `~/AGENTS-FULL.md` on 2026-08-27 (crew#26 CP-B); nothing reworded.
-
 These four outrank convenience and habit. They restate LAW 2, LAW 3 and LAW 9 in the exact shape
 they were broken in.
 
@@ -133,7 +141,7 @@ commit search must run first to ensure the code doesn't already exist.
 GUARD collisions or force turns to end prematurely. Execute next tasks that have zero dependency
 on that background run, with zero narrative bloat.
 
-**6. Optimise before execution.** No command that changes the world runs before the plan has been written and optimised in writing (naive steps → bottleneck → memoize, parallelise, lazy, batch → count again → `Optimised:` line). Founder, 2026-08-29: "optimise before build ... note this process down as it will become law ... how to plan and optimise before starting any execution". On trial on crew#584; the operating-model gate enforces the line after the trial.
+**6. Optimise before execution.** No command that changes the world runs before the plan has been written and optimised in writing (naive steps → bottleneck → memoize, parallelise, lazy, batch → count again → `Optimised:` line). Founder's words and the trial note: `~/AGENTS-FULL.md`.
 
 # How to work
 
@@ -149,8 +157,7 @@ about to write a project's name in this file, it belongs in that project's file.
   that does not start with one of those five is malformed. `WAITING:` is for a background run still
   in flight and names the run's task id; the harness re-invokes you when it reports, and idle-guard v2
   does not prompt a board claim (crew#506 CP2, 2026-08-27). A `WAITING:` naming no live run is idle.
-- **`DONE:` means the founder used it and confirmed it.** Founder, 2026-08-25, Definition of Done
-  v2.1: "Merged code, green CI, and passing tests are inventory. They are not progress." Built,
+- **`DONE:` means the founder used it and confirmed it.** Built,
   merged and green is `INVENTORY:`. A `DONE:` reply carries a `Founder receipt:` line naming
   where his confirmation is recorded. `dod-guard.py` refuses the reply otherwise.
 - **An `INVENTORY:` reply is a handoff, and a handoff has exactly five lines** above the fold:
@@ -171,7 +178,7 @@ about to write a project's name in this file, it belongs in that project's file.
   turn. Surface it unfixed only when you are barred from touching it: a founder decision, a refused
   permission, another session's work.
 
-The other eleven subsections (Executable spec or blocked (R29, founder 2026-08-25), Plain English, Proving a claim, Smallest diff, How to test, Closing a mistake — the LAW 45 protocol, Context discipline, Never sit and watch a long command, Session hygiene, Model routing, State is a probe, not a paragraph) were moved verbatim to `~/AGENTS-FULL.md` on 2026-08-27 (crew#26 CP-B); nothing reworded. They bind exactly as before.
+The eleven other subsections of How to work live verbatim in `~/AGENTS-FULL.md` and bind exactly as before.
 
 # Compact instructions
 
@@ -187,10 +194,12 @@ output already acted on; any standing directive already in a memory file — cit
 
 **Never drop:** a decision, a file path, a command or an error string.
 
-
 # OUR SSO POLICY (founder 2026-08-31)
 
-One identity layer: OIDC at the gateway, never in an app (idp decision 0003); federated login,
-no password ever held for a person (decision 0007). No surface ships its own login; a second
-SSO is stitching and gets deleted. Full policy: `~/AGENTS-FULL.md`; read both decisions before
-touching any login, auth or identity code.
+One identity layer: OIDC at the gateway, never in an app; federated login, no password ever held
+for a person. No surface ships its own login. Full policy and both decisions: `~/AGENTS-FULL.md`.
+
+# THE FLAKE PROTOCOL (founder 2026-09-03)
+
+A CI failure gets a root-cause read. If it is 100% unrelated to your change, quarantine the flaky
+test in your own pull request and merge; do not rerun and wait. Full text: `~/AGENTS-FULL.md`.
