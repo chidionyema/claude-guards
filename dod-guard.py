@@ -53,6 +53,19 @@ CHECKABLE = re.compile(
 # block or a `> ` quotation somewhere above the fold. The guard cannot know the quoted line is
 # real; it can refuse the reply that quotes nothing at all.
 QUOTED = re.compile(r"^\s*(?:```|>\s\S)", re.MULTILINE)
+#: A reply that writes MEASURED_OK inside backticks, a fenced block or a quotation is talking
+#: about the word, not claiming it - the rule's first victim was the reply announcing the rule.
+#: Stripping those spans first is what separates a claim from a mention. It also means an agent
+#: could dodge the guard by backticking its own claim; that is a smaller hole than a guard that
+#: refuses every discussion of the rule, and the founder is the oracle either way.
+FENCED = re.compile(r"```.*?```", re.DOTALL)
+INLINE = re.compile(r"`[^`]*`")
+QUOTE_LINE = re.compile(r"^\s*>.*$", re.MULTILINE)
+
+
+def asserted(text: str) -> str:
+    """The reply's own voice: everything outside code fences, backticks and quotations."""
+    return QUOTE_LINE.sub("", INLINE.sub("", FENCED.sub("", text)))
 
 
 def above_the_fold(text: str) -> str:
@@ -99,7 +112,7 @@ def offences(text: str) -> list[str]:
             out.append("STAGED: needs the sentence `Reply 'go' to execute immediately, 'hold' to review.`")
         if not re.search(r"Auto-activating in \d+ minutes", fold):
             out.append("STAGED: needs `Auto-activating in <N> minutes.` with a number.")
-    if "MEASURED_OK" in fold and not QUOTED.search(fold):
+    if "MEASURED_OK" in asserted(fold) and not QUOTED.search(fold):
         out.append("MEASURED_OK without a quoted line the system itself printed. THE EMPIRICAL "
                    "PROOF RULE (founder 2026-09-05): synthetic probes, CI gates and HTTP 200 "
                    "health checks are not proof. Quote a real end-to-end transaction from "
@@ -173,11 +186,13 @@ def selftest() -> int:
     probe_only = "WORKING: cyrus is MEASURED_OK; the readiness probe answers 200.\n"
     quoted_log = ("WORKING: cyrus is MEASURED_OK.\n```\nINFO linear webhook issue.create -> "
                   "run 41 completed\n```\n")
+    about_the_rule = "WORKING: the guard now refuses a reply saying `MEASURED_OK` off a probe.\n"
     ok = True
     for name, text, expect_block in (("bad", bad, True), ("bad2", bad2, True), ("good", good, False),
                                      ("good2", good2, False), ("working", working, False),
                                      ("staged", staged, False), ("staged_bad", staged_bad, True),
-                                     ("probe_only", probe_only, True), ("quoted_log", quoted_log, False)):
+                                     ("probe_only", probe_only, True), ("quoted_log", quoted_log, False),
+                                     ("about_the_rule", about_the_rule, False)):
         got = bool(offences(text))
         print(f"{name}: {'BLOCK' if got else 'PASS'} {'ok' if got == expect_block else 'WRONG'}")
         ok &= got == expect_block
