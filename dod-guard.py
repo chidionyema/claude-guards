@@ -17,11 +17,7 @@ WHAT IT ENFORCES, mechanically, on the text above the fold of the last assistant
   Evidence:   must carry something checkable: a URL, a commit hash, a file path, or a
               command in backticks. A bare sentence is not evidence.
 
-  MEASURED_OK: in any reply, needs a quoted line the running system printed — a fenced block
-              or a `> ` quotation. THE EMPIRICAL PROOF RULE, founder 2026-09-05: a synthetic
-              probe, a CI gate and an HTTP 200 are not proof of a working system.
-
-WORKING:, WAITING: and BLOCKED: replies are otherwise untouched. So is anything below the first `---`.
+WORKING:, WAITING: and BLOCKED: replies are untouched. So is anything below the first `---`.
 
 WHAT IT CANNOT SEE (residual, stated per LAW 45 step 5). It checks the shape of the claim,
 not its truth. A false `Founder receipt:` line passes this guard; the founder is the oracle
@@ -47,25 +43,6 @@ HANDOFF = ("Built:", "Use:", "Expect:", "Not done:", "Evidence:")
 CHECKABLE = re.compile(
     r"https?://\S+|\b[0-9a-f]{7,40}\b|`[^`]+`|(?:~|/)[\w./-]+"
 )
-
-# THE EMPIRICAL PROOF RULE (founder 2026-09-05). A MEASURED_OK claim has to carry a line the
-# running system printed, not a summary of a probe the session controls. Mechanically: a fenced
-# block or a `> ` quotation somewhere above the fold. The guard cannot know the quoted line is
-# real; it can refuse the reply that quotes nothing at all.
-QUOTED = re.compile(r"^\s*(?:```|>\s\S)", re.MULTILINE)
-#: A reply that writes MEASURED_OK inside backticks, a fenced block or a quotation is talking
-#: about the word, not claiming it - the rule's first victim was the reply announcing the rule.
-#: Stripping those spans first is what separates a claim from a mention. It also means an agent
-#: could dodge the guard by backticking its own claim; that is a smaller hole than a guard that
-#: refuses every discussion of the rule, and the founder is the oracle either way.
-FENCED = re.compile(r"```.*?```", re.DOTALL)
-INLINE = re.compile(r"`[^`]*`")
-QUOTE_LINE = re.compile(r"^\s*>.*$", re.MULTILINE)
-
-
-def asserted(text: str) -> str:
-    """The reply's own voice: everything outside code fences, backticks and quotations."""
-    return QUOTE_LINE.sub("", INLINE.sub("", FENCED.sub("", text)))
 
 
 def above_the_fold(text: str) -> str:
@@ -112,11 +89,6 @@ def offences(text: str) -> list[str]:
             out.append("STAGED: needs the sentence `Reply 'go' to execute immediately, 'hold' to review.`")
         if not re.search(r"Auto-activating in \d+ minutes", fold):
             out.append("STAGED: needs `Auto-activating in <N> minutes.` with a number.")
-    if "MEASURED_OK" in asserted(fold) and not QUOTED.search(fold):
-        out.append("MEASURED_OK without a quoted line the system itself printed. THE EMPIRICAL "
-                   "PROOF RULE (founder 2026-09-05): synthetic probes, CI gates and HTTP 200 "
-                   "health checks are not proof. Quote a real end-to-end transaction from "
-                   "`kubectl logs --tail=100` in a fenced block, or say UNKNOWN.")
     if kind in ("DONE", "INVENTORY") and has_line(fold, "Evidence:") and not evidence_is_checkable(fold):
         out.append("`Evidence:` must contain a URL, a commit hash, a file path or a `command`.")
     return out
@@ -183,16 +155,10 @@ def selftest() -> int:
     staged = ("STAGED: platform/access apply (idp#150) is ready. Reply 'go' to execute immediately, 'hold' to "
               "review. Auto-activating in 60 minutes.\n")
     staged_bad = "STAGED: platform/access apply is ready, say go.\n"
-    probe_only = "WORKING: cyrus is MEASURED_OK; the readiness probe answers 200.\n"
-    quoted_log = ("WORKING: cyrus is MEASURED_OK.\n```\nINFO linear webhook issue.create -> "
-                  "run 41 completed\n```\n")
-    about_the_rule = "WORKING: the guard now refuses a reply saying `MEASURED_OK` off a probe.\n"
     ok = True
     for name, text, expect_block in (("bad", bad, True), ("bad2", bad2, True), ("good", good, False),
                                      ("good2", good2, False), ("working", working, False),
-                                     ("staged", staged, False), ("staged_bad", staged_bad, True),
-                                     ("probe_only", probe_only, True), ("quoted_log", quoted_log, False),
-                                     ("about_the_rule", about_the_rule, False)):
+                                     ("staged", staged, False), ("staged_bad", staged_bad, True)):
         got = bool(offences(text))
         print(f"{name}: {'BLOCK' if got else 'PASS'} {'ok' if got == expect_block else 'WRONG'}")
         ok &= got == expect_block

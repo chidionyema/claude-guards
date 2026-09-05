@@ -171,3 +171,37 @@ test_a_stale_or_missing_document_refuses_nothing if {
 	count(deny) == 0 with input as {"event": "Stop", "reply": "DONE: estate is green", "estate": {"fresh": false}}
 	count(deny) == 0 with input as {"event": "Stop", "reply": "DONE: estate is green"}
 }
+
+# THE EMPIRICAL PROOF RULE. A probe-only claim is refused; a quoted log line passes; naming the
+# word inside backticks is a mention, not a claim (the rule's first victim was the reply that
+# announced it).
+test_measured_ok_off_a_probe_is_refused if {
+	some m in deny with input as {
+		"event": "Stop",
+		"reply_asserted": "WORKING: cyrus is MEASURED_OK; the readiness probe answers 200.",
+		"reply_has_quote": false,
+	}
+	contains(m, "EMPIRICAL PROOF RULE")
+}
+
+test_measured_ok_with_a_quoted_log_line_passes if {
+	count([m |
+		some m in deny with input as {
+			"event": "Stop",
+			"reply_asserted": "WORKING: cyrus is MEASURED_OK.",
+			"reply_has_quote": true,
+		}
+		contains(m, "EMPIRICAL PROOF RULE")
+	]) == 0
+}
+
+test_measured_ok_inside_backticks_is_a_mention_not_a_claim if {
+	count([m |
+		some m in deny with input as {
+			"event": "Stop",
+			"reply_asserted": "WORKING: the guard now refuses a reply saying  off a probe.",
+			"reply_has_quote": false,
+		}
+		contains(m, "EMPIRICAL PROOF RULE")
+	]) == 0
+}

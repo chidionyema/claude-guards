@@ -230,3 +230,26 @@ deny contains msg if {
 		[concat("\n  ", sort(estate_red_rows))],
 	)
 }
+
+# THE EMPIRICAL PROOF RULE (founder 2026-09-05, verbatim in ~/AGENTS.md; record:
+# ~/.claude/docs/founder/2026-09-05T1415Z-he-generalized-rule-empirical-proof-over-synthetic-probes-a79801e5.md).
+# "NEVER declare a system WORKING or MEASURED_OK based solely on synthetic probes, CI gates, or
+# HTTP 200 health checks. Synthetic checks lie." THE CLASS: a reply that reports a service good on
+# the strength of a check the session itself controls. The guard cannot know a quoted line is real;
+# it refuses the reply that quotes nothing at all.
+#
+# input.reply_asserted and input.reply_has_quote are measured by opa-hook.py, because neither
+# survives into input.reply: fenced blocks are deleted from it, so the quoted log line Rego is
+# asking about is already gone, and backticked text would make every mention of the word look like
+# a claim. Adapter gathers, Rego decides.
+deny contains msg if {
+	input.event == "Stop"
+	contains(input.reply_asserted, "MEASURED_OK")
+	not input.reply_has_quote
+	msg := concat("", [
+		"MEASURED_OK without a line the running system printed. THE EMPIRICAL PROOF RULE ",
+		"(founder 2026-09-05): synthetic probes, CI gates and HTTP 200 health checks are not proof. ",
+		"Quote a real end-to-end transaction from `kubectl logs --tail=100` in a fenced block, ",
+		"check `kubectl get events` for a pod that crashes just after answering the probe, or say UNKNOWN.",
+	])
+}
