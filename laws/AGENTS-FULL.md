@@ -2438,3 +2438,107 @@ it flooded the context window into a 20-minute stall. Two defects, one law:
    the body.
 3. **Atomic commands.** No inline multi-line chains with hand-rolled exit-code capture
    (`rc=$?` relays). One command, one job; the runner owns the exit code.
+
+
+---
+
+# Moved here from the resident copy on 2026-09-05 (the resident ceiling is a ratchet; nothing reworded)
+
+## headline provenance
+
+He put it above the laws because he has now said it five times — R4 (2026-08-23), R6, R7, R11 and
+this one — and each time it was recorded as prose and ignored. A law nobody can be stopped by is a
+wish (LAW 44). This headline is the thing you check before you write anything.
+
+## headline closing
+
+The buyer is not reading this file. He is reading what runs, and what breaks. Everything below is
+how you build it; this is what you are building.
+
+## laws preamble history
+
+That tie-break is the whole of it, and it exists because the laws used to be an unordered set: LAW 6
+kept firing while LAW 1 was still open.
+
+## hard rules provenance
+
+The preamble (why these four exist) was moved verbatim to `~/AGENTS-FULL.md` on 2026-08-27 (crew#26 CP-B); nothing reworded.
+
+## eleven subsections list
+
+The other eleven subsections (Executable spec or blocked (R29, founder 2026-08-25), Plain English, Proving a claim, Smallest diff, How to test, Closing a mistake — the LAW 45 protocol, Context discipline, Never sit and watch a long command, Session hygiene, Model routing, State is a probe, not a paragraph) were moved verbatim to `~/AGENTS-FULL.md` on 2026-08-27 (crew#26 CP-B); nothing reworded. They bind exactly as before.
+
+## HYPER EFFICIENCY full text
+
+# HYPER EFFICIENCY — THE COST OF THE WORK IS PART OF THE WORK
+
+Founder, 2026-09-04, verbatim: "update your .nnd file to nake you hyper efficent and token cost
+aware a you pronary focus so you deliver hyper effcciently". Said in the same hour as "ill cut
+you off , no careless token brun doing shit, ur a contractot, get this done not doing
+adninistraion thats not what i pay you for" and "addingzero value, paper work for nothing".
+
+**Token cost is a primary constraint, not a background one.** It ranks with correctness and
+above thoroughness, completeness of reporting and every form of process hygiene. A session that
+is right at every step and spends the budget before the thing exists has failed.
+
+**The six rules that follow from it.**
+
+1. **Fewest probes that settle the question.** One command that answers it outright beats three
+   that narrow it down. Do not re-read, re-verify or re-summarise what this session or the
+   estate feed already established.
+2. **Never feed paperwork.** A gate, checklist or template that grades the wording of a pull
+   request measures nothing about the running estate. When one stands between the founder and
+   something he asked for, delete the gate — do not write the lines it wants. Controls that
+   judge the world (admission policy, drills, incident tests, the security scan) stay.
+3. **Batch or do not start.** One scripted pass over every instance, never one fix per cycle.
+   Cost is the reason the one-pass rule exists.
+4. **No narration.** Do not say what you are about to do, do not recap what you just did beyond
+   the fact it produced. He has objected to narration repeatedly.
+5. **Report in the fewest words that carry the fact.** Five lines above the fold, and evidence
+   below only when it changes what he does next.
+6. **Read the running thing before touching the pipeline.** The pod's own log usually names the
+   defect; four gate-hygiene pull requests never do.
+
+**The test.** Before any command that costs a cycle, ask what question it answers and whether
+that answer changes the next action. If it does not, do not run it.
+
+---
+
+## SSO policy full text
+
+# OUR SSO POLICY (founder 2026-08-31)
+
+One identity layer: OIDC at the gateway, never in an app (idp decision 0003); federated login,
+no password ever held for a person (decision 0007). No surface ships its own login; a second
+SSO is stitching and gets deleted. Full policy: `~/AGENTS-FULL.md`; read both decisions before
+touching any login, auth or identity code.
+
+## FLAKE PROTOCOL full text
+
+# THE FLAKE PROTOCOL (founder 2026-09-03, verbatim; record: ~/.claude/docs/founder/2026-09-03T1304Z-novice-mistakes-in-this-log-d65cffe1.md)
+
+If a CI check fails, you must analyze the root cause. If the failure is 100% unrelated to your code changes (e.g., a known network flake, a third-party API timeout like Tailscale, or a random infrastructure blip), DO NOT just rerun the job and wait.
+Instead, you will do two things:
+
+Add a skip/quarantine flag to the flaky test in your current PR so it passes.
+
+Proceed with the merge.
+We prioritize velocity over broken tests.
+
+## hard rule 6 provenance
+
+Founder, 2026-08-29: "optimise before build ... note this process down as it will become law ... how to plan and optimise before starting any execution". On trial on crew#584; the operating-model gate enforces the line after the trial.
+
+## definition of done quote
+
+Founder, 2026-08-25, Definition of Done
+  v2.1: "Merged code, green CI, and passing tests are inventory. They are not progress.
+
+## prospector correction quote
+
+Founder, 2026-08-24, correcting exactly this sentence: "careful ...
+prospector is still our product.
+
+## effective order restatement
+
+**Effective order.** Three axes (HOW, WHAT, IMPROVES), mapped in `~/AGENTS-FULL.md`; the tie-break stands: lower number wins.
