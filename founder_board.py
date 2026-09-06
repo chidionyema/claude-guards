@@ -2151,7 +2151,7 @@ def collect_linear_board() -> list[Row]:
                          "grep LINEAR_API_KEY ~/.config/estate/estate.env")]
     query = """{ issues(first:250) { nodes { id priority
                    project { name }
-                   attachments { nodes { sourceType } } } }
+                   attachments { nodes { url } } } }
                  projects(first:50) { nodes { name } } }"""
     import urllib.request
 
@@ -2170,8 +2170,11 @@ def collect_linear_board() -> list[Row]:
 
     active = len(nodes)
     no_project = sum(1 for n in nodes if not n["project"])
+    # Graded on where the attachment points, not on Linear's sourceType. An attachment made
+    # through the API is typed "api" however GitHub-shaped its URL is, and the first version
+    # of this row read "0 of 206" against 206 working GitHub links because of it.
     linked = sum(1 for n in nodes
-                 if any(a["sourceType"] == "github" for a in n["attachments"]["nodes"]))
+                 if any("github.com/" in (a["url"] or "") for a in n["attachments"]["nodes"]))
     headroom = LINEAR_FREE_ISSUE_CAP - active
 
     cap_state = GOOD if headroom > 50 else (WARN if headroom > 0 else BAD)
