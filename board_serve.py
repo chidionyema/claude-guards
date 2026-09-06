@@ -12,6 +12,7 @@ a stale page that says it is stale is honest, and a page that cannot say so is a
 
     http://127.0.0.1:8787/                 the board
     http://127.0.0.1:8787/ops              every session, its ticket, its last words
+    http://127.0.0.1:8787/look             the newest design preview, before it is merged
     http://127.0.0.1:8787/alerts           every estate alert, repeats folded into one row
     http://127.0.0.1:8787/admin            the admin dashboard: freshness, and mint a link
     http://127.0.0.1:8787/audit?t=TOKEN    the full estate audit, behind a minted token
@@ -49,6 +50,7 @@ AUDIT = os.path.expanduser("~/.claude/state/estate-audit.html")
 AUDIT_JSON = os.path.expanduser("~/.claude/state/estate-audit.json")
 TOKENS = os.path.expanduser("~/.claude/state/audit-tokens.json")
 OPS = os.path.expanduser("~/.claude/state/ops-dashboard.html")
+LOOK = os.path.expanduser("~/.claude/state/design-preview.html")
 ALERTS = os.path.expanduser(os.environ.get("ESTATE_ALERT_INBOX",
                             "~/.estate/alerts/inbox.jsonl"))
 PORT = int(os.environ.get("FOUNDER_BOARD_PORT", "8787"))
@@ -382,6 +384,24 @@ class Handler(BaseHTTPRequestHandler):
                       f'{int(ops_age // 60)} minutes ago</div>').encode()
             self._send(200, banner + body, "text/html; charset=utf-8")
             return
+        if path == "/look":
+            #: The newest look at a change to a page, written by whichever session built it, so a
+            #: design decision reaches him without a vendor page and without a session being alive
+            #: (LAW 34: no provider single point of failure; LAW 39: this board already existed).
+            try:
+                with open(LOOK, "rb") as fh:
+                    body = fh.read()
+            except OSError as e:
+                self._send(503, f"no design preview on disk at {LOOK}: {e}".encode(), "text/plain")
+                return
+            look_age = time.time() - os.stat(LOOK).st_mtime
+            hours = look_age / 3600
+            banner = (f'<div style="font:14px/1.5 -apple-system,sans-serif;'
+                      f'background:{"#14532d" if hours < 24 else "#9a3412"};'
+                      f'color:#fff;padding:8px 16px">this look was drawn '
+                      f'{int(look_age // 60)} minutes ago</div>').encode()
+            self._send(200, banner + body, "text/html; charset=utf-8")
+            return
         try:
             age = time.time() - os.stat(BOARD).st_mtime
         except OSError as e:
@@ -396,7 +416,7 @@ class Handler(BaseHTTPRequestHandler):
                        "text/plain")
             return
         if path not in ("/", "/index.html", "/founder-board.html"):
-            self._send(404, b"this server serves: / (board), /ops, /alerts, /admin, /audit?t=TOKEN, /health\n",
+            self._send(404, b"this server serves: / (board), /ops, /look, /alerts, /admin, /audit?t=TOKEN, /health\n",
                        "text/plain")
             return
         try:
