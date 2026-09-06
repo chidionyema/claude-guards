@@ -883,13 +883,64 @@ def foreign_changes(cmd: str) -> dict | None:
     return {"repo": top, "files": sorted(old)} if old else None
 
 
+def rule_unbounded_kube_logs(cmd: str) -> str | None:
+    """WARN (not refuse) on an unbounded `bin/idp-kube ... logs` read.
+
+    bin/idp-kube is the ONE approved cluster path and passes bare_kubectl by design, but it is a
+    thin pass-through (KUBECONFIG=... exec kubectl "$@") with NO output bound. An agent that runs
+    `bin/idp-kube -n observability logs deploy/x` on a chatty pod floods the whole context window
+    with raw log lines -- the Law-55 failure (bulk runs emit only a summary, raw logs never read
+    into context). The estate's own break-glass tool idp-oke-break-glass bounds EVERY log read with
+    --tail=NN or | tail -NN; the ad-hoc agent path never learned the same habit.
+
+    This is a WARNING, not a refusal (LAW 38): reading a full log is sometimes the correct action
+    mid-incident, and refusing it would be a fence that blocks legitimate work. The message steers
+    the agent to bound the read, exactly as bare_kubectl steers bare kubectl to bin/idp-kube.
+    Bounded forms (--tail, -f follow, or a pipe to tail/grep/head) do not fire."""
+    # Grade each newline-separated command independently; a marker exempts only its own line.
+    for line in normalise(cmd).split("\n"):
+        if "tail-raw-log-intended" in line:
+            continue
+        segs = [s.strip() for s in re.split(r"(?:\|\||&&|\||;)", line) if s.strip()]
+        for i, seg in enumerate(segs):
+            m = re.search(r"(^|[\s=/])(bin/)?idp-kube(\s|$)", seg)
+            if not m or not re.search(r"(^|\s)logs(\s|$)", seg):
+                continue
+            # Redirect to a file never reaches the context window.
+            if re.search(r"[$\s;&][12]?>\s*\S+", seg):
+                continue
+            # -f/--tail directly on the read is bounded.
+            if re.search(r"--tail\b", seg) or re.search(r"(^|\s)-f($|\s)", seg):
+                continue
+            # Is the logs output piped downstream to tail/grep/head/less (a bound)?
+            bounded = any(
+                re.search(r"^(tail|grep|head|less|awk|sed)\b", segs[j])
+                for j in range(i + 1, len(segs))
+            )
+            if bounded:
+                continue
+            return (
+                "NOTE (not blocked): `bin/idp-kube logs` with no --tail dumps the entire log into the "
+                "context window (Law 55: raw logs never read into context; the estate's own break-glass "
+                "always bounds with --tail). Bound the read:\n"
+                "    bin/idp-kube logs <pod> --tail=100\n"
+                "    bin/idp-kube logs <pod> 2>&1 | tail -n 50     (a pipe to tail/grep is fine)\n"
+                "    bin/idp-kube logs -f <pod>                    (follow streams, does not dump)\n"
+                "You truly want the full log captured? append the marker:  # tail-raw-log-intended"
+            )
+    return None
+
+
 RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
          rule_commit_in_shared_checkout, rule_merge_red_pr,
          rule_restart_kills_a_live_build, rule_self_symlink)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
-WARN_RULES: tuple = ()
+#: 2026-09-06: rule_unbounded_kube_logs is the first re-inhabitant -- a genuine warn-grade rule
+#: (reading a full pod log mid-incident is legitimate, so it must not be a refusal, but the agent
+#: should be steered to --tail).
+WARN_RULES: tuple = (rule_unbounded_kube_logs,)
 
 
 # ------------------------------------------------------------- the Rego policy
