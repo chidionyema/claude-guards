@@ -16,7 +16,7 @@ This wrapper is the one place that measures. It passes stdin through, returns th
 stdout, stderr and exit code untouched, and appends one line per run to the ledger:
 
     {"at": ISO-8601 UTC, "event": hook_event_name, "hook": basename, "session": session_id,
-     "exit": int, "ms": int, "refused": bool}
+     "exit": int, "ms": int, "refused": bool, "tool": str, "what": str, "cwd": str}
 
 `waived` (crew#370) is the override marker the command carried when the hook passed it
 (`# raw-diff-intended`, `# main-is-red`, `# in-flight`, ...). A refusal followed by a waived pass of
@@ -185,9 +185,47 @@ def run_closed(argv: list[str], stdin: bytes) -> subprocess.CompletedProcess:
     return proc
 
 
+# What the session is doing, taken from the payload the hook already carries. Two short strings,
+# never the whole tool input: this line is written on every tool call of every session, and a
+# ledger that costs a kilobyte per Write is a ledger nobody can tail (2026-09-07, founder: "you
+# need to fully audit their transaction in real time as they are working").
+_WHAT_KEYS = (
+    "command",
+    "file_path",
+    "notebook_path",
+    "pattern",
+    "url",
+    "prompt",
+    "query",
+)
+
+
+def doing(payload: dict) -> tuple[str, str]:
+    tool = str(payload.get("tool_name") or "")
+    what = ""
+    args = payload.get("tool_input")
+    if isinstance(args, dict):
+        for key in _WHAT_KEYS:
+            value = args.get(key)
+            if isinstance(value, str) and value.strip():
+                what = " ".join(value.split())[:160]
+                break
+    return tool, what
+
+
+# The ledger is append-only and unbounded; it reached 86 MB by 2026-09-07. One roll, so the live
+# view tails a bounded file and the history is still one file back.
+LEDGER_MAX_BYTES = int(os.environ.get("HOOK_OUTCOMES_MAX_BYTES") or 64 * 1024 * 1024)
+
+
 def record(row: dict) -> None:
     try:
         os.makedirs(os.path.dirname(LEDGER), exist_ok=True)
+        try:
+            if os.path.getsize(LEDGER) > LEDGER_MAX_BYTES:
+                os.replace(LEDGER, LEDGER + ".1")
+        except OSError:
+            pass
         with open(LEDGER, "a", encoding="utf-8") as fh:
             fh.write(json.dumps(row, separators=(",", ":")) + "\n")
     except OSError:
@@ -221,6 +259,13 @@ def main(argv: list[str]) -> int:
         "ms": ms,
         "refused": refused(proc.returncode, proc.stdout),
     }
+    tool, what = doing(payload)
+    if tool:
+        row["tool"] = tool
+    if what:
+        row["what"] = what
+    if payload.get("cwd"):
+        row["cwd"] = str(payload["cwd"])[-80:]
     marker = waived(payload)
     if marker and not row["refused"]:
         row["waived"] = marker
