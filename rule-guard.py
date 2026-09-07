@@ -49,6 +49,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import slow_commands  # noqa: E402  -- the path above has to be set before this resolves
+
 #: LAW 46: no literal machine path -- read PROSPECTOR_REPO (action_items.py's same
 #: convention). Off that env var and off this Mac, `_git` abstains IN SILENCE to every
 #: question a rule asks it, so fall back to the tree this process is standing in,
@@ -839,6 +842,7 @@ _SESSION_STARTED: float | None = None
 #: Seconds since this project's checkpoints/LATEST.md was written; None when there is nothing to
 #: measure. Measured here, judged in policy/command.rego (crew#423 row 25, LAW 25).
 _CHECKPOINT_AGE_S: int | None = None
+_RUN_IN_BACKGROUND: bool = False
 
 
 def checkpoint_age_s(transcript_path: str | None) -> int | None:
@@ -1007,6 +1011,26 @@ def rule_stash_hides_work(cmd: str) -> str | None:
     return None
 
 
+def rule_slow_in_the_foreground(cmd: str) -> str | None:
+    """WARN when a command measured slow on this machine is about to block the session.
+
+    Founder, 2026-09-07, watching a session sit still for 2m29s on `trivy config`: "like this the
+    waits, the slience,s a lot of tine is spent waiting". Measured over 14,176 paired tool calls
+    in this project's transcripts: 310 Bash calls ran 60s or longer, 9.90 hours of wall clock, and
+    NONE of them were backgrounded. The Bash tool has taken run_in_background the whole time.
+
+    It measures rather than pattern-matches, because the measurement says a pattern list would be
+    wrong: those 310 calls spread across kubectl (19.9%), CI and gate runs (20.4%), polling loops
+    (16.5%), grep sweeps (8.3%), git transfers (6.4%), scanners (4.9%) and a 19.1% tail no list
+    would hold. A signature has to have been slow HERE at least three times before this speaks, so
+    it can never refuse novel correct work -- and it warns rather than refuses (LAW 38) because
+    the estate has commands that are long by design (`tofu plan`, `bin/idp-vault-reads` over a
+    90-minute audit window) and a fence across those would be an outage.
+
+    The measuring half is slow_commands.py: mark_start() below, and --post on PostToolUse."""
+    return slow_commands.note(cmd, _RUN_IN_BACKGROUND)
+
+
 RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
          rule_commit_in_shared_checkout, rule_merge_red_pr,
          rule_restart_kills_a_live_build, rule_self_symlink,
@@ -1017,7 +1041,7 @@ RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
 #: 2026-09-06: rule_unbounded_kube_logs is the first re-inhabitant -- a genuine warn-grade rule
 #: (reading a full pod log mid-incident is legitimate, so it must not be a refusal, but the agent
 #: should be steered to --tail).
-WARN_RULES: tuple = (rule_unbounded_kube_logs,)
+WARN_RULES: tuple = (rule_unbounded_kube_logs, rule_slow_in_the_foreground)
 
 
 # ------------------------------------------------------------- the Rego policy
@@ -1536,7 +1560,11 @@ def main() -> int:
     cmd = str(payload.get("tool_input", {}).get("command", ""))
     if not cmd:
         return 0
-    global _ACTIVE_REPO, _SESSION_CWD, _SESSION_STARTED, _CHECKPOINT_AGE_S
+    global _ACTIVE_REPO, _SESSION_CWD, _SESSION_STARTED, _CHECKPOINT_AGE_S, _RUN_IN_BACKGROUND
+    _RUN_IN_BACKGROUND = bool(payload.get("tool_input", {}).get("run_in_background"))
+    # Stamp the start here rather than in a seventh PreToolUse hook: this process is already
+    # running on every Bash call, and idp-44 measured the existing six at 252-417ms each.
+    slow_commands.mark_start(str(payload.get("session_id") or ""), cmd)
     _SESSION_CWD = payload.get("cwd")
     _SESSION_STARTED = _session_started(payload.get("transcript_path"))
     _CHECKPOINT_AGE_S = checkpoint_age_s(payload.get("transcript_path"))
