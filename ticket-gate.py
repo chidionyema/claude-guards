@@ -239,36 +239,6 @@ def hook() -> int:
     return 0                                        # first call always passes
 
 
-def roster() -> int:
-    """Every session that has moved recently, and the ticket it is working under."""
-    proj = os.path.join(HOME, ".claude", "projects")
-    now = time.time()
-    rows = []
-    for root, _dirs, files in os.walk(proj):
-        for name in files:
-            if not name.endswith(".jsonl"):
-                continue
-            path = os.path.join(root, name)
-            try:
-                age = now - os.path.getmtime(path)
-            except OSError:
-                continue
-            if age > 3 * 3600:
-                continue
-            sid = name[:-6]
-            b = read_bind(sid) or {}
-            rows.append((age, os.path.basename(root)[-20:], b.get("issue"),
-                         (b.get("title") or b.get("words") or "")[:60]))
-    rows.sort()
-    print("%-6s %-20s %-7s %s" % ("IDLE", "WHERE", "TICKET", "WHAT HE ASKED FOR"))
-    for age, where, issue, title in rows:
-        tag = ("#%d" % issue) if issue else "NONE"
-        print("%5.0fm %-20s %-7s %s" % (age / 60, where, tag, title))
-    missing = [r for r in rows if not r[2]]
-    print("\n%d live session(s), %d with no ticket" % (len(rows), len(missing)))
-    return 0
-
-
 DASHBOARD = os.path.join(HOME, ".claude", "state", "ops-dashboard.html")
 
 
@@ -291,77 +261,6 @@ def _observe():
         sys.modules["aiden_observe"] = mod
         spec.loader.exec_module(mod)
     return mod
-
-
-def live_rows() -> list[dict]:
-    """Every session that moved in the last three hours, with its ticket and its own last words.
-
-    Read straight off the transcripts, because that is the one record that cannot drift from what
-    a session actually did.
-
-    The walk itself belongs to aiden's observe.py and is not repeated here. That module already
-    scans this tree with scandir and caches the result per process, and its own comment records
-    why: 81,377 transcripts across 16,631 directories, where listdir plus a stat each took a pass
-    from 27.9s to a fraction of it under the 3.9.6 that launchd actually uses. This function's
-    first version walked the same tree again with os.walk and getmtime, which is the exact shape
-    that comment was written about, and it cost the tick 16.6s it did not have.
-
-    The fallback below is not politeness. This file is a PreToolUse hook and must keep working if
-    aiden is moved, renamed or deleted, so it carries its own slow walk for that case only.
-    """
-    try:
-        observe = _observe()
-        #: 24, then filter, and the 24 is not a change of window -- this page still shows three
-        #: hours. observe caches by the number of hours it was asked for, so sessions(3) and
-        #: sessions(24) are two separate entries and two separate passes of the tree. The tick has
-        #: already asked for 24 by the time the ops page is built, so asking for the same key makes
-        #: this a dictionary read; asking for 3 walked 16,631 directories a second time to look at
-        #: a subset of what was already in memory.
-        rows = []
-        for r in observe.sessions(24)[0]:
-            if r["idle"] > 3 * 3600:
-                continue
-            bind = read_bind(r["session"]) or {}
-            rows.append({
-                "idle_min": r["idle"] / 60,
-                "where": r["slug"],
-                "issue": bind.get("issue") or 0,
-                "error": bind.get("error", ""),
-                "asked": (bind.get("words") or bind.get("title") or "")[:150],
-                "said": " ".join((r.get("text") or "").split())[:150],
-                "session": r["session"],
-            })
-        rows.sort(key=lambda r: r["idle_min"])
-        return rows
-    except Exception:
-        pass
-    proj = os.path.join(HOME, ".claude", "projects")
-    now = time.time()
-    rows = []
-    for root, _dirs, files in os.walk(proj):
-        for name in files:
-            if not name.endswith(".jsonl"):
-                continue
-            path = os.path.join(root, name)
-            try:
-                age = now - os.path.getmtime(path)
-            except OSError:
-                continue
-            if age > 3 * 3600:
-                continue
-            sid = name[:-6]
-            bind = read_bind(sid) or {}
-            rows.append({
-                "idle_min": age / 60,
-                "where": os.path.basename(root),
-                "issue": bind.get("issue") or 0,
-                "error": bind.get("error", ""),
-                "asked": (bind.get("words") or bind.get("title") or "")[:150],
-                "said": last_words(path)[:150],
-                "session": sid,
-            })
-    rows.sort(key=lambda r: r["idle_min"])
-    return rows
 
 
 def last_words(path: str) -> str:
@@ -801,94 +700,6 @@ def headline() -> str:
                 c["open"], c["moved_24h"], c["closed_24h"], c["stuck"], tail))
 
 
-def dashboard() -> int:
-    """Write the ops page. He opens one URL and sees the tickets moving, then every tab and the
-    ticket it is on.
-
-    Regenerated by aiden's five-minute tick, so it costs no launchd job of its own.
-    """
-    rows = live_rows()
-    noticket = [r for r in rows if not r["issue"]]
-    broken = [r for r in rows if r["error"]]
-
-    def esc(s):
-        return (s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-
-    out = ["<title>Ops</title>", """<style>
-:root{--bg:#fbfaf8;--ink:#1b1a18;--dim:#6c6862;--line:#e7e3dc;--ok:#14532d;--warn:#9a3412}
-@media(prefers-color-scheme:dark){:root{--bg:#141312;--ink:#f2efe9;--dim:#9b958c;--line:#2c2a27}}
-body{background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,sans-serif;
-margin:0;padding:20px}
-h1{font-size:20px;margin:0 0 4px}p.sub{color:var(--dim);margin:0 0 18px;font-size:13px}
-table{border-collapse:collapse;width:100%;font-size:13px}
-td,th{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
-th{color:var(--dim);font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase}
-td.n{font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--dim)}
-a{color:inherit}.tk{font-weight:600}.none{color:var(--warn);font-weight:600}
-.said{color:var(--dim)}.wrap{overflow-x:auto}
-.ok{color:var(--ok)}h1.second{margin-top:32px}
-</style>"""]
-    #: Tickets first, sessions second. He asked to see tickets moving, not to ask what an agent
-    #: is doing, so the answer to "is work finishing" has to be the top of the page.
-    data = movement()
-    items = data.get("items") or []
-    c = counts(items)
-    items.sort(key=lambda i: _age_h(i.get("updatedAt", "")))
-    out.append("<h1>Tickets</h1>")
-    out.append("<p class=sub>%d open &middot; %d moved in 24h &middot; %d closed in 24h &middot; "
-               "<b class=%s>%d stuck over 24h</b>%s</p>"
-               % (c["open"], c["moved_24h"], c["closed_24h"],
-                  "none" if c["stuck"] else "sub", c["stuck"],
-                  " &middot; numbers are stale" if data.get("stale") else ""))
-    #: What the open work has cost so far, and how much of it nobody budgeted. This is the line
-    #: the founder asked for: he does not run a script to find out what a piece of work is costing,
-    #: he reads it on a page that is already current. The unbudgeted count comes off the last close
-    #: sweep rather than being recomputed, because the sweep already read every open body.
-    out.append("<p class=sub>%s</p>" % esc(spend_summary()))
-    out.append("<div class=wrap><table><tr><th>Moved</th><th>Ticket</th><th>State</th>"
-               "<th>What it is</th></tr>")
-    for i in items[:40]:
-        h = _age_h(i.get("updatedAt", ""))
-        when = "%.0fm" % (h * 60) if h < 1 else ("%.0fh" % h if h < 72 else "%.0fd" % (h / 24))
-        closed = i.get("state") == "CLOSED"
-        state = ("<span class=ok>closed</span>" if closed
-                 else ("<span class=none>stuck</span>" if h >= 24 else "open"))
-        out.append("<tr><td class=n>%s</td>"
-                   "<td><a class=tk href='https://github.com/%s/issues/%d'>#%d</a></td>"
-                   "<td>%s</td><td>%s</td></tr>"
-                   % (when, REPO, i.get("number", 0), i.get("number", 0), state,
-                      esc((i.get("title") or "")[:110])))
-    out.append("</table></div>")
-
-    out.append("<h1 class=second>Every session, and the ticket it is on</h1>")
-    out.append("<p class=sub>%d live in the last 3 hours &middot; %d with no ticket &middot; "
-               "%d could not open one &middot; built %s</p>"
-               % (len(rows), len(noticket), len(broken),
-                  time.strftime("%H:%M", time.localtime())))
-    out.append("<div class=wrap><table><tr><th>Idle</th><th>Ticket</th><th>What he asked for"
-               "</th><th>What it last said</th><th>Where</th></tr>")
-    for r in rows:
-        if r["error"]:
-            tk = "<span class=none>FAILED</span>"
-        elif r["issue"]:
-            tk = ("<a class=tk href='https://github.com/%s/issues/%d'>#%d</a>"
-                  % (REPO, r["issue"], r["issue"]))
-        else:
-            tk = "<span class=none>none</span>"
-        out.append("<tr><td class=n>%.0fm</td><td>%s</td><td>%s</td>"
-                   "<td class=said>%s</td><td class=n>%s</td></tr>"
-                   % (r["idle_min"], tk, esc(r["asked"]) or "&mdash;",
-                      esc(r["said"]) or "&mdash;", esc(r["where"][-24:])))
-    out.append("</table></div>")
-    os.makedirs(os.path.dirname(DASHBOARD), exist_ok=True)
-    tmp = DASHBOARD + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(out))
-    os.replace(tmp, DASHBOARD)
-    print("wrote %s: %d sessions, %d with no ticket" % (DASHBOARD, len(rows), len(noticket)))
-    return 0
-
-
 SETTINGS = os.path.join(HOME, ".claude", "settings.json")
 HOOK_CMD = "python3 $HOME/.claude/scripts/ticket-gate.py"
 MATCHERS = ("Edit|Write|MultiEdit|NotebookEdit", "Bash")
@@ -1089,10 +900,14 @@ if __name__ == "__main__":
                             sys.argv[3]))
     if len(sys.argv) > 1 and sys.argv[1] in ("--off", "--on"):
         sys.exit(switch(sys.argv[1] == "--on"))
-    if len(sys.argv) > 1 and sys.argv[1] == "--dashboard":
-        sys.exit(dashboard())
-    if len(sys.argv) > 1 and sys.argv[1] == "--roster":
-        sys.exit(roster())
+    if len(sys.argv) > 1 and sys.argv[1] in ("--roster", "--dashboard"):
+        #: Both used to walk 81k transcripts; --dashboard took 4m32s (measured 2026-09-07) to
+        #: produce a page a five-minute tick then served as if it were live. session_live reads
+        #: the hook ledger instead and answers in 0.08s, so there is one reader and no producer.
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import session_live
+        print(session_live.text(session_live.sessions(session_live.read_rows())))
+        sys.exit(0)
     if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
         sys.exit(selftest())
     if len(sys.argv) > 1 and sys.argv[1] == "--selftest-close":
