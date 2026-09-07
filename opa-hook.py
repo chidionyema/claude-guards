@@ -133,27 +133,6 @@ def reply_evidence(transcript_path: str) -> dict:
     }
 
 
-def checkpoint_age_s(transcript_path):
-    """Seconds since the project's checkpoints/LATEST.md was written; None when there is nothing to
-    measure (crew#423 rows 16 and 25). None is BLIND, and the policy makes no verdict on it:
-    - no transcript path: no project directory to look in;
-    - no LATEST.md in the project: 3 of 8 active project dirs have never written one (#137 review),
-      and a session that never wrote a checkpoint has not dropped a thread; a large number here was
-      a refusal forever.
-    A subagent's transcript sits at <project>/<session>/subagents/agent-*.jsonl, so the project
-    directory is two levels up from there, not the subagents directory (#137 review: every subagent
-    `git worktree add` was refused). The policy decides; this adapter only measures."""
-    if not transcript_path:
-        return None
-    project = os.path.dirname(transcript_path)
-    if os.path.basename(project) == "subagents":
-        project = os.path.dirname(os.path.dirname(project))
-    try:
-        return int(time.time() - os.stat(os.path.join(project, "checkpoints", "LATEST.md")).st_mtime)
-    except OSError:
-        return None
-
-
 def standing_focus() -> str:
     """The founder's standing FOCUS: line (goal_focus.py writes it), or '' when none is set.
     crew#395 / crew#398: policy/reply.rego holds a BLOCKED: reply to it; the file read is here
@@ -215,9 +194,6 @@ def decide(payload: dict, event: str) -> int:
         reply = last_reply_above_fold(str(payload.get("transcript_path", "")))
         payload_in = {"event": "Stop", "reply": reply, "focus": standing_focus(), "estate": estate_snapshot()}
         payload_in.update(reply_evidence(str(payload.get("transcript_path", ""))))
-        age = checkpoint_age_s(str(payload.get("transcript_path", "")))
-        if age is not None:
-            payload_in["checkpoint_age_s"] = age
         msgs = denials(payload_in, REPLY_QUERY)
         if msgs:
             print(json.dumps({"decision": "block", "reason": "\n\n".join(sorted(msgs))}))
