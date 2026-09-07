@@ -17,7 +17,8 @@ Three ways a session dies, and only one of them gives any warning:
 So this runs on Stop -- after every single turn -- and rebuilds the recovery file from the
 transcript. The file is never more than one turn stale, and it survives all three.
 
-  session-recorder.py --hook          what settings.json runs (reads hook json on stdin)
+  session-recorder.py --hook          what settings.json runs on Stop (reads hook json on stdin)
+  session-recorder.py --restore-hook  what settings.json runs on SessionStart (hook json on stdin)
   session-recorder.py --restore       print the newest recovery file for this project
   session-recorder.py --list          every recorded session, newest first
   session-recorder.py --selftest      prove it
@@ -252,6 +253,75 @@ def cmd_restore(cwd: str) -> int:
     return 0
 
 
+RESTORE_MAX_BYTES = 20_000     # what a SessionStart may hand back without crowding the window
+
+
+def restore_choice(cwd: str, session_id: str, source: str):
+    """Which recovery file a starting session should be handed, and why.
+
+    RECOVERY-LATEST.md is per PROJECT, not per session, so with two sessions open in one
+    checkout it is whichever of them stopped last. Handing that to a session that was just
+    compacted would give it another session's head -- the exact way this goes wrong when the
+    founder runs several at once. So the per-session file wins whenever it exists, and it
+    exists precisely in the cases that matter:
+
+      compact, resume   same session id, so RECOVERY-<id>.md is this session's own work
+      clear             a NEW id, but the same seat in the same checkout, so LATEST is right
+      startup           a new terminal; another session's transcript is not its business, so
+                        it gets a pointer to what is there, not the contents
+    """
+    d = PROJECTS / _slug(cwd) / "checkpoints"
+    per = d / f"RECOVERY-{session_id[:8]}.md" if session_id else None
+    if per is not None and per.exists():
+        return per, "full", "this session's own work, from before the interruption"
+    latest = d / "RECOVERY-LATEST.md"
+    if not latest.exists():
+        return None, "", ""
+    if source == "startup":
+        return latest, "pointer", "the newest recovery in this checkout"
+    return latest, "full", "the last thing recorded in this checkout"
+
+
+def _pointer(f: Path) -> str:
+    """One line of what is in a recovery file, without spending the window on it."""
+    age = int((time.time() - f.stat().st_mtime) / 60)
+    ask = ""
+    for line in f.read_text(errors="replace").splitlines():
+        if re.match(r"^\d+\. ", line):
+            ask = line[:200]
+    return (f"A recovery file in this checkout was written {age} min ago: `{f}`.\n"
+            f"Its last founder turn was: {ask or '(none recorded)'}\n"
+            "Read it with `session-recorder.py --restore` if this session is picking that up.")
+
+
+def cmd_restore_hook() -> int:
+    """SessionStart. Hands the session back what it was doing, so nobody has to remind it.
+
+    Never raises and never returns non-zero: a session that will not start is worse than a
+    session that starts without its history.
+    """
+    try:
+        payload = json.load(sys.stdin)
+    except Exception:
+        return 0
+    try:
+        cwd = payload.get("cwd") or os.getcwd()
+        f, how, why = restore_choice(cwd, payload.get("session_id") or "", payload.get("source") or "")
+        if f is None:
+            return 0
+        if how == "pointer":
+            print(_pointer(f))
+            return 0
+        body = f.read_text(errors="replace")
+        if len(body) > RESTORE_MAX_BYTES:
+            body = body[:RESTORE_MAX_BYTES] + f"\n\n_(cut here; the whole file is `{f}`)_\n"
+        print(f"# PICK UP WHERE THIS SESSION LEFT OFF\n\n"
+              f"Source: {why} (`{f}`). Continue it without being asked again.\n\n{body}")
+    except Exception as exc:
+        _board_failure(exc)
+    return 0
+
+
 def cmd_list() -> int:
     rows = sorted(PROJECTS.glob("*/checkpoints/RECOVERY-*.md"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not rows:
@@ -314,10 +384,35 @@ def selftest() -> int:
             print("   ", e)
         check("a corrupt transcript does not raise", ok)
 
+        # Two sessions in one checkout: the second one to stop owns RECOVERY-LATEST.md, and a
+        # restore that read LATEST would hand session one session two's head.
+        tr2 = Path(td) / "t2.jsonl"
+        tr2.write_text(json.dumps(
+            {"type": "user", "message": {"content": "the OTHER session's ask"}}) + "\n")
+        record(tr2, "999999zzzz", td)
+        f, how, _ = restore_choice(td, "abcdef1234", "compact")
+        check("a compacted session gets its OWN file, not the project's newest",
+              f is not None and f.name == "RECOVERY-abcdef12.md" and how == "full",
+              str(f))
+        check("and that file holds its own work",
+              "first ask, verbatim" in f.read_text() and "OTHER session" not in f.read_text())
+        f, how, _ = restore_choice(td, "cleared0000", "clear")
+        check("a cleared session gets the checkout's newest, whole",
+              f is not None and f.name == "RECOVERY-LATEST.md" and how == "full")
+        f, how, _ = restore_choice(td, "brandnew000", "startup")
+        check("a brand-new terminal gets a pointer, not another session's transcript",
+              how == "pointer")
+        check("the pointer names the file and the last ask",
+              "RECOVERY-LATEST.md" in _pointer(f) and "OTHER session" in _pointer(f))
+        f, _, _ = restore_choice(str(Path(td) / "nothing-here"), "x", "compact")
+        check("a checkout with no recovery file restores nothing", f is None)
+
         old = sys.stdin
         sys.stdin = open(os.devnull)
         try:
             check("--hook returns 0 on garbage stdin", cmd_hook() == 0)
+            sys.stdin = open(os.devnull)
+            check("--restore-hook returns 0 on garbage stdin", cmd_restore_hook() == 0)
         finally:
             sys.stdin = old
 
@@ -329,6 +424,8 @@ if __name__ == "__main__":
     a = sys.argv[1:]
     if "--selftest" in a:
         sys.exit(selftest())
+    if "--restore-hook" in a:
+        sys.exit(cmd_restore_hook())
     if "--restore" in a:
         sys.exit(cmd_restore(os.getcwd()))
     if "--list" in a:
