@@ -945,7 +945,16 @@ def rule_unbounded_kube_logs(cmd: str) -> str | None:
     return None
 
 
-_STASH_HIDES = re.compile(r"\bgit\s+(?:-C\s+\S+\s+)*stash\s+(?:push|save)\b|\bgit\s+(?:-C\s+\S+\s+)*stash\s*$")
+# The second alternative is "git stash" with nothing but flags after it, ending at a
+# separator rather than at end-of-string. It used to require end-of-string, which meant
+# the rule refused `git stash` alone and permitted `git stash && git checkout main` --
+# the compound it was written to stop -- and permitted `git stash -u`, which writes to
+# the same shared refs/stash the docstring is about. A read subcommand (list, show) and
+# a restore (pop, apply, create) are words, not flags, so they still pass.
+_STASH_HIDES = re.compile(
+    r"\bgit\s+(?:-C\s+\S+\s+)*stash\s+(?:push|save)\b"
+    r"|\bgit\s+(?:-C\s+\S+\s+)*stash(?:\s+-[\w-]+)*\s*(?=$|[;&|\n])"
+)
 _SWITCH_AWAY = re.compile(
     r"\bgit\s+(?:-C\s+\S+\s+)*(?:checkout|switch)\s+(?:-b|-c|-C)?\s*(?P<ref>[\w.][\w./+-]*)\s*(?=$|[;&|\n])"
 )
@@ -1192,8 +1201,8 @@ def selftest() -> int:
         ("git stash pop  # stash-intended", None),
         ("git stash list", None),
         ("git stash show -p stash@{0}", None),
-        ("git stash -u", None),
-        ("git stash push -m wip", None),
+        ("git stash -u", "rule_stash_hides_work"),
+        ("git stash push -m wip", "rule_stash_hides_work"),
         ("git add -A  # add-all-intended", None),
         ("git add -- scripts/ops_status.py", None),
         ("git add -p", None),
@@ -1203,6 +1212,11 @@ def selftest() -> int:
 
         ("git stash push -m auto", "rule_stash_hides_work"),
         ("git stash save wip", "rule_stash_hides_work"),
+        # The spelling anyone actually uses: the stash is never the point, the thing after
+        # the && is. The rule matched a bare `git stash` only at end-of-string until
+        # 2026-09-07, so this exact line -- the one the rule exists to refuse -- passed.
+        ("git stash && git checkout main", "rule_stash_hides_work"),
+        ("git stash --include-untracked; git pull", "rule_stash_hides_work"),
         ("git diff --stat origin/main HEAD", "rule_two_dot_diff"),
         # Two BRANCH-shaped refs, not a branch-and-HEAD. This used to name
         # `origin/pr/shelf-copy-glossary`, which has since been deleted from origin — so
