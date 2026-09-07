@@ -702,16 +702,24 @@ def rule_merge_red_pr(cmd: str) -> str | None:
             return _unresolved
     sl = _merge_repo_slug(cmd)
     states = _pr_check_states(pr, cmd)
-    verdict = _merge_verdict(pr, states, escaped,
-                             _main_red_refusal(sl) if sl else _main_red_refusal(),
-                             "main-is-red" in cmd)
+    main_red = _main_red_refusal(sl) if sl else _main_red_refusal()
+
+    # `--auto` is graded on its own terms, and it is graded FIRST. It merges nothing now: GitHub
+    # queues the merge and performs it when the REQUIRED checks pass. So "a check is still
+    # running" is not an objection to it -- it is the reason the flag exists, and refusing on it
+    # left a session sitting and watching a pull request, which the founder banned on 2026-09-04
+    # ("turn auto-merge on for every pull request ... watching checks is time I am paying for").
+    # The real risk is unchanged and still fires below: GitHub waiting for a shorter set than
+    # this PR actually runs (idp#675, 2026-08-29), which _auto_merge_refusal is what grades.
+    if _GH_MERGE_AUTO.search(cmd):
+        auto = _auto_merge_refusal(pr, states, _required_contexts(sl), cmd)
+        if auto is not None:
+            return auto
+        return None if "main-is-red" in cmd else main_red
+
+    verdict = _merge_verdict(pr, states, escaped, main_red, "main-is-red" in cmd)
     if verdict is not None:
         return verdict
-    # Last, and never overridden. A merge this guard graded green NOW can still be wrong when
-    # GitHub performs it later against a shorter required set -- idp#675, 2026-08-29. The states
-    # above are the ones that existed at typing time; --auto is about the ones that do not yet.
-    if _GH_MERGE_AUTO.search(cmd):
-        return _auto_merge_refusal(pr, states, _required_contexts(sl), cmd)
     return None
 
 
@@ -931,9 +939,64 @@ def rule_unbounded_kube_logs(cmd: str) -> str | None:
     return None
 
 
+_STASH_HIDES = re.compile(r"\bgit\s+(?:-C\s+\S+\s+)*stash\s+(?:push|save)\b|\bgit\s+(?:-C\s+\S+\s+)*stash\s*$")
+_SWITCH_AWAY = re.compile(
+    r"\bgit\s+(?:-C\s+\S+\s+)*(?:checkout|switch)\s+(?:-b|-c|-C)?\s*(?P<ref>[\w.][\w./+-]*)\s*(?=$|[;&|\n])"
+)
+
+
+def rule_stash_hides_work(cmd: str) -> str | None:
+    """Refuse the move that loses work: stashing, or switching a dirty checkout.
+
+    Written 2026-09-07 because an agent asked the founder to choose between
+    "stash them", "commit them first" and "leave them be" for uncommitted changes
+    in his main checkout. All three are wrong and the question should never have
+    reached him.
+
+    The stash is shared: refs/stash is one list for every worktree and every
+    session on this machine, so `git stash push` in one session buries another
+    session's in-flight work in a place nobody else will think to look. Fifteen
+    entries were sitting there on the day this rule was written, the oldest
+    unreadable as to whose it was.
+
+    Switching branches in a dirty checkout is the same defect with a different
+    ending: the edits ride along to the new branch and collide there.
+
+    The move that costs nothing is a worktree. A new branch gets its own
+    directory, so the dirty checkout never moves and nothing has to be decided
+    about it. `git stash create` stays allowed -- it writes a commit object and
+    touches neither the working tree nor the shared list, which is how you take
+    a safety copy.
+    """
+    if _STASH_HIDES.search(cmd):
+        return ("`git stash push` in this estate.\n"
+                "refs/stash is ONE list shared by every worktree and session on this machine, so this\n"
+                "buries work another session is holding, somewhere they will not look for it.\n"
+                "Take a safety copy that touches nothing instead:\n"
+                "  snap=$(git stash create) && git tag safety/<what-it-is> \"$snap\" && git push origin safety/<what-it-is>\n"
+                "and to start a branch without moving this checkout, use a worktree:\n"
+                "  git worktree add <dir> -b <branch> origin/main")
+    # A path restore names paths after a double dash and moves no branch, so it is not
+    # this. Neither is a sentence in a commit message that happens to name the command:
+    # the pattern requires a bare ref at the end of its own segment, which prose never is.
+    if _SWITCH_AWAY.search(cmd):
+        root = _worktree_root(os.getcwd())
+        if root:
+            rc, out = _git("status", "--porcelain", "--untracked-files=no", cwd=root)
+            if rc == 0 and out.strip():
+                n = len(out.strip().splitlines())
+                return (f"switching branches with {n} uncommitted file(s) in {root}.\n"
+                        "The edits ride along to the new branch and collide there, and they may not be\n"
+                        "yours -- worktrees in this estate are shared between sessions.\n"
+                        "Start the branch in its own directory instead, so this checkout never moves:\n"
+                        "  git worktree add <dir> -b <branch> origin/main")
+    return None
+
+
 RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
          rule_commit_in_shared_checkout, rule_merge_red_pr,
-         rule_restart_kills_a_live_build, rule_self_symlink)
+         rule_restart_kills_a_live_build, rule_self_symlink,
+         rule_stash_hides_work)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
@@ -1112,6 +1175,8 @@ def selftest() -> int:
         ("git commit -m x\nrg -n PATTERN docs/", None),          # -n on a LATER line
         ("git commit -m x && tail -n 5 log", None),               # -n after a separator
 
+        ("git stash push -m auto", "rule_stash_hides_work"),
+        ("git stash save wip", "rule_stash_hides_work"),
         ("git diff --stat origin/main HEAD", "rule_two_dot_diff"),
         # Two BRANCH-shaped refs, not a branch-and-HEAD. This used to name
         # `origin/pr/shelf-copy-glossary`, which has since been deleted from origin — so
