@@ -127,9 +127,16 @@ legacy := {
 	# runner, then dod-guard and blocker-guard move to policy/reply.rego and leave this list.
 	"dod-guard.py": 202,
 	# Added 2026-08-26 at 94 lines, the first time it is committed: settings.json has run it
-	# untracked since 2026-08-25 (LAW 24). Same reason as dod-guard: a Stop rule over the reply
-	# and the Telegram ledger, no OPA Stop runner exists. Same follow-up, same exit.
-	"blocker-guard.py": 94,
+	# untracked since 2026-08-25 (LAW 24). Its exit was booked as "no OPA Stop runner exists",
+	# and on 2026-09-07 that turned out to be the wrong reading of the problem: a guard does not
+	# need a Stop RUNNER, it can ask OPA itself, which feed-guard.py has done since crew#259.
+	# So the rules left this file on 2026-09-07 for policy/blocker.rego, with their cases in
+	# blocker_test.rego. 94 -> 110 is what stayed: the reply out of the transcript, the telegram
+	# ledger, the opa eval, and the one transform the rules are cut on (fenced blocks dropped,
+	# inline code spans blanked, so that NAMING a mark is not asking for anything). Every one is
+	# data OPA cannot read for itself. dod-guard.py is the same shape and the follow-up now
+	# names a worked example instead of a missing runner.
+	"blocker-guard.py": 110,
 	# 176 -> 212 on 2026-08-26 (crew#331, #99). The rule itself (a handoff on a lane another
 	# live session holds is refused unless the holder is named on the OVERLAP line) went into
 	# policy/feed.rego with three tests. The 36 Python lines are the data OPA cannot read for

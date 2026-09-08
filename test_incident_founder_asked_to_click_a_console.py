@@ -7,7 +7,10 @@ three guards that see a founder-facing line.
 import importlib.machinery
 import importlib.util
 import pathlib
+import shutil
 import time
+
+import pytest
 
 HERE = pathlib.Path(__file__).resolve().parent
 
@@ -46,18 +49,30 @@ def test_founder_blocker_refuses_a_console_step_and_permits_a_device_step():
 
 
 def test_blocker_guard_grades_the_ledger_row_kind():
+    """The same seven cases as when this was written, through the seam they moved to.
+
+    blocker-guard.py stopped deciding on 2026-09-07: the rules are policy/blocker.rego and
+    denials() asks OPA for them, so the shape here is a list of refusals rather than an exit
+    code. The row kinds are the incident -- a `staged` row does not pay for a FOUNDER ACTION:,
+    and neither does a pre-crew#281 `sent` row with no `physical:` key.
+
+    Skipped without opa, and not blind when it is: the same cases run as Rego in
+    policy/blocker_test.rego, which the policy workflow runs on every push.
+    """
+    if shutil.which("opa") is None:
+        pytest.skip("opa is not installed; policy/blocker_test.rego covers these cases")
     bg = _load("blocker_guard", "blocker-guard.py")
     now = time.time()
     staged = [{"source": "founder-blocker", "outcome": "staged", "key": "staged:60:x", "msg_id": 7, "ts": now}]
     physical = [{"source": "founder-blocker", "outcome": "sent", "key": "physical:x", "msg_id": 8, "ts": now}]
     legacy = [{"source": "founder-blocker", "outcome": "sent", "key": "create the OAuth App", "msg_id": 9, "ts": now}]
-    assert bg.verdict("STAGED: x is ready. Reply 'go' ...", staged, now)[0] == 0
-    assert bg.verdict("STAGED: x is ready.", [], now)[0] == 2
-    assert bg.verdict("FOUNDER ACTION: touch the hardware key", physical, now)[0] == 0
-    assert bg.verdict("FOUNDER ACTION: create the OAuth App", legacy, now)[0] == 2   # the incident shape
-    assert bg.verdict("FOUNDER ACTION: create the OAuth App", staged, now)[0] == 2
-    assert bg.verdict("INVENTORY: nothing founder-facing", [], now)[0] == 0
-    assert bg.verdict("FOUNDER ACTION: x", None, now)[0] == 0   # BLIND permits and says so
+    assert bg.denials("STAGED: x is ready. Reply 'go' ...", staged, now) == []
+    assert bg.denials("STAGED: x is ready.", [], now)
+    assert bg.denials("FOUNDER ACTION: touch the hardware key", physical, now) == []
+    assert bg.denials("FOUNDER ACTION: create the OAuth App", legacy, now)   # the incident shape
+    assert bg.denials("FOUNDER ACTION: create the OAuth App", staged, now)
+    assert bg.denials("INVENTORY: nothing founder-facing", [], now) == []
+    assert bg.denials("FOUNDER ACTION: x", None, now) == []   # BLIND permits and says so
 
 
 def test_dod_guard_accepts_the_staged_shape_and_refuses_a_loose_one():
