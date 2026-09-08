@@ -87,7 +87,29 @@ legacy := {
 	# WHY: idp#675 was merged by --auto at 00:35:33Z with portability-drill run 33223840305 still
 	# going; it concluded FAILURE and main's gate was out ~30 min. Adapter gathers, Rego decides is
 	# the shape this becomes when a runner can hand OPA the check names and the required set.
-	"rule-guard.py": 1452,
+	# 1452 -> 1589 on 2026-09-08 (claude-guards#251). Three rule functions arrived, and the
+	# raise is granted for the reason the deny message names -- each asks a live question, or
+	# says something command.rego has no way to say. Written out one by one so a later session
+	# can check the claim rather than inherit it:
+	#
+	#   rule_slow_in_the_foreground  reads slow_commands' measured store: how long THIS machine
+	#     has taken over this command before. That number is not in the command text and cannot
+	#     be. It also reads tool_input.run_in_background, which the hook payload carries and the
+	#     command string does not.
+	#   rule_stash_hides_work        its second half asks `git status --porcelain` in the
+	#     worktree root before refusing a branch switch. "Is this checkout dirty" is a live
+	#     question. Its FIRST half is pure pattern and is not here: `git stash push` is a row in
+	#     command.rego beside shared_stash, where it belongs.
+	#   rule_unbounded_kube_logs     emits a WARNING, not a refusal. command.rego's contract is
+	#     `deny`, and a rule whose whole point is to steer without blocking (LAW 38: reading a
+	#     full log mid-incident is sometimes correct) has nothing to put in that set.
+	#
+	# Worth saying plainly, because this ceiling is the estate's own instrument: the deny message
+	# calls these "command refusals" and the input counts `^def rule_`. One of the three refuses
+	# nothing. The count is of rule functions, and the third is a warning that got swept into a
+	# refusal count. Not fixed here -- redesigning the gate in the pull request the gate is
+	# refusing is how a measurement stops meaning anything.
+	"rule-guard.py": 1589,
 	# crew#407 (claude-guards#118): the credential shapes use lookarounds ((?!...), (?<!...)) that
 	# RE2, and so OPA, cannot run, and the one definition is estate_alert.credential_shape, shared
 	# with the Telegram senders (#113). The hook is the adapter for two events (Stop reply text,
@@ -189,7 +211,9 @@ legacy := {
 # tree, which Rego cannot do. The seventh (rule_self_symlink, 2026-08-28) asks the
 # filesystem whether `ln -s` target and link resolve to the same path, or whether -f
 # would unlink a regular file: a stat, not a regex.
-rule_ceiling := {"rule-guard.py": 7}
+# 7 -> 10 on 2026-09-08 (claude-guards#251), each of the three justified by name in the
+# `legacy` block above. Same direction as always after that: it only ever falls.
+rule_ceiling := {"rule-guard.py": 10}
 
 deny contains msg if {
 	some g in input.guards

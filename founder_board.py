@@ -2109,6 +2109,93 @@ def collect_bearing() -> list[Row]:
     return [_cluster_from_here(), _cluster_from_ci(), _runs_on_this_laptop(), _map_is_a_disk_scan()]
 
 
+LINEAR_API = "https://api.linear.app/graphql"
+LINEAR_FREE_ISSUE_CAP = 250
+
+
+def _estate_env(key: str) -> str:
+    """Read one value from the estate env file, without sourcing a shell.
+
+    The file is the estate's one place for a credential this laptop needs; a key typed into
+    this script would be a literal in git (LAW 46) and readable forever (LAW 10).
+    """
+    path = os.path.join(HOME, ".config", "estate", "estate.env")
+    try:
+        with open(path) as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith(key + "="):
+                    return line.split("=", 1)[1].strip().strip('"\'')
+    except OSError:
+        pass
+    return os.environ.get(key, "")
+
+
+def collect_linear_board() -> list[Row]:
+    """Is the issue board a board, or a pile?
+
+    Founder, 2026-09-06: "we dont have projecsts inl liner,, issues arent linked, etc".
+    He was right, and the numbers are why this section exists rather than a reassurance: on
+    the morning he asked, all 210 issues sat in Todo, none was in a project, none carried a
+    link to the GitHub issue it came from, and 171 had no priority.
+
+    Three rows, because three things can go wrong and each has a different lever:
+      - the free plan counts ACTIVE issues against 250 and Done and Canceled both count, so
+        the cap is a housekeeping number, not a usage number;
+      - an issue with no project has no answer to "what is this for";
+      - an issue with no GitHub link cannot be followed to the work.
+    """
+    key = _estate_env("LINEAR_API_KEY")
+    if not key:
+        return [_unknown("Linear board", "no LINEAR_API_KEY in the estate env file",
+                         "grep LINEAR_API_KEY ~/.config/estate/estate.env")]
+    query = """{ issues(first:250) { nodes { id priority
+                   project { name }
+                   attachments { nodes { url } } } }
+                 projects(first:50) { nodes { name } } }"""
+    import urllib.request
+
+    try:
+        # In-process, not curl: a token in an argv is readable by anyone who can run ps.
+        req = urllib.request.Request(
+            LINEAR_API, data=json.dumps({"query": query}).encode(),
+            headers={"Authorization": key, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=25) as resp:
+            data = json.loads(resp.read()).get("data") or {}
+        nodes = data["issues"]["nodes"]
+        projects = data["projects"]["nodes"]
+    except Exception as ex:  # noqa: BLE001 - any failure is UNKNOWN, never a zero
+        return [_unknown("Linear board", f"{type(ex).__name__}: {ex}",
+                         "POST api.linear.app/graphql")]
+
+    active = len(nodes)
+    no_project = sum(1 for n in nodes if not n["project"])
+    # Graded on where the attachment points, not on Linear's sourceType. An attachment made
+    # through the API is typed "api" however GitHub-shaped its URL is, and the first version
+    # of this row read "0 of 206" against 206 working GitHub links because of it.
+    linked = sum(1 for n in nodes
+                 if any("github.com/" in (a["url"] or "") for a in n["attachments"]["nodes"]))
+    headroom = LINEAR_FREE_ISSUE_CAP - active
+
+    cap_state = GOOD if headroom > 50 else (WARN if headroom > 0 else BAD)
+    rows = [Row(cap_state, "Room on the free plan", f"{active} of {LINEAR_FREE_ISSUE_CAP} used",
+                f"{headroom} issues of headroom. Done and Canceled count too, so the estate "
+                f"stays free by archiving, not by closing.",
+                "linear: filter is:open"),
+            Row(GOOD if no_project == 0 else (WARN if no_project < active / 2 else BAD),
+                "Issues that belong to a project",
+                f"{active - no_project} of {active}",
+                f"{len(projects)} projects exist. {no_project} issues answer nothing when "
+                f"asked what they are for.",
+                "linear: group by project"),
+            Row(GOOD if linked >= active else (WARN if linked else BAD),
+                "Issues linked to their GitHub issue", f"{linked} of {active}",
+                "A linked issue opens the GitHub thread it was migrated from; an unlinked "
+                "one is a title with no trail.",
+                "platform/linear/setup.py")]
+    return rows
+
+
 COLLECTORS = [
     ("Where it runs \u2014 mac, cluster, CI", collect_bearing),
     ("The board \u2014 nothing is live until you tick it", collect_estate_state),
@@ -2121,6 +2208,7 @@ COLLECTORS = [
     ("Research and documents \u2014 did the asset land?", collect_research_and_docs),
     ("Science lane \u2014 capabilities and progress", collect_science_showcase),
     ("What you said, and whether it landed", collect_founder_friction),
+    ("The issue board \u2014 is it a board or a pile?", collect_linear_board),
     ("Work in flight", collect_prs),
     ("What is broken", collect_estate_audit),
     ("What is broken (prospector)", collect_estate_checks),

@@ -344,8 +344,9 @@ rules := [
 	{
 		"id": "shared_stash",
 		# `git stash list` and `git stash show` are reads and stay allowed.
-		# `git stash push` is allowed too: pushing only ever ADDS an entry, and
-		# the damage is in taking one off.
+		# `git stash push` was allowed here on the argument that pushing only ever ADDS an
+		# entry. 2026-09-07 overturned that half: see stash_push_hides_work below. This row
+		# is now only about taking an entry OFF, which is where the two ways it went wrong are.
 		"re": `\bgit\s+stash\s+(pop|apply|drop|clear)\b`,
 		"marker": "stash-intended",
 		"must_match": "git stash pop",
@@ -358,6 +359,37 @@ rules := [
 			"conflicted; on 2026-08-07 it dropped an entry that had to be recovered.\n",
 			"Read it first:  git stash list && git stash show -p stash@{0}\n",
 			"To save your own work, commit on a branch instead of stashing.",
+		]),
+	},
+	{
+		"id": "stash_push_hides_work",
+		# 2026-09-07. An agent found uncommitted changes in the founder's main checkout and
+		# asked him to choose between "stash them", "commit them first" and "leave them be".
+		# All three are wrong and the question should never have reached him (R31, R54).
+		#
+		# shared_stash above used to allow the push half, on the argument that adding to the
+		# list harms nobody. That argument only holds if someone comes back for the entry.
+		# refs/stash is ONE list for every worktree and every session on this machine; there
+		# were fifteen entries on the day this row was written, the oldest with no way left to
+		# tell whose it was. A push is not a save, it is a place work goes to be forgotten.
+		#
+		# The move that costs nothing is a worktree: a new branch gets its own directory, so
+		# the dirty checkout never moves and nothing has to be decided about it.
+		#
+		# `git stash create` stays allowed and is the safety copy: it writes a commit object
+		# and touches neither the working tree nor the shared list. `list` and `show` are reads.
+		"re": `\bgit\s+(?:-C\s+\S+\s+)*stash\s+(?:push|save)\b|\bgit\s+(?:-C\s+\S+\s+)*stash(?:\s+-[\w-]+)*\s*(?:$|[;&|\n])`,
+		"marker": "stash-intended",
+		"must_match": "git stash push -m wip",
+		"must_not_match": "snap=$(git stash create) && git tag safety/wip \"$snap\"",
+		"msg": concat("", [
+			"BLOCKED by rule-guard: `git stash push` in this estate.\n",
+			"refs/stash is ONE list shared by every worktree and session on this machine, so this ",
+			"buries work another session is holding, somewhere they will not look for it.\n",
+			"Take a safety copy that touches nothing instead:\n",
+			"  snap=$(git stash create) && git tag safety/<what-it-is> \"$snap\" && git push origin safety/<what-it-is>\n",
+			"and to start a branch without moving this checkout, use a worktree:\n",
+			"  git worktree add <dir> -b <branch> origin/main",
 		]),
 	},
 	{

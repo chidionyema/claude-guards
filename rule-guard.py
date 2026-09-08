@@ -49,6 +49,9 @@ import subprocess
 import sys
 import time
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import slow_commands  # noqa: E402  -- the path above has to be set before this resolves
+
 #: LAW 46: no literal machine path -- read PROSPECTOR_REPO (action_items.py's same
 #: convention). Off that env var and off this Mac, `_git` abstains IN SILENCE to every
 #: question a rule asks it, so fall back to the tree this process is standing in,
@@ -702,16 +705,24 @@ def rule_merge_red_pr(cmd: str) -> str | None:
             return _unresolved
     sl = _merge_repo_slug(cmd)
     states = _pr_check_states(pr, cmd)
-    verdict = _merge_verdict(pr, states, escaped,
-                             _main_red_refusal(sl) if sl else _main_red_refusal(),
-                             "main-is-red" in cmd)
+    main_red = _main_red_refusal(sl) if sl else _main_red_refusal()
+
+    # `--auto` is graded on its own terms, and it is graded FIRST. It merges nothing now: GitHub
+    # queues the merge and performs it when the REQUIRED checks pass. So "a check is still
+    # running" is not an objection to it -- it is the reason the flag exists, and refusing on it
+    # left a session sitting and watching a pull request, which the founder banned on 2026-09-04
+    # ("turn auto-merge on for every pull request ... watching checks is time I am paying for").
+    # The real risk is unchanged and still fires below: GitHub waiting for a shorter set than
+    # this PR actually runs (idp#675, 2026-08-29), which _auto_merge_refusal is what grades.
+    if _GH_MERGE_AUTO.search(cmd):
+        auto = _auto_merge_refusal(pr, states, _required_contexts(sl), cmd)
+        if auto is not None:
+            return auto
+        return None if "main-is-red" in cmd else main_red
+
+    verdict = _merge_verdict(pr, states, escaped, main_red, "main-is-red" in cmd)
     if verdict is not None:
         return verdict
-    # Last, and never overridden. A merge this guard graded green NOW can still be wrong when
-    # GitHub performs it later against a shorter required set -- idp#675, 2026-08-29. The states
-    # above are the ones that existed at typing time; --auto is about the ones that do not yet.
-    if _GH_MERGE_AUTO.search(cmd):
-        return _auto_merge_refusal(pr, states, _required_contexts(sl), cmd)
     return None
 
 
@@ -837,6 +848,9 @@ def orphan_state(cmd: str) -> dict | None:
 #: cannot -- "which modified tracked files here are older than this session" -- and Rego refuses.
 _SESSION_STARTED: float | None = None
 
+#: Whether this Bash call was launched detached. A background run cannot make an agent sit and
+#: wait, so the slow-command warning has nothing to say about it.
+_RUN_IN_BACKGROUND: bool = False
 
 
 _DISCARDS = re.compile(
@@ -883,13 +897,141 @@ def foreign_changes(cmd: str) -> dict | None:
     return {"repo": top, "files": sorted(old)} if old else None
 
 
+def rule_unbounded_kube_logs(cmd: str) -> str | None:
+    """WARN (not refuse) on an unbounded `bin/idp-kube ... logs` read.
+
+    bin/idp-kube is the ONE approved cluster path and passes bare_kubectl by design, but it is a
+    thin pass-through (KUBECONFIG=... exec kubectl "$@") with NO output bound. An agent that runs
+    `bin/idp-kube -n observability logs deploy/x` on a chatty pod floods the whole context window
+    with raw log lines -- the Law-55 failure (bulk runs emit only a summary, raw logs never read
+    into context). The estate's own break-glass tool idp-oke-break-glass bounds EVERY log read with
+    --tail=NN or | tail -NN; the ad-hoc agent path never learned the same habit.
+
+    This is a WARNING, not a refusal (LAW 38): reading a full log is sometimes the correct action
+    mid-incident, and refusing it would be a fence that blocks legitimate work. The message steers
+    the agent to bound the read, exactly as bare_kubectl steers bare kubectl to bin/idp-kube.
+    Bounded forms (--tail, -f follow, or a pipe to tail/grep/head) do not fire."""
+    # Grade each newline-separated command independently; a marker exempts only its own line.
+    for line in normalise(cmd).split("\n"):
+        if "tail-raw-log-intended" in line:
+            continue
+        segs = [s.strip() for s in re.split(r"(?:\|\||&&|\||;)", line) if s.strip()]
+        for i, seg in enumerate(segs):
+            m = re.search(r"(^|[\s=/])(bin/)?idp-kube(\s|$)", seg)
+            if not m or not re.search(r"(^|\s)logs(\s|$)", seg):
+                continue
+            # Redirect to a file never reaches the context window.
+            if re.search(r"[$\s;&][12]?>\s*\S+", seg):
+                continue
+            # -f/--tail directly on the read is bounded.
+            if re.search(r"--tail\b", seg) or re.search(r"(^|\s)-f($|\s)", seg):
+                continue
+            # Is the logs output piped downstream to tail/grep/head/less (a bound)?
+            bounded = any(
+                re.search(r"^(tail|grep|head|less|awk|sed)\b", segs[j])
+                for j in range(i + 1, len(segs))
+            )
+            if bounded:
+                continue
+            return (
+                "NOTE (not blocked): `bin/idp-kube logs` with no --tail dumps the entire log into the "
+                "context window (Law 55: raw logs never read into context; the estate's own break-glass "
+                "always bounds with --tail). Bound the read:\n"
+                "    bin/idp-kube logs <pod> --tail=100\n"
+                "    bin/idp-kube logs <pod> 2>&1 | tail -n 50     (a pipe to tail/grep is fine)\n"
+                "    bin/idp-kube logs -f <pod>                    (follow streams, does not dump)\n"
+                "You truly want the full log captured? append the marker:  # tail-raw-log-intended"
+            )
+    return None
+
+
+# The second alternative is "git stash" with nothing but flags after it, ending at a
+# separator rather than at end-of-string. It used to require end-of-string, which meant
+# the rule refused `git stash` alone and permitted `git stash && git checkout main` --
+# the compound it was written to stop -- and permitted `git stash -u`, which writes to
+# the same shared refs/stash the docstring is about. A read subcommand (list, show) and
+# a restore (pop, apply, create) are words, not flags, so they still pass.
+_SWITCH_AWAY = re.compile(
+    r"\bgit\s+(?:-C\s+\S+\s+)*(?:checkout|switch)\s+(?:-b|-c|-C)?\s*(?P<ref>[\w.][\w./+-]*)\s*(?=$|[;&|\n])"
+)
+
+
+def rule_stash_hides_work(cmd: str) -> str | None:
+    """Refuse switching a branch in a checkout that has uncommitted work in it.
+
+    The other half of this -- `git stash push` -- is NOT here. It is a pattern and nothing
+    more, so it is a row in policy/command.rego (stash_push_hides_work) where the estate's
+    patterns live. What stays in Python is the half that has to ask git a live question:
+    whether THIS checkout is dirty right now. No regex over the command can answer that.
+
+    Written 2026-09-07 because an agent asked the founder to choose between
+    "stash them", "commit them first" and "leave them be" for uncommitted changes
+    in his main checkout. All three are wrong and the question should never have
+    reached him.
+
+    The stash is shared: refs/stash is one list for every worktree and every
+    session on this machine, so `git stash push` in one session buries another
+    session's in-flight work in a place nobody else will think to look. Fifteen
+    entries were sitting there on the day this rule was written, the oldest
+    unreadable as to whose it was.
+
+    Switching branches in a dirty checkout is the same defect with a different
+    ending: the edits ride along to the new branch and collide there.
+
+    The move that costs nothing is a worktree. A new branch gets its own
+    directory, so the dirty checkout never moves and nothing has to be decided
+    about it. `git stash create` stays allowed -- it writes a commit object and
+    touches neither the working tree nor the shared list, which is how you take
+    a safety copy.
+    """
+    # A path restore names paths after a double dash and moves no branch, so it is not
+    # this. Neither is a sentence in a commit message that happens to name the command:
+    # the pattern requires a bare ref at the end of its own segment, which prose never is.
+    if _SWITCH_AWAY.search(cmd):
+        root = _worktree_root(os.getcwd())
+        if root:
+            rc, out = _git("status", "--porcelain", "--untracked-files=no", cwd=root)
+            if rc == 0 and out.strip():
+                n = len(out.strip().splitlines())
+                return (f"switching branches with {n} uncommitted file(s) in {root}.\n"
+                        "The edits ride along to the new branch and collide there, and they may not be\n"
+                        "yours -- worktrees in this estate are shared between sessions.\n"
+                        "Start the branch in its own directory instead, so this checkout never moves:\n"
+                        "  git worktree add <dir> -b <branch> origin/main")
+    return None
+
+
+def rule_slow_in_the_foreground(cmd: str) -> str | None:
+    """WARN when a command measured slow on this machine is about to block the session.
+
+    Founder, 2026-09-07, watching a session sit still for 2m29s on `trivy config`: "like this the
+    waits, the slience,s a lot of tine is spent waiting". Measured over 14,176 paired tool calls
+    in this project's transcripts: 310 Bash calls ran 60s or longer, 9.90 hours of wall clock, and
+    NONE of them were backgrounded. The Bash tool has taken run_in_background the whole time.
+
+    It measures rather than pattern-matches, because the measurement says a pattern list would be
+    wrong: those 310 calls spread across kubectl (19.9%), CI and gate runs (20.4%), polling loops
+    (16.5%), grep sweeps (8.3%), git transfers (6.4%), scanners (4.9%) and a 19.1% tail no list
+    would hold. A signature has to have been slow HERE at least three times before this speaks, so
+    it can never refuse novel correct work -- and it warns rather than refuses (LAW 38) because
+    the estate has commands that are long by design (`tofu plan`, `bin/idp-vault-reads` over a
+    90-minute audit window) and a fence across those would be an outage.
+
+    The measuring half is slow_commands.py: mark_start() below, and --post on PostToolUse."""
+    return slow_commands.note(cmd, _RUN_IN_BACKGROUND)
+
+
 RULES = (rule_two_dot_diff, rule_pr_size, rule_runtime_state,
          rule_commit_in_shared_checkout, rule_merge_red_pr,
-         rule_restart_kills_a_live_build, rule_self_symlink)
+         rule_restart_kills_a_live_build, rule_self_symlink,
+         rule_stash_hides_work)
 
 #: Rules that let the command through and say something. Empty since 2026-08-17: the one warning
 #: that lived here, the shared-checkout commit, was ignored for 105 commits and is a refusal now.
-WARN_RULES: tuple = ()
+#: 2026-09-06: rule_unbounded_kube_logs is the first re-inhabitant -- a genuine warn-grade rule
+#: (reading a full pod log mid-incident is legitimate, so it must not be a refusal, but the agent
+#: should be steered to --tail).
+WARN_RULES: tuple = (rule_unbounded_kube_logs, rule_slow_in_the_foreground)
 
 
 # ------------------------------------------------------------- the Rego policy
@@ -1052,8 +1194,8 @@ def selftest() -> int:
         ("git stash pop  # stash-intended", None),
         ("git stash list", None),
         ("git stash show -p stash@{0}", None),
-        ("git stash -u", None),
-        ("git stash push -m wip", None),
+        ("git stash -u", "policy"),   # stash_push_hides_work, policy/command.rego
+        ("git stash push -m wip", "policy"),   # stash_push_hides_work, policy/command.rego
         ("git add -A  # add-all-intended", None),
         ("git add -- scripts/ops_status.py", None),
         ("git add -p", None),
@@ -1061,6 +1203,13 @@ def selftest() -> int:
         ("git commit -m x\nrg -n PATTERN docs/", None),          # -n on a LATER line
         ("git commit -m x && tail -n 5 log", None),               # -n after a separator
 
+        ("git stash push -m auto", "policy"),   # stash_push_hides_work, policy/command.rego
+        ("git stash save wip", "policy"),   # stash_push_hides_work, policy/command.rego
+        # The spelling anyone actually uses: the stash is never the point, the thing after
+        # the && is. The rule matched a bare `git stash` only at end-of-string until
+        # 2026-09-07, so this exact line -- the one the rule exists to refuse -- passed.
+        ("git stash && git checkout main", "policy"),   # stash_push_hides_work, policy/command.rego
+        ("git stash --include-untracked; git pull", "policy"),   # stash_push_hides_work, policy/command.rego
         ("git diff --stat origin/main HEAD", "rule_two_dot_diff"),
         # Two BRANCH-shaped refs, not a branch-and-HEAD. This used to name
         # `origin/pr/shelf-copy-glossary`, which has since been deleted from origin — so
@@ -1405,7 +1554,11 @@ def main() -> int:
     cmd = str(payload.get("tool_input", {}).get("command", ""))
     if not cmd:
         return 0
-    global _ACTIVE_REPO, _SESSION_CWD, _SESSION_STARTED
+    global _ACTIVE_REPO, _SESSION_CWD, _SESSION_STARTED, _RUN_IN_BACKGROUND
+    _RUN_IN_BACKGROUND = bool(payload.get("tool_input", {}).get("run_in_background"))
+    # Stamp the start here rather than in a seventh PreToolUse hook: this process is already
+    # running on every Bash call, and idp-44 measured the existing six at 252-417ms each.
+    slow_commands.mark_start(str(payload.get("session_id") or ""), cmd)
     _SESSION_CWD = payload.get("cwd")
     _SESSION_STARTED = _session_started(payload.get("transcript_path"))
     _ACTIVE_REPO = _repo_for(cmd, payload.get("cwd"))
