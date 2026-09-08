@@ -1,0 +1,4 @@
+repo=chidionyema/crew
+issue=102
+dead_letter=~/.claude/state/board-deadletter.jsonl
+comment_format=ts **from** (kind/priority): message
