@@ -159,40 +159,6 @@ deny contains msg if {
 	)
 }
 
-# LAW 16 (leave a path back when you drop something), crew#423 map row 16 "leave-a-path-back-when":
-# the session dropped a thread and wrote no checkpoints/LATEST.md. THE CLASS: a Stop reply that says
-# it parks, drops, defers or switches away from an item, on a line that names no way back (a
-# checkpoint file, a ticket number, a branch or a "path back:"), while the session's
-# checkpoints/LATEST.md is older than 30 minutes or missing. Verbs are matched in lower or sentence
-# case only: a live sweep refused a report over the constant DEFER. A park verb needs a thread-like
-# object (thread, lane, item, ticket, issue, task, work, ...) or "away from": claude-guards#134 review
-# found "Switched to --force-with-lease" and "Dropping the worktree" refused, neither a dropped thread. opa-hook.py supplies
-# checkpoint_age_s from the file's mtime; with no value at all the rule stays silent (BLIND, LAW 45).
-park_re := `\b(?:[Pp]ark(?:ed|ing)?\s+(?:the\s+|this\s+|that\s+|my\s+|it\s+)?(?:[a-z#\d./-]+\s+){0,3}?(?:thread|lane|item|ticket|issue|task|work|investigation|fix|repair|lead|question|row|checkpoint|cp\d)\b|[Pp]ark(?:ed|ing)?\s+(?:it|this|that)\b|[Dd]ropp(?:ed|ing)\s+(?:the\s+|this\s+|that\s+|my\s+|it\s+)?(?:[a-z#\d./-]+\s+){0,3}?(?:thread|lane|item|ticket|issue|task|work|investigation|fix|repair|lead|question|row|checkpoint|cp\d)\b|[Dd]efer(?:red|ring)?\s+(?:the\s+|this\s+|that\s+|my\s+|it\s+)?(?:[a-z#\d./-]+\s+){0,3}?(?:thread|lane|item|ticket|issue|task|work|investigation|fix|repair|lead|question|row|checkpoint|cp\d)\b|[Ss]helv(?:ed|ing)\s+(?:the\s+|this\s+|that\s+|my\s+|it\s+)?(?:[a-z#\d./-]+\s+){0,3}?(?:thread|lane|item|ticket|issue|task|work|investigation|fix|repair|lead|question|row|checkpoint|cp\d)\b|[Ss]witch(?:ed|ing)\s+away\s+from\b|[Ss]witch(?:ed|ing)\s+to\s+(?:another|a\s+different|the\s+next)\s+(?:thread|lane|item|ticket|issue|task)\b|[Ll]eav(?:e|ing)\s+(?:it|this|that|[a-z#\d]+)\s+for\s+(?:later|now|another)|[Pp]ick(?:ing)?\s+(?:it|this|that|[a-z#\d]+)\s+up\s+later|[Cc]ome\s+back\s+to\s+(?:it|this|that)\s+later)`
-
-path_back_re := `(?i)LATEST\.md|checkpoint|\bpath\s+back\b|#\d+|\b[a-z]+/[a-z0-9._/-]+\b`
-
-park_without_path(line) if {
-	regex.match(park_re, line)
-	not regex.match(path_back_re, line)
-}
-
-deny contains msg if {
-	input.event == "Stop"
-	input.checkpoint_age_s > 1800
-	some line in split(input.reply, "\n")
-	park_without_path(line)
-	msg := sprintf(
-		concat("", [
-			"LAW 16: leave a path back when you drop something. This reply parks a thread with no way back on the line:\n",
-			"  %s\n",
-			"and checkpoints/LATEST.md is %d s old. Name the ticket, branch or checkpoint on that line, ",
-			"or write the checkpoint first (map row 16, crew#423).",
-		]),
-		[trim_space(line), input.checkpoint_age_s],
-	)
-}
-
 # crew#648 CP4 (founder 2026-08-30). Every session starts with the estate state document
 # (estate-state-relay.py); the reply's status may not contradict it. When the document is fresh
 # (input.estate.fresh: available, not stale, fetched under 30 minutes ago) and says a production

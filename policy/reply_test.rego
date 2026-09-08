@@ -102,46 +102,6 @@ test_option_lines_with_decision_allowed if {
 	count(deny) == 0 with input as stop("INVENTORY: two ways were on the table.\nOption A: launchd.\nOption B: a Dagster row.\nChosen: B, portable; risk: the row needs the daemon up.")
 }
 
-# crew#423 row 16: parked thread with no path back, both ways.
-stop_aged(text, age) := {"event": "Stop", "reply": text, "checkpoint_age_s": age}
-
-test_parked_thread_without_path_and_stale_checkpoint_refused if {
-	count(deny) == 1 with input as stop_aged("INVENTORY: idp row landed.\nParking the drift work for now and switching to the receipt.", 7200)
-}
-
-test_parked_thread_with_ticket_on_the_line_allowed if {
-	count(deny) == 0 with input as stop_aged("INVENTORY: idp row landed.\nParking the drift work on crew#401 for now, branch fix/crew401-drift.", 7200)
-}
-
-test_parked_thread_with_fresh_checkpoint_allowed if {
-	count(deny) == 0 with input as stop_aged("Parking the drift work for now and switching to the receipt.", 120)
-}
-
-test_no_checkpoint_age_supplied_is_blind_not_a_verdict if {
-	count(deny) == 0 with input as stop("Parking the drift work for now and switching to the receipt.")
-}
-
-test_dropped_pods_in_a_report_are_not_a_parked_thread if {
-	count(deny) == 0 with input as stop_aged("The receipt dropped the two pods that were Succeeded; see checkpoints/LATEST.md.", 7200)
-}
-
-test_an_uppercase_constant_is_not_a_parked_thread if {
-	count(deny) == 0 with input as stop_aged("The demotion must not set retrieval_failed; that fires DEFER at verify.py:693 and dropped 10 criticals.", 7200)
-}
-
-# claude-guards#134 review: two lane shapes that are not a parked thread.
-test_switched_to_a_flag_is_not_a_parked_thread if {
-	count(deny) == 0 with input as stop_aged("Switched to --force-with-lease after the guard refused the push.", 7200)
-}
-
-test_dropping_a_worktree_is_not_a_parked_thread if {
-	count(deny) == 0 with input as stop_aged("Dropping the worktree and picking up the next board item.", 7200)
-}
-
-test_parking_a_named_lane_without_path_still_refused if {
-	count(deny) == 1 with input as stop_aged("Parking the drift lane for now, switching away from it.", 7200)
-}
-
 red_estate := {"fresh": true, "document": {"runtime": {
 	"clusters": [{"name": "oke", "role": "production", "state": "FAIL", "flux_rows": [{"kind": "Kustomization", "namespace": "flux-system", "name": "tailscale", "ready": false, "message": "stalled"}]}],
 	"surfaces": [{"name": "second-hop", "verdict": "FAIL", "detail": "did not load"}],

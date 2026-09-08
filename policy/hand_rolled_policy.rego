@@ -68,6 +68,15 @@ legacy := {
 	# command while checkpoints/LATEST.md is more than 30 min old). The lines are the state Rego
 	# cannot gather: checkpoint_age_s() stats LATEST.md next to the transcript, walks up from a
 	# subagents/ transcript, and hands None (BLIND) when there is no file. Adapter gathers, Rego decides.
+	# DELETED 2026-09-07. Measured across all 34 project directories holding sessions: 23 of them
+	# (11,639 sessions) had no LATEST.md at all, so the rule was BLIND and could never fire; of the
+	# 11 that had one (564 sessions), 10 were already past the 30-minute threshold, median age 316
+	# hours. The single fresh one was idp -- the one repo whose sessions had been trained to
+	# hand-write the file because this rule nagged them. It measured who fed it, not who checkpointed.
+	# The record moved to the work's GitHub issue (idp bin/estate-checkpoint, ADR 2026-09-07), which
+	# every agent writes whatever its vendor. rules_count fell by 2: this rule and reply.rego's LAW 16
+	# stale-checkpoint rule, which shared the same input and would have become permanently armed the
+	# moment this one went.
 	# 1353 -> 1452 on 2026-08-29 (session 14ed6c8b, crew#488). No refusal was added: rules_count is
 	# still 7 (`grep -c '^def rule_'` before and after), and the new dimension lives inside
 	# rule_merge_red_pr -- one of the four this file's header names as unable to move, because it
