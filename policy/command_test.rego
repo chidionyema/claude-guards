@@ -100,6 +100,16 @@ refuse := [
 	"gh api repos/chidionyema/prospector/actions/variables", # value dump
 	"gh api repos/chidionyema/prospector/actions/variables --jq '.variables[].value'", # value dump
 	"gh variable list", # value dump
+	# 2026-09-08: a wrapper is not a disguise. Every one of these was invisible to the
+	# guard until wrapper_re, because the anchor only ever looked at the head of a segment,
+	# and `timeout 60 <cmd>` is how an agent bounds a command that might hang -- so the shape
+	# that defeated the fence was also the shape a careful session writes.
+	"timeout 60 kubectl get pods -n observability", # bare_kubectl behind a timeout
+	"timeout --foreground 5m kubectl exec dagster-daemon -- ls", # a flag before the duration
+	"nohup kubectl logs deploy/dagster-daemon", # a different wrapper
+	"nice -n 10 kubectl top nodes", # and a third
+	"timeout 600 pytest -q", # R45: the whole suite, behind a timeout
+	"timeout 5 printenv", # value dump behind a timeout
 	"kubectl get secret prospector-engine-env -o yaml", # value dump
 	"kubectl get secret prospector-engine-env -o json", # value dump
 	"printenv", # value dump
@@ -183,6 +193,13 @@ permit := [
 	"kind create cluster --name prospector", # allowed: the EUR 0 substrate
 	"minikube start --driver=docker", # allowed: the EUR 0 substrate
 	"bin/idp-kube create namespace prospector", # allowed: costs nothing; bare kubectl is the mistake (crew#66)
+	# The other half of wrapper_re. A wrapper must not turn a correct command into a refused
+	# one (LAW 38), and it must not swallow the escape bare_kubectl already grants: an explicit
+	# kubeconfig is exactly how a session is meant to reach a cluster it built itself.
+	"timeout 60 bin/idp-kube get pods -n observability", # allowed: the approved path, wrapped
+	"KUBECONFIG=/tmp/kc.yaml kubectl get pods", # allowed: an assignment is not a wrapper
+	"timeout 600 pytest tests/test_x.py", # allowed: scoped, wrapped
+	"timeout 5 env FOO=1 python3 run.py", # allowed: sets, does not print
 	"hcloud server list", # allowed: reading costs nothing
 	"hcloud server delete 12345", # allowed: destroying saves money
 	"doctl kubernetes cluster list", # allowed: reading costs nothing

@@ -52,3 +52,32 @@ def test_a_merge_naming_its_number_still_takes_the_graded_path(monkeypatch):
 
 if __name__ == "__main__":
     sys.exit(subprocess.call(["python3", "-m", "pytest", "-q", __file__]))
+
+
+def test_a_repo_flag_with_a_space_does_not_hide_the_number():
+    """`-R owner/repo 252` names PR 252, and the guard must read it as such.
+
+    2026-09-08: it did not. The flag-skipping loop consumed `-R` and then met
+    `chidionyema/claude-guards`, which is not a flag, so it stopped before the number.
+    The rule fell back to the checkout, resolved idp#2407 -- a different pull request in
+    a different repository -- and refused the merge on THAT PR's red checks. A guard
+    grading the wrong subject is worse than one that grades nothing: it produces a
+    confident, specific, wrong refusal (LAW 38).
+
+    `--repo=x` matched and `-R x` did not, so the defect was invisible to anyone who
+    happened to write the equals sign.
+    """
+    mod = _load()
+    for cmd, want in (
+        ("gh pr merge -R chidionyema/claude-guards 252 --squash --delete-branch", "252"),
+        ("gh pr merge --repo chidionyema/claude-guards 253 --squash", "253"),
+        # every shape that already worked, unchanged
+        ("gh pr merge 252", "252"),
+        ("gh pr merge --repo=chidionyema/claude-guards 252", "252"),
+        ("gh pr merge --squash 252", "252"),
+        ("gh pr merge 2440 --squash --delete-branch", "2440"),
+        ("gh api -X PUT repos/o/r/pulls/324/merge", "324"),
+    ):
+        m = mod._GH_MERGE_NUM.search(cmd)
+        assert m is not None, cmd
+        assert (m.group(1) or m.group(2)) == want, cmd
