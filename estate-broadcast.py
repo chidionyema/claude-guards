@@ -13,24 +13,34 @@ import time
 import fcntl
 from pathlib import Path
 from datetime import datetime, timezone
+import uuid # Import uuid for idempotency key
 
 BOARD_PATH = Path.home() / ".claude" / "ESTATE_BOARD.jsonl"
 BOARD_LOCK = Path.home() / ".claude" / ".ESTATE_BOARD.lock"
 MAX_RETRIES = 5
 LOCK_TIMEOUT = 30
 
-# Founder, 2026-08-24: "why not just use github issues? why reinvent the wheel badly."
-# The board IS crew issue #102 — a phone can read it, nothing lives only on this laptop.
-# The JSONL above remains the offline cache the prompt hooks read at each session start.
-GH_REPO = "chidionyema/crew"
-GH_BOARD_ISSUE = "102"
-DEADLETTER = Path.home() / ".claude" / "state" / "board-deadletter.jsonl"
+# Read board target configuration
+try:
+    with open(Path.home() / ".claude" / "bin" / "board-target", "r") as f:
+        config = {}
+        for line in f:
+            key, value = line.strip().split("=", 1)
+            config[key] = value
+    GH_REPO = config.get("repo", "chidionyema/crew")
+    GH_BOARD_ISSUE = config.get("issue", "102")
+    DEADLETTER = Path(config.get("dead_letter", (Path.home() / ".claude" / "state" / "board-deadletter.jsonl")).replace("~", str(Path.home())))
+except FileNotFoundError:
+    print("[WARN] bin/board-target not found, using default GitHub issue settings.", file=sys.stderr)
+    GH_REPO = "chidionyema/crew"
+    GH_BOARD_ISSUE = "102"
+    DEADLETTER = Path.home() / ".claude" / "state" / "board-deadletter.jsonl"
 
 
 def format_row(record):
     """One board row as one GitHub comment body."""
     text = record.get("message") or record.get("text") or json.dumps(
-        {k: v for k, v in record.items() if k not in ("ts", "from", "kind", "priority")},
+        {k: v for k, v in record.items() if k not in ("ts", "from", "kind", "priority", "idempotency_key")}, # Exclude idempotency_key from message
         ensure_ascii=True)
     body = "`%s` **%s** (%s/%s): %s" % (
         record.get("ts", "?"), record.get("from", "?"), record.get("kind", "?"),
@@ -189,6 +199,10 @@ def append_broadcast(record):
     if 'kind' not in record:
         raise ValueError("record must have 'kind' field")
     
+    # Add idempotency key
+    if 'idempotency_key' not in record:
+        record['idempotency_key'] = str(uuid.uuid4())
+
     # Serialize to single-line JSON (no embedded newlines)
     json_line = json.dumps(record, separators=(',', ':'), ensure_ascii=True)
     
