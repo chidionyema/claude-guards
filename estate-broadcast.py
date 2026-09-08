@@ -13,18 +13,25 @@ import time
 import fcntl
 from pathlib import Path
 from datetime import datetime, timezone
+import configparser
+import io
 
 BOARD_PATH = Path.home() / ".claude" / "ESTATE_BOARD.jsonl"
 BOARD_LOCK = Path.home() / ".claude" / ".ESTATE_BOARD.lock"
 MAX_RETRIES = 5
 LOCK_TIMEOUT = 30
 
-# Founder, 2026-08-24: "why not just use github issues? why reinvent the wheel badly."
-# The board IS crew issue #102 — a phone can read it, nothing lives only on this laptop.
-# The JSONL above remains the offline cache the prompt hooks read at each session start.
-GH_REPO = "chidionyema/crew"
-GH_BOARD_ISSUE = "102"
-DEADLETTER = Path.home() / ".claude" / "state" / "board-deadletter.jsonl"
+def _read_board_target_config():
+    """Reads the board target configuration from bin/board-target."""
+    config = configparser.ConfigParser()
+    # Use a dummy section header to parse the key-value pairs
+    config.read_string("[DEFAULT]\n" + (Path.home() / ".claude" / "scripts" / "bin" / "board-target").read_text())
+    return config["DEFAULT"]
+
+_board_config = _read_board_target_config()
+GH_REPO = _board_config.get("repo", "chidionyema/crew")
+GH_BOARD_ISSUE = _board_config.get("issue", "102")
+DEADLETTER = Path(os.path.expanduser(_board_config.get("dead_letter", "~/.claude/state/board-deadletter.jsonl")))
 
 
 def format_row(record):
