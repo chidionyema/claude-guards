@@ -60,6 +60,26 @@ package command
 
 import rego.v1
 
+# A command that runs another command. `timeout 60 kubectl get pods` is a kubectl call, and
+# every rule below that anchors on the start of a command segment used to miss it.
+#
+# 2026-09-08: the session that found this had run bare kubectl against the cluster all night.
+# Each call was written `timeout 60 kubectl ...` because the agent was bounding a hang, and
+# bare_kubectl's `(?:^|[;&|(]\s*)kubectl` never fired once. The guard reported nothing and the
+# agent believed it was covered -- the worst state a fence can be in, because a fence that
+# refuses nothing still tells you it is there. The commands happened to be harmless (they used
+# a working kubeconfig), so this is a hole found by inspection and not by a wrong answer.
+#
+# What is deliberately NOT in this set: a variable assignment. `KUBECONFIG=/path kubectl get`
+# is bare_kubectl's own approved escape and has to keep passing, so a leading `NAME=value` must
+# not be treated as a wrapper. Only these named programs are, and each may carry its own flags
+# and a bare duration (`timeout 60`, `timeout --foreground 5m`, `nice -n 10`).
+#
+# Still out of reach, and honestly so: a command hidden inside a quoted string, as in
+# `timeout 60 bash -c 'kubectl get pods'`. RE2 cannot parse a shell, and pretending otherwise
+# would be the third copy of a lie. That shape is rare; this one was every command in a session.
+wrapper_re := `(?:(?:timeout|nohup|time|stdbuf|nice|ionice|command)(?:\s+(?:-[-\w]+(?:=[-\w.]+)?|[\d.]+[smhd]?))*\s+)*`
+
 # Each rule is: the pattern, the escape marker that turns it off, the message,
 # and the two examples that prove the pattern still works.
 #
@@ -146,9 +166,9 @@ rules := [
 		# segment with no KUBECONFIG= in front of it is reading ~/.kube/config, and that is the
 		# mistake. Local-only subcommands (kustomize, config, version, explain, api-resources,
 		# help) never open a socket and pass.
-		"re": `(?:^|[;&|(]\s*)kubectl\s+(?:-[-\w]+(?:[=\s]+[-\w./,:]+)?\s+)*(?:get|describe|logs|apply|delete|exec|rollout|top|patch|scale|port-forward|wait|cp|create|edit|label|annotate|drain|cordon|uncordon|taint|debug|events|diff|replace|run|attach|auth|certificate|cluster-info|expose|set)\b`,
+		"re": concat("", [`(?:^|[;&|(]\s*)`, wrapper_re, `kubectl\s+(?:-[-\w]+(?:[=\s]+[-\w./,:]+)?\s+)*(?:get|describe|logs|apply|delete|exec|rollout|top|patch|scale|port-forward|wait|cp|create|edit|label|annotate|drain|cordon|uncordon|taint|debug|events|diff|replace|run|attach|auth|certificate|cluster-info|expose|set)\b`]),
 		"marker": "kubectl-local-intended",
-		"must_match": "kubectl get pods -n observability",
+		"must_match": "timeout 60 kubectl get pods -n observability",
 		"must_not_match": "bin/idp-kube get pods -n observability",
 		"msg": concat("", [
 			"BLOCKED by rule-guard: bare kubectl reads ~/.kube/config, and on this laptop that is a dead k3d context.\n",
@@ -547,12 +567,12 @@ deny contains msg if {
 # passes. A run that genuinely needs the suite appends  # full-suite-intended.
 # ---------------------------------------------------------------------------
 
-pytest_call_re := `(?:^|[;&|(]\s*)(?:[\w./~$-]*/)?(?:python[0-9.]*\s+-m\s+pytest|pytest)(?:\s|$)`
+pytest_call_re := concat("", [`(?:^|[;&|(]\s*)`, wrapper_re, `(?:[\w./~$-]*/)?(?:python[0-9.]*\s+-m\s+pytest|pytest)(?:\s|$)`])
 
 # The arguments of the first pytest call: everything after it up to the next
 # separator or comment. RE2 has no lookahead, so the scoping test is a second step.
 pytest_args(cmd) := args if {
-	m := regex.find_all_string_submatch_n(`(?:^|[;&|(]\s*)(?:[\w./~$-]*/)?(?:python[0-9.]*\s+-m\s+pytest|pytest)([^;&|#]*)`, cmd, 1)
+	m := regex.find_all_string_submatch_n(concat("", [`(?:^|[;&|(]\s*)`, wrapper_re, `(?:[\w./~$-]*/)?(?:python[0-9.]*\s+-m\s+pytest|pytest)([^;&|#]*)`]), cmd, 1)
 	args := m[0][1]
 }
 
@@ -854,7 +874,7 @@ value_dumps := [
 	},
 	{
 		"id": "printenv_all",
-		"re": `(?:^|[;&|]\s*)printenv\s*(?:$|[|;&\n])`,
+		"re": concat("", [`(?:^|[;&|]\s*)`, wrapper_re, `printenv\s*(?:$|[|;&\n])`]),
 		"dumps": "printenv with no argument prints the whole environment",
 		"instead": "printenv NAME, or test the value without printing it",
 		"must_match": "printenv",
@@ -866,7 +886,7 @@ value_dumps := [
 		# that has whitespace before it. `a|env|b` is a grep alternation, not a command:
 		# on 2026-08-27 this rule refused two read-only greps whose -E pattern carried `|env|`
 		# (session d5ae1960), so the pipe form needs the space a shell pipeline has.
-		"re": `(?:^|\s\|\s*|[;&]\s*)env\s*(?:$|[|;&])`,
+		"re": concat("", [`(?:^|\s\|\s*|[;&]\s*)`, wrapper_re, `env\s*(?:$|[|;&])`]),
 		"dumps": "env with no argument prints the whole environment",
 		"instead": "printenv NAME, or test the value without printing it",
 		"must_match": "env",
