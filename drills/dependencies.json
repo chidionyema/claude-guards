@@ -33,6 +33,10 @@
       "is": "coding agent vendor",
       "covered_by": "no-anthropic"
     },
+    "api.linear.app": {
+      "is": "the issue board the founder board reads, over the free plan's 250-issue cap",
+      "dismissed": "read-only, and only by one section of one page. collect_linear_board() has no key path and a request path, both of which return an UNKNOWN row rather than raising -- the board renders every other section. Nothing in the estate writes to Linear or waits on it, so losing it costs a panel, not a capability."
+    },
     "api.mistral.ai": {
       "is": "substrate rail and the only working agent rail",
       "covered_by": "no-anthropic"
@@ -113,6 +117,10 @@
       "is": "model weights, pulled once",
       "dismissed": "nothing scheduled reads it; a local model already downloaded survives the host going away"
     },
+    "llm.mumchimp.com": {
+      "is": "the estate model router (platform/llm); consultd's keyed lanes and hermes bin/consult call it (crew#568)",
+      "dismissed": "the router down = consultd falls to the local ollama floor then the honest 503 (exit 3 is the documented normal state); the cluster's own availability gate drills the router (idp bin/idp-availability-gate)"
+    },
     "mumchimp.com": {
       "is": "a domain the estate owns",
       "dismissed": "no scheduled job calls it. It belongs on the register the day something does"
@@ -168,10 +176,6 @@
     "www.minimax.io": {
       "is": "a marketing page",
       "dismissed": "same"
-    },
-    "llm.mumchimp.com": {
-      "is": "the estate model router (platform/llm); consultd's keyed lanes and hermes bin/consult call it (crew#568)",
-      "dismissed": "the router down = consultd falls to the local ollama floor then the honest 503 (exit 3 is the documented normal state); the cluster's own availability gate drills the router (idp bin/idp-availability-gate)"
     }
   },
   "credentials": {
@@ -190,6 +194,10 @@
     "CLAUDE_API_KEY": {
       "is": "the same vendor under a second name",
       "covered_by": "no-anthropic"
+    },
+    "CONSOLE_PASSWORD": {
+      "is": "a fixture string in tests/test_incident_crew407_*: the shape the Telegram guard must refuse",
+      "dismissed": "not a credential the estate holds; it exists only so the guard is proved to refuse it"
     },
     "CONSULT_TOKEN": {
       "is": "auth between two local processes on this Mac",
@@ -235,6 +243,14 @@
       "is": "tracing",
       "dismissed": "same"
     },
+    "LINEAR_API_KEY": {
+      "is": "the read token for the issue board panel above",
+      "dismissed": "same as api.linear.app: its absence is a handled branch that prints where to look for it, not a failure."
+    },
+    "LITELLM_API_KEY": {
+      "is": "the laptop's one router virtual key, minted by idp vault-seed entry=laptop, delivered by estate-secrets (crew#568)",
+      "dismissed": "losing it costs the keyed lanes only; consultd falls to ollama, bin/consult exits 3; re-minted by one workflow dispatch, never pasted"
+    },
     "LOCAL_KEY": {
       "is": "the path of the same recovery key at ~/.config/estate, the copy a scheduled job can read",
       "covered_by": "key-escrow-restore"
@@ -262,14 +278,6 @@
     "TELEGRAM_TOKEN": {
       "is": "the only channel that reaches the founder",
       "covered_by": "telegram-delivery"
-    },
-    "CONSOLE_PASSWORD": {
-      "is": "a fixture string in tests/test_incident_crew407_*: the shape the Telegram guard must refuse",
-      "dismissed": "not a credential the estate holds; it exists only so the guard is proved to refuse it"
-    },
-    "LITELLM_API_KEY": {
-      "is": "the laptop's one router virtual key, minted by idp vault-seed entry=laptop, delivered by estate-secrets (crew#568)",
-      "dismissed": "losing it costs the keyed lanes only; consultd falls to ollama, bin/consult exits 3; re-minted by one workflow dispatch, never pasted"
     }
   }
 }
