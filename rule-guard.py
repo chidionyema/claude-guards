@@ -951,17 +951,18 @@ def rule_unbounded_kube_logs(cmd: str) -> str | None:
 # the compound it was written to stop -- and permitted `git stash -u`, which writes to
 # the same shared refs/stash the docstring is about. A read subcommand (list, show) and
 # a restore (pop, apply, create) are words, not flags, so they still pass.
-_STASH_HIDES = re.compile(
-    r"\bgit\s+(?:-C\s+\S+\s+)*stash\s+(?:push|save)\b"
-    r"|\bgit\s+(?:-C\s+\S+\s+)*stash(?:\s+-[\w-]+)*\s*(?=$|[;&|\n])"
-)
 _SWITCH_AWAY = re.compile(
     r"\bgit\s+(?:-C\s+\S+\s+)*(?:checkout|switch)\s+(?:-b|-c|-C)?\s*(?P<ref>[\w.][\w./+-]*)\s*(?=$|[;&|\n])"
 )
 
 
 def rule_stash_hides_work(cmd: str) -> str | None:
-    """Refuse the move that loses work: stashing, or switching a dirty checkout.
+    """Refuse switching a branch in a checkout that has uncommitted work in it.
+
+    The other half of this -- `git stash push` -- is NOT here. It is a pattern and nothing
+    more, so it is a row in policy/command.rego (stash_push_hides_work) where the estate's
+    patterns live. What stays in Python is the half that has to ask git a live question:
+    whether THIS checkout is dirty right now. No regex over the command can answer that.
 
     Written 2026-09-07 because an agent asked the founder to choose between
     "stash them", "commit them first" and "leave them be" for uncommitted changes
@@ -983,14 +984,6 @@ def rule_stash_hides_work(cmd: str) -> str | None:
     touches neither the working tree nor the shared list, which is how you take
     a safety copy.
     """
-    if _STASH_HIDES.search(cmd):
-        return ("`git stash push` in this estate.\n"
-                "refs/stash is ONE list shared by every worktree and session on this machine, so this\n"
-                "buries work another session is holding, somewhere they will not look for it.\n"
-                "Take a safety copy that touches nothing instead:\n"
-                "  snap=$(git stash create) && git tag safety/<what-it-is> \"$snap\" && git push origin safety/<what-it-is>\n"
-                "and to start a branch without moving this checkout, use a worktree:\n"
-                "  git worktree add <dir> -b <branch> origin/main")
     # A path restore names paths after a double dash and moves no branch, so it is not
     # this. Neither is a sentence in a commit message that happens to name the command:
     # the pattern requires a bare ref at the end of its own segment, which prose never is.
@@ -1201,8 +1194,8 @@ def selftest() -> int:
         ("git stash pop  # stash-intended", None),
         ("git stash list", None),
         ("git stash show -p stash@{0}", None),
-        ("git stash -u", "rule_stash_hides_work"),
-        ("git stash push -m wip", "rule_stash_hides_work"),
+        ("git stash -u", "policy"),   # stash_push_hides_work, policy/command.rego
+        ("git stash push -m wip", "policy"),   # stash_push_hides_work, policy/command.rego
         ("git add -A  # add-all-intended", None),
         ("git add -- scripts/ops_status.py", None),
         ("git add -p", None),
@@ -1210,13 +1203,13 @@ def selftest() -> int:
         ("git commit -m x\nrg -n PATTERN docs/", None),          # -n on a LATER line
         ("git commit -m x && tail -n 5 log", None),               # -n after a separator
 
-        ("git stash push -m auto", "rule_stash_hides_work"),
-        ("git stash save wip", "rule_stash_hides_work"),
+        ("git stash push -m auto", "policy"),   # stash_push_hides_work, policy/command.rego
+        ("git stash save wip", "policy"),   # stash_push_hides_work, policy/command.rego
         # The spelling anyone actually uses: the stash is never the point, the thing after
         # the && is. The rule matched a bare `git stash` only at end-of-string until
         # 2026-09-07, so this exact line -- the one the rule exists to refuse -- passed.
-        ("git stash && git checkout main", "rule_stash_hides_work"),
-        ("git stash --include-untracked; git pull", "rule_stash_hides_work"),
+        ("git stash && git checkout main", "policy"),   # stash_push_hides_work, policy/command.rego
+        ("git stash --include-untracked; git pull", "policy"),   # stash_push_hides_work, policy/command.rego
         ("git diff --stat origin/main HEAD", "rule_two_dot_diff"),
         # Two BRANCH-shaped refs, not a branch-and-HEAD. This used to name
         # `origin/pr/shelf-copy-glossary`, which has since been deleted from origin — so

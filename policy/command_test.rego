@@ -54,6 +54,10 @@ refuse := [
 	"git stash drop stash@{0}", # rule_shared_stash
 	"git stash clear", # rule_shared_stash
 	"git stash apply stash@{1}", # rule_shared_stash
+	# The push half, moved out of rule_stash_hides_work in rule-guard.py on 2026-09-07 so the
+	# decision lives in one place. shared_stash used to permit these two.
+	"git stash push -m wip", # stash_push_hides_work
+	"git stash -u", # stash_push_hides_work: a bare stash with flags is a push
 	"git add -A", # rule_add_all
 	"git add --all", # rule_add_all
 	"git add .", # rule_add_all
@@ -150,8 +154,12 @@ permit := [
 	"git stash pop  # stash-intended", # allowed
 	"git stash list", # allowed
 	"git stash show -p stash@{0}", # allowed
-	"git stash -u", # allowed
-	"git stash push -m wip", # allowed
+	# `git stash -u` and `git stash push -m wip` were here until 2026-09-07, when the push half
+	# stopped being allowed (stash_push_hides_work). They are in `refuse` now, and the two
+	# shapes that replace them are below: `git stash create`, which touches neither the working
+	# tree nor the shared list, and the marker for a session that means it.
+	"snap=$(git stash create) && git tag safety/wip \"$snap\"", # allowed: a commit object, not a list entry
+	"git stash push -m wip  # stash-intended", # allowed: the escape hatch works
 	"git add -A  # add-all-intended", # allowed
 	"git add -- scripts/ops_status.py", # allowed
 	"git add -p", # allowed
