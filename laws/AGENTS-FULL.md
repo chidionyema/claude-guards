@@ -1895,6 +1895,14 @@ use (claude-guards#65). You are breaking it when you ask him to open a console.
 
 **Sharpened 2026-08-25, second miss.** Founder: "again i missed it, i manage 8 agents concurrently, did you send to telegram also? i said it needs to be loud, if it's blocking, and seamless" and "i should never miss a beat". The terminal push reached one of eight terminals. The protocol is now one command: `python3 ~/.claude/scripts/founder-blocker.py "<what he must do>" <url-or-word>` sends to the Telegram home channel, pins it, records the message_id in the telegram ledger and prints the `FOUNDER ACTION:` line for reply line 2. `blocker-guard.py` (Stop hook) refuses any reply carrying `FOUNDER ACTION:` without a ledgered send in the last hour, proved both ways in its own file. Residual: the guard proves a pinned message exists, not that he read it.
 
+**Sharpened 2026-09-09, the steps ride with the action.** Founder, verbatim: "every founder action
+should come with clear instructions else needs back and forth", then "this is law/rule". Incident: a
+FOUNDER ACTION said "create the Linear OAuth app for Cyrus from your phone using Telegram pin 47292" and
+named no page, no button, no callback URL and no vault field; he had to ask. Protocol: `founder-blocker.py
+--physical` takes `--steps "s1|s2|..."`, two or more, each naming the app or page, the button, the value
+to enter or copy and where the result goes; the send is refused without them and the steps are pinned
+under the action. Record: `~/.claude/docs/founder/2026-09-09T0740Z-every-founder-action-comes-with-clear-instructions.md`.
+
 ## LAW 50 — Every workload emits to the central collector; coverage is a backend query
 
 **Fires:** every workload admitted to a cluster, every Mac and cloud surface, and every coverage
