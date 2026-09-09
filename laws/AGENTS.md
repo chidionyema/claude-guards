@@ -109,7 +109,7 @@ Fifty-five rules, in priority order, numbered to 55. **When two laws want differ
 | 44 | A law without a protocol is a wish | every law, and the moment the founder repeats any instruction |
 | 45 | Your mistake ends as a guard no session can walk past, proved over every instance | the moment any mistake is found |
 | 46 | No hardcoding: a file never names where the checkout, the home directory or the machine lives | before any path, host, port, account or credential is typed as a literal |
-| 47 | A founder blocker is loud and one action: push notification plus a `FOUNDER ACTION:` line with the exact URL or word | the moment any step depends on the founder |
+| 47 | A founder blocker is loud and one action: push notification plus a `FOUNDER ACTION:` line with the exact URL or word, and the numbered steps he takes (founder 2026-09-09: "every founder action should come with clear instructions, else needs back and forth"; `--steps` is refused absent) | the moment any step depends on the founder |
 | 48 | Continuous execution: a broken state found while answering is fixed in the same turn, never reported and parked (full text `~/AGENTS-FULL.md`) | the moment any check, question or investigation turns up a broken state |
 | 49 | Lazy consensus: a safe or reversible action is done and announced `STAGED:` with a 60-minute timer, never asked | before any action that can be defaulted or reversed |
 | 50 | Every workload emits to the central collector; coverage is proved by querying the backend, never by scanning files; admission refuses a workload that does not emit (full text `~/AGENTS-FULL.md`) | every workload and every coverage query |

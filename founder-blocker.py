@@ -189,14 +189,6 @@ def steps_text(steps: list[str]) -> str:
 def send(action: str, target: str = "", session: str = "", *, staged_minutes: int | None = None,
          physical: bool = False, register: str | None = None, steps: str | None = None) -> int:
     """Returns Telegram message_id (>0) or 0 when blind or refused."""
-    step_list = parse_steps(steps)
-    if physical and len(step_list) < MIN_STEPS:
-        telegram_ledger.record(SOURCE, "refused", action, key="no-steps")
-        print(f"REFUSED: FOUNDER ACTION: needs --steps with at least {MIN_STEPS} steps, pipe-separated: which app "
-              "or page, which button, what to enter or copy, where the result goes. Founder 2026-09-09: "
-              "\"every founder action should come with clear instructions, else needs back and forth\".",
-              file=sys.stderr)
-        return 0
     held = already_on_disk(action)
     if held:
         telegram_ledger.record(SOURCE, "refused", action, key="on-disk")
@@ -223,6 +215,14 @@ def send(action: str, target: str = "", session: str = "", *, staged_minutes: in
         print("REFUSED: FOUNDER ACTION: is for a physical step only (crew#281). This text names no "
               "device in his hand. Stage it instead: founder-blocker.py \"<action>\" --staged [N], and the "
               "API side is code, never a console.", file=sys.stderr)
+        return 0
+    step_list = parse_steps(steps)
+    if physical and len(step_list) < MIN_STEPS:
+        telegram_ledger.record(SOURCE, "refused", action, key="no-steps")
+        print(f"REFUSED: FOUNDER ACTION: needs --steps with at least {MIN_STEPS} steps, pipe-separated: which app "
+              "or page, which button, what to enter or copy, where the result goes. Founder 2026-09-09: "
+              "\"every founder action should come with clear instructions, else needs back and forth\".",
+              file=sys.stderr)
         return 0
     tok, chat = ea._env("TELEGRAM_BOT_TOKEN"), ea._env("TELEGRAM_HOME_CHANNEL")
     if not tok or not chat:
