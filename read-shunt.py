@@ -47,6 +47,12 @@ FALLBACKS = [
 LEDGER = os.environ.get("READ_SHUNT_LEDGER") or os.path.join(
     HOME, ".claude", "state", "read-shunt.jsonl"
 )
+
+
+class EmptyDigest(RuntimeError):
+    """The worker answered 200 with no content; graded like a 5xx, never shown to the frontier."""
+
+
 CAT_RE = re.compile(r"^\s*cat\s+(?:-[A-Za-z]+\s+)?(['\"]?)([^\s'\"|;&<>]+)\1\s*$")
 
 PROMPT = """You are a code-reading worker for a senior engineer who will NOT see this file. Produce a digest they can act on without reading it. Be exact and dense; no preamble. HARD BUDGET: the whole digest must be under 2500 characters. Prefer line ranges over prose.
@@ -122,13 +128,13 @@ def _worker(path: str, lines: int, body: str) -> tuple[str, dict, str]:
         try:
             digest, usage = _ask(model, path, lines, body)
             return digest, usage, model
-        except urllib.error.HTTPError as e:
+        except (urllib.error.HTTPError, EmptyDigest) as e:
             last = e
-            if e.code == 401:
+            if getattr(e, "code", None) == 401:
                 raise  # the key is wrong for every alias; no point asking the next one
             # 403 falls through: LiteLLM answers 403 when this key may not use that one alias.
             print(
-                f"read-shunt: {model} answered {e.code}; trying the next worker",
+                f"read-shunt: {model} answered {getattr(e, 'code', 'empty')}; trying the next worker",
                 file=sys.stderr,
             )
     raise last if last else RuntimeError("no worker model configured")
@@ -157,7 +163,13 @@ def _ask(model: str, path: str, lines: int, body: str) -> tuple[str, dict]:
     )
     with urllib.request.urlopen(req, timeout=TIMEOUT) as r:  # noqa: S310 scheme pinned to https in _base()
         d = json.load(r)
-    return d["choices"][0]["message"]["content"].strip(), d.get("usage") or {}
+    digest = (d["choices"][0]["message"].get("content") or "").strip()
+    if not digest:
+        # measured 2026-09-09 08:54Z: minimax answered 200 with empty content for a 1261-line file
+        # and the frontier model got a refusal with nothing behind it. An empty digest is a
+        # refused read with no reading; hand it to the next worker like a 5xx.
+        raise EmptyDigest(f"{model} answered 200 with an empty digest")
+    return digest, d.get("usage") or {}
 
 
 def report() -> int:
