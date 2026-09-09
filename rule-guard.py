@@ -386,7 +386,16 @@ def rule_commit_in_shared_checkout(cmd: str) -> str | None:
 #: that run at 07:01:58 and `ci-ok` concluded failure at 07:02:13 -- the same shape as #315, an
 #: hour after #315 was cleaned up. A fence that names one spelling of the command is not a fence.
 _GH_MERGE = re.compile(r"\bgh\s+pr\s+merge\b|/pulls/\d+/merge\b")
-_GH_MERGE_NUM = re.compile(r"\bgh\s+pr\s+merge\s+(?:--?\S+(?:=\S+)?\s+)*?(\d+)\b"
+# The flag-skipping loop has to skip a flag's VALUE too when a space separates them.
+# 2026-09-08: `gh pr merge -R chidionyema/claude-guards 252 --squash` matched nothing here --
+# `-R` was skipped, `chidionyema/claude-guards` is not a flag, and the loop stopped before the
+# number. rule_merge_red_pr then fell back to resolving the PR from the checkout and graded
+# idp#2407, an unrelated pull request in a different repository, refusing a correct merge on
+# another PR's red checks (LAW 38: a guard that refuses correct work is an outage). `--repo=x`
+# worked and `-R x` did not, which is the kind of difference nobody discovers on purpose.
+# The value is only consumed when it is neither a flag nor the number itself.
+_GH_MERGE_NUM = re.compile(r"\bgh\s+pr\s+merge\s+"
+                           r"(?:-{1,2}[\w-]+(?:=\S+)?\s+(?:(?!\d+(?:\s|$))[^-\s]\S*\s+)?)*?(\d+)\b"
                            r"|/pulls/(\d+)/merge\b")
 
 #: States meaning the job has not finished. Merging on one of these is how three of main's four
