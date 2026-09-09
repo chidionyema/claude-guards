@@ -6,7 +6,7 @@ Claude Code stays only if its cost is slashed. The pattern is Spotify's Shunt pl
 hook intercepts reads over a line threshold and hands the file to a cheap worker, which returns a
 structured digest. Spotify measured about 90% fewer tokens on bulk reads. Their plugin needs
 Portal; this is the same three layers on the estate's own LiteLLM proxy (R34 provider agnostic:
-the worker is whatever alias READ_SHUNT_MODEL names, default `deepseek`, the estate's cheap lane).
+the worker is whatever alias READ_SHUNT_MODEL names; default `minimax`, founder 2026-09-09: "Any file read over 350 lines use minimax").
 
 What it grades: PreToolUse on Read (any path, no offset/limit) and on Bash when the command is a
 bare `cat <one file>`. A read with offset/limit is an exact-range read and passes untouched; that is
@@ -35,7 +35,15 @@ HOME = os.path.expanduser("~")
 THRESHOLD = int(os.environ.get("READ_SHUNT_LINES", "350"))
 MAX_CHARS = int(os.environ.get("READ_SHUNT_MAX_CHARS", "400000"))
 TIMEOUT = float(os.environ.get("READ_SHUNT_TIMEOUT", "40"))
-MODEL = os.environ.get("READ_SHUNT_MODEL", "deepseek")
+MODEL = os.environ.get("READ_SHUNT_MODEL", "minimax")
+# A worker that answers 429, 5xx or an unknown-model 4xx hands the read to the next alias, never back to the frontier
+# model: measured 2026-09-09 04:40Z, minimax answered 429 in 267 ms and a 1261-line file went to
+# Claude whole. The chain ends at the frontier only when every alias has refused.
+FALLBACKS = [
+    m
+    for m in os.environ.get("READ_SHUNT_FALLBACK", "deepseek").split(",")
+    if m.strip() and m.strip() != MODEL
+]
 LEDGER = os.environ.get("READ_SHUNT_LEDGER") or os.path.join(
     HOME, ".claude", "state", "read-shunt.jsonl"
 )
@@ -106,12 +114,32 @@ def _target(payload: dict) -> str | None:
     return None
 
 
-def _worker(path: str, lines: int, body: str) -> tuple[str, dict]:
+def _worker(path: str, lines: int, body: str) -> tuple[str, dict, str]:
+    import urllib.error
+
+    last: Exception | None = None
+    for model in [MODEL, *FALLBACKS]:
+        try:
+            digest, usage = _ask(model, path, lines, body)
+            return digest, usage, model
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code == 401:
+                raise  # the key is wrong for every alias; no point asking the next one
+            # 403 falls through: LiteLLM answers 403 when this key may not use that one alias.
+            print(
+                f"read-shunt: {model} answered {e.code}; trying the next worker",
+                file=sys.stderr,
+            )
+    raise last if last else RuntimeError("no worker model configured")
+
+
+def _ask(model: str, path: str, lines: int, body: str) -> tuple[str, dict]:
     req = urllib.request.Request(  # noqa: S310 scheme pinned to https in _base()
         _base() + "/chat/completions",
         data=json.dumps(
             {
-                "model": MODEL,
+                "model": model,
                 "messages": [
                     {
                         "role": "user",
@@ -190,7 +218,8 @@ def main() -> int:
             return 0
         if truncated:
             body += f"\n[... truncated at {MAX_CHARS} chars; the rest was not sent ...]"
-        digest, usage = _worker(path, lines, body)
+        digest, usage, model = _worker(path, lines, body)
+        row["model"] = model
     except Exception as e:  # fail open, record why
         row.update(
             outcome="passed-through",
@@ -213,7 +242,7 @@ def main() -> int:
     _ledger(row)
     reason = (
         f"read-shunt: {path} is {lines} lines (over {THRESHOLD}); the full read went to the worker model "
-        f"`{MODEL}` and this digest came back instead. For exact text call Read with offset and limit "
+        f"`{model}` and this digest came back instead. For exact text call Read with offset and limit "
         f"(a ranged read is never shunted); the READ EXACTLY section names the ranges worth it.\n\n{digest}"
     )
     print(
