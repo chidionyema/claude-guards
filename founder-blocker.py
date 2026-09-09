@@ -11,10 +11,14 @@ physical step, a device in his hand. Everything else is staged with a default an
   STAGED: <action> is ready. Reply 'go' to execute immediately, 'hold' to review. Auto-activating in N minutes.
 The staging session owns the timer: it executes at N minutes unless 'hold' arrives.
 
-Usage: founder-blocker.py "<action, one sentence>" [<url or word>] [--session ID] [--staged [N]] [--physical]
+Usage: founder-blocker.py "<action, one sentence>" [<url or word>] [--session ID] [--staged [N]] [--physical --steps "s1|s2|..."]
   default            STAGED with the estate timeout (estate-defaults.yaml handoff_protocol.timeout_minutes, else 60)
   --staged N         STAGED with N minutes
   --physical         FOUNDER ACTION: permitted only when the text names the physical thing
+  --steps "a|b|c"    with --physical: the exact steps he takes, in order, two or more, pipe-separated. Each
+                     names the app or page, the button, and the value to enter or copy. Founder 2026-09-09:
+                     "every founder action should come with clear instructions, else needs back and forth".
+                     A physical send without steps is refused; the steps go to Telegram under the action.
   --register ROW     with --physical: the Capabilities register row (~/AGENTS-FULL.md) you checked, or `none`.
                      A row that exists is a self-serve path and the send is refused (crew#325: four
                      sessions sent "create the GitHub App" for a deploy key any session can mint).
@@ -171,9 +175,28 @@ def already_on_disk(action: str, db: pathlib.Path | None = None) -> str | None:
     return f"{m.group(1)} is state.db row {row[0]}" if row else None
 
 
+MIN_STEPS = 2
+
+
+def parse_steps(raw: str | None) -> list[str]:
+    return [x.strip().rstrip(".") for x in (raw or "").split("|") if x.strip()]
+
+
+def steps_text(steps: list[str]) -> str:
+    return "Steps:\n" + "\n".join(f"{i}. {x}." for i, x in enumerate(steps, 1))
+
+
 def send(action: str, target: str = "", session: str = "", *, staged_minutes: int | None = None,
-         physical: bool = False, register: str | None = None) -> int:
+         physical: bool = False, register: str | None = None, steps: str | None = None) -> int:
     """Returns Telegram message_id (>0) or 0 when blind or refused."""
+    step_list = parse_steps(steps)
+    if physical and len(step_list) < MIN_STEPS:
+        telegram_ledger.record(SOURCE, "refused", action, key="no-steps")
+        print(f"REFUSED: FOUNDER ACTION: needs --steps with at least {MIN_STEPS} steps, pipe-separated: which app "
+              "or page, which button, what to enter or copy, where the result goes. Founder 2026-09-09: "
+              "\"every founder action should come with clear instructions, else needs back and forth\".",
+              file=sys.stderr)
+        return 0
     held = already_on_disk(action)
     if held:
         telegram_ledger.record(SOURCE, "refused", action, key="on-disk")
@@ -212,6 +235,8 @@ def send(action: str, target: str = "", session: str = "", *, staged_minutes: in
         outcome, key, text = "staged", f"staged:{minutes}:" + action[:40], staged_text(action, minutes)
     if target:
         text += "\n" + target.strip()
+    if step_list:
+        text += "\n" + steps_text(step_list)
     if carries_credential(text):
         telegram_ledger.record(SOURCE, "refused", "<credential-shaped text withheld>", key="credential")
         print("REFUSED: the text carries a credential (password/token/key value). A secret never travels "
@@ -238,11 +263,11 @@ def send(action: str, target: str = "", session: str = "", *, staged_minutes: in
     return mid
 
 
-def parse_argv(argv: list[str]) -> tuple[list[str], str, int | None, bool, str | None]:
-    """(positional args, session, staged minutes, physical, register row or None). Exits 2 on an unknown flag: `--help`
+def parse_argv(argv: list[str]) -> tuple[list[str], str, int | None, bool, str | None, str | None]:
+    """(positional args, session, staged minutes, physical, register row or None, steps or None). Exits 2 on an unknown flag: `--help`
     once went to Telegram as "STAGED: --help is ready" (msg 14081, 2026-08-26). A flag is never
     the founder's message."""
-    sess, args, minutes, physical, register = "", [], None, False, None
+    sess, args, minutes, physical, register, steps = "", [], None, False, None, None
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -256,6 +281,10 @@ def parse_argv(argv: list[str]) -> tuple[list[str], str, int | None, bool, str |
             register = a.split("=", 1)[1]
         elif a == "--register" and i + 1 < len(argv):
             register = argv[i + 1]; i += 1
+        elif a.startswith("--steps="):
+            steps = a.split("=", 1)[1]
+        elif a == "--steps" and i + 1 < len(argv):
+            steps = argv[i + 1]; i += 1
         elif a == "--staged":
             minutes = 0
             if i + 1 < len(argv) and argv[i + 1].isdigit():
@@ -266,12 +295,12 @@ def parse_argv(argv: list[str]) -> tuple[list[str], str, int | None, bool, str |
         else:
             args.append(a)
         i += 1
-    return args, sess, minutes, physical, register
+    return args, sess, minutes, physical, register, steps
 
 
 if __name__ == "__main__":
-    args, sess, minutes, physical, register = parse_argv(sys.argv[1:])
+    args, sess, minutes, physical, register, steps = parse_argv(sys.argv[1:])
     if not args:
         print(__doc__); sys.exit(2)
     sys.exit(0 if send(args[0], args[1] if len(args) > 1 else "", sess,
-                       staged_minutes=minutes or None, physical=physical, register=register) else 1)
+                       staged_minutes=minutes or None, physical=physical, register=register, steps=steps) else 1)
