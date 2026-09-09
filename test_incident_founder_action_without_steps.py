@@ -19,6 +19,7 @@ spec.loader.exec_module(fb)
 def test_physical_without_steps_is_refused(monkeypatch, capsys):
     monkeypatch.setattr(fb.telegram_ledger, "record", lambda *a, **k: None)
     monkeypatch.setattr(fb, "register_rows", lambda: [])
+    monkeypatch.setattr(fb.ea, "_env", lambda k: "x")
     assert fb.send("plug the phone in", "word", physical=True, register="none") == 0
     assert "--steps" in capsys.readouterr().err
 

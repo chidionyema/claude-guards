@@ -216,6 +216,10 @@ def send(action: str, target: str = "", session: str = "", *, staged_minutes: in
               "device in his hand. Stage it instead: founder-blocker.py \"<action>\" --staged [N], and the "
               "API side is code, never a console.", file=sys.stderr)
         return 0
+    tok, chat = ea._env("TELEGRAM_BOT_TOKEN"), ea._env("TELEGRAM_HOME_CHANNEL")
+    if not tok or not chat:
+        print("BLIND: TELEGRAM_BOT_TOKEN or TELEGRAM_HOME_CHANNEL missing", file=sys.stderr)
+        return 0
     step_list = parse_steps(steps)
     if physical and len(step_list) < MIN_STEPS:
         telegram_ledger.record(SOURCE, "refused", action, key="no-steps")
@@ -223,10 +227,6 @@ def send(action: str, target: str = "", session: str = "", *, staged_minutes: in
               "or page, which button, what to enter or copy, where the result goes. Founder 2026-09-09: "
               "\"every founder action should come with clear instructions, else needs back and forth\".",
               file=sys.stderr)
-        return 0
-    tok, chat = ea._env("TELEGRAM_BOT_TOKEN"), ea._env("TELEGRAM_HOME_CHANNEL")
-    if not tok or not chat:
-        print("BLIND: TELEGRAM_BOT_TOKEN or TELEGRAM_HOME_CHANNEL missing", file=sys.stderr)
         return 0
     if physical:
         outcome, key, text = "sent", "physical:" + action[:50], "FOUNDER ACTION: " + action.strip()
