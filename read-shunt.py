@@ -6,7 +6,7 @@ Claude Code stays only if its cost is slashed. The pattern is Spotify's Shunt pl
 hook intercepts reads over a line threshold and hands the file to a cheap worker, which returns a
 structured digest. Spotify measured about 90% fewer tokens on bulk reads. Their plugin needs
 Portal; this is the same three layers on the estate's own LiteLLM proxy (R34 provider agnostic:
-the worker is whatever alias READ_SHUNT_MODEL names). Founder 2026-09-09: "Any file read over 350 lines use minimax"; measured the same day on the digest prompt, MiniMax-M3 spent 1499 of 1500 and 2999 of 3000 tokens on reasoning and returned 2 chars even with reasoning_effort none, so the default worker is `gemini` (gemini-2.5-flash free tier: 3249 chars in 0.5 s, zero reasoning) with `minimax_m27` (2406 chars, 31 s) then `minimax` behind it. DeepSeek is the lead engineer, never a reader (founder, same day).
+the worker is whatever alias READ_SHUNT_MODEL names). Founder 2026-09-09: "Any file read over 350 lines use minimax"; measured the same day on the digest prompt, MiniMax-M3 spent 1499 of 1500 and 2999 of 3000 tokens on reasoning and returned 2 chars even with reasoning_effort none, so the default worker is `minimax_m27` (MiniMax-M2.7, same fixed-fee account: 2406 chars in 31 s; founder 2026-09-09: "we pay fixed fee for minimax, we need to get usage out of it"), then `gemini` (free tier, 3249 chars in 0.5 s, but a free quota runs out), then `minimax` (M3). DeepSeek is the lead engineer, never a reader (founder, same day).
 
 What it grades: PreToolUse on Read (any path, no offset/limit) and on Bash when the command is a
 bare `cat <one file>`. A read with offset/limit is an exact-range read and passes untouched; that is
@@ -35,7 +35,7 @@ HOME = os.path.expanduser("~")
 THRESHOLD = int(os.environ.get("READ_SHUNT_LINES", "350"))
 MAX_CHARS = int(os.environ.get("READ_SHUNT_MAX_CHARS", "400000"))
 TIMEOUT = float(os.environ.get("READ_SHUNT_TIMEOUT", "60"))
-MODEL = os.environ.get("READ_SHUNT_MODEL", "gemini")
+MODEL = os.environ.get("READ_SHUNT_MODEL", "minimax_m27")
 # MiniMax-M3 is a reasoning model: measured 2026-09-09 09:58Z, a 900-token budget was spent whole on
 # reasoning_content (899 tokens), content came back 2 chars and finish_reason was `length`. The request
 # now asks for reasoning_effort none; 1500 covers a 2500-char digest with room. Founder 2026-09-09:
@@ -47,7 +47,7 @@ MAX_TOKENS = int(os.environ.get("READ_SHUNT_MAX_TOKENS", "1500"))
 # Claude whole. The chain ends at the frontier only when every alias has refused.
 FALLBACKS = [
     m
-    for m in os.environ.get("READ_SHUNT_FALLBACK", "minimax_m27,minimax").split(",")
+    for m in os.environ.get("READ_SHUNT_FALLBACK", "gemini,minimax").split(",")
     if m.strip() and m.strip() != MODEL
 ]
 LEDGER = os.environ.get("READ_SHUNT_LEDGER") or os.path.join(
