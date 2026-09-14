@@ -30,6 +30,7 @@ from datetime import datetime
 PROBE_TIMEOUT = 45
 
 INJECT_BUDGET = 8000   # chars of checkpoint to re-inject on restore (~2K tokens; one-time per session)
+STALE_CKPT_MINUTES = 120  # a checkpoint older than this is not "resuming" a live task; pointer only
 TAIL = 400_000         # bytes of transcript to scan from the end
 
 def read_stdin():
@@ -122,10 +123,27 @@ def latest_checkpoint(transcript_path):
     d = os.path.join(os.path.dirname(transcript_path), "checkpoints")
     if not os.path.isdir(d):
         return None
-    files = [os.path.join(d, n) for n in os.listdir(d) if n.endswith(".md")]
+    #: RECOVERY-*.md (including RECOVERY-LATEST.md) is session-recorder.py's own file family, not
+    #: this loop's -- its restore-hook already injects the newest one as "PICK UP WHERE THIS SESSION
+    #: LEFT OFF" on the same SessionStart. Excluding only the literal name "RECOVERY-LATEST.md" left
+    #: every dated RECOVERY-<session>.md file eligible, and one of those is usually the newest file
+    #: here by mtime (LATEST.md is a copy written right after it) -- so this loop re-injected the same
+    #: checkpoint a second time under a different banner, on every session, for free. Measured
+    #: 2026-09-14: RECOVERY-LATEST.md and RECOVERY-e55b4bac.md were byte-identical at session start.
+    files = [os.path.join(d, n) for n in os.listdir(d)
+             if n.endswith(".md") and not n.startswith("RECOVERY-")]
     if not files:
         return None
     f = max(files, key=lambda p: os.path.getmtime(p))
+    age_min = (time.time() - os.path.getmtime(f)) / 60.0
+    if age_min > STALE_CKPT_MINUTES:
+        # crew#26 measured the same waste for the laws block: re-injecting a full narrative
+        # nobody asked for, every session, costs real tokens for zero benefit once it's stale.
+        # A checkpoint hours or days old is not "resuming" the current task -- it's a different
+        # task the founder has moved on from. Name it and let the agent pull it on demand.
+        return (f"_(checkpoint: {os.path.basename(f)}, {age_min:.0f} min old — stale, not "
+                f"injected. Read it yourself if this session is actually resuming that task: "
+                f"open {f})_")
     txt = open(f, errors="replace").read()
     txt = f"_(checkpoint: {os.path.basename(f)})_\n\n" + txt
     if len(txt) > INJECT_BUDGET:
