@@ -123,7 +123,12 @@ def latest_checkpoint(transcript_path):
     d = os.path.join(os.path.dirname(transcript_path), "checkpoints")
     if not os.path.isdir(d):
         return None
-    files = [os.path.join(d, n) for n in os.listdir(d) if n.endswith(".md")]
+    #: RECOVERY-LATEST.md is session-recorder.py's own file, not this loop's -- its restore-hook
+    #: already injects it as "PICK UP WHERE THIS SESSION LEFT OFF" on the same SessionStart. Before
+    #: this exclusion it was also the newest file here by mtime, so this loop re-injected the exact
+    #: same checkpoint a second time under a different banner, on every session, for free.
+    files = [os.path.join(d, n) for n in os.listdir(d)
+             if n.endswith(".md") and n != "RECOVERY-LATEST.md"]
     if not files:
         return None
     f = max(files, key=lambda p: os.path.getmtime(p))
