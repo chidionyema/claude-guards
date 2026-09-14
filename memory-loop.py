@@ -30,6 +30,7 @@ from datetime import datetime
 PROBE_TIMEOUT = 45
 
 INJECT_BUDGET = 8000   # chars of checkpoint to re-inject on restore (~2K tokens; one-time per session)
+STALE_CKPT_MINUTES = 120  # a checkpoint older than this is not "resuming" a live task; pointer only
 TAIL = 400_000         # bytes of transcript to scan from the end
 
 def read_stdin():
@@ -126,6 +127,15 @@ def latest_checkpoint(transcript_path):
     if not files:
         return None
     f = max(files, key=lambda p: os.path.getmtime(p))
+    age_min = (time.time() - os.path.getmtime(f)) / 60.0
+    if age_min > STALE_CKPT_MINUTES:
+        # crew#26 measured the same waste for the laws block: re-injecting a full narrative
+        # nobody asked for, every session, costs real tokens for zero benefit once it's stale.
+        # A checkpoint hours or days old is not "resuming" the current task -- it's a different
+        # task the founder has moved on from. Name it and let the agent pull it on demand.
+        return (f"_(checkpoint: {os.path.basename(f)}, {age_min:.0f} min old — stale, not "
+                f"injected. Read it yourself if this session is actually resuming that task: "
+                f"open {f})_")
     txt = open(f, errors="replace").read()
     txt = f"_(checkpoint: {os.path.basename(f)})_\n\n" + txt
     if len(txt) > INJECT_BUDGET:
