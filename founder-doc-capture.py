@@ -152,20 +152,6 @@ def hook() -> int:
         if path is None:
             return 0
         commit([path])
-        print(
-            json.dumps(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "UserPromptSubmit",
-                        "additionalContext": (
-                            f"FOUNDER DOCUMENT SAVED: {path} (committed to the claude-estate repo). "
-                            "Cite this path in your reply and on the board row for the work. Never paraphrase it from "
-                            "memory and never search transcripts for it: the file is the record."
-                        ),
-                    }
-                }
-            )
-        )
     except Exception:
         return 0
     return 0
