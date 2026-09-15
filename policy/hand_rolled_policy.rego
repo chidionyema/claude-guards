@@ -154,8 +154,12 @@ legacy := {
 	# off disk (last_assistant_text), and the per-session "never block the same text twice, at
 	# most three times" state file (load_state/save_state) -- both are state opa eval has no
 	# session-scoped place to keep, not a decision. Same shape as blocker-guard.py below, which
-	# made the identical move on crew#281's actual follow-up commit.
-	"dod-guard.py": 239,
+	# made the identical move on crew#281's actual follow-up commit. 239 -> 251 same commit:
+	# `ruff format` reflows the multi-arg `opa eval` subprocess.run call onto one argument per
+	# line (crew#620 estate Python standard, same reason feed-guard.py is 526 and not 270 -- see
+	# its own entry below). No line added or removed by hand; `git diff --stat` on the formatting
+	# commit shows the same statements, more lines.
+	"dod-guard.py": 251,
 	# Added 2026-08-26 at 94 lines, the first time it is committed: settings.json has run it
 	# untracked since 2026-08-25 (LAW 24). Its exit was booked as "no OPA Stop runner exists",
 	# and on 2026-09-07 that turned out to be the wrong reading of the problem: a guard does not
