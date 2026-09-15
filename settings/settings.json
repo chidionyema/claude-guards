@@ -89,6 +89,11 @@
             "type": "command",
             "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/canonical-root-guard.py",
             "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "python3 $HOME/.claude/scripts/hook-run.py $HOME/.claude/scripts/single-session-guard.py",
+            "timeout": 15
           }
         ]
       },

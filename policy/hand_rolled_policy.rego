@@ -145,9 +145,21 @@ legacy := {
 	# 192 -> 202 on 2026-08-26 (crew#281 CP2, claude-guards#65): STAGED: is a fifth reply word and
 	# must carry the founder's go/hold sentence and a minute count. It is a Stop-hook rule over
 	# the reply text; opa-hook.py runs only on PreToolUse (Artifact) and no Stop runner feeds a
-	# transcript to OPA yet, so the rule cannot be Rego today. Follow-up on crew#281: a Stop
-	# runner, then dod-guard and blocker-guard move to policy/reply.rego and leave this list.
-	"dod-guard.py": 202,
+	# transcript to OPA yet, so the rule cannot be Rego today.
+	# 202 -> 239 on 2026-09-15 (PR #267): the follow-up above landed. opa-hook.py became the Stop
+	# runner on crew#281 CP2 (its own docstring says so), so the DONE/INVENTORY/STAGED/live-claim/
+	# LAW 31 rules moved to policy/dod.rego, proven byte-for-byte against the file's own eleven
+	# `--selftest` cases plus six new LAW 31 cases (policy/dod_test.rego, 17/17). What stayed, and
+	# grew because the adapter now shells to OPA instead of deciding inline: the transcript read
+	# off disk (last_assistant_text), and the per-session "never block the same text twice, at
+	# most three times" state file (load_state/save_state) -- both are state opa eval has no
+	# session-scoped place to keep, not a decision. Same shape as blocker-guard.py below, which
+	# made the identical move on crew#281's actual follow-up commit. 239 -> 251 same commit:
+	# `ruff format` reflows the multi-arg `opa eval` subprocess.run call onto one argument per
+	# line (crew#620 estate Python standard, same reason feed-guard.py is 526 and not 270 -- see
+	# its own entry below). No line added or removed by hand; `git diff --stat` on the formatting
+	# commit shows the same statements, more lines.
+	"dod-guard.py": 251,
 	# Added 2026-08-26 at 94 lines, the first time it is committed: settings.json has run it
 	# untracked since 2026-08-25 (LAW 24). Its exit was booked as "no OPA Stop runner exists",
 	# and on 2026-09-07 that turned out to be the wrong reading of the problem: a guard does not
@@ -199,6 +211,19 @@ legacy := {
 	# ask `gh` for the live check rollup, and conftest has neither a transcript nor a
 	# network. Tracked at its landing size. Only ever falls.
 	"pr-green-guard.py": 239,
+	# Added 2026-09-15 (PR #267), first committed at 128 lines. Enforces the "only one Claude
+	# Code session" rule (the 2026-09-15 incident: five concurrent `claude` processes found
+	# running, one of which rebased a shared branch and wiped a second session's uncommitted
+	# work via `git reflog`). The decision itself (>0 other live sessions -> refuse) is one
+	# line and would be trivial Rego, but every input it needs is OS process introspection
+	# conftest/OPA cannot perform: list_claude_pids() shells `ps -axo pid=,ppid=,comm=,command=`
+	# and filters to processes whose comm basename is `claude`; own_session_pid() walks up to
+	# ten `ps -o ppid= -p <pid>` hops to find this hook's own ancestor session so it excludes
+	# itself from the count. Rego is a pure JSON-input evaluator with no OS access -- it cannot
+	# invoke `ps` or walk a process tree, only judge input handed to it. Only ever falls; wired
+	# into settings.json's SessionStart hooks in this same PR (it shipped unwired since
+	# 2026-08-25, LAW 24, and the incident above is what an unwired guard cost).
+	"single-session-guard.py": 128,
 }
 
 # How many command refusals each guard still implements in Python. Same direction
