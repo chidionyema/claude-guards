@@ -45,9 +45,13 @@ def run_hook(mod, prompt, tmp_path):
     ).stdout
 
 
-def test_a_pasted_document_becomes_a_file_the_session_is_told_about(
+def test_a_pasted_document_becomes_a_file_written_and_committed_silently(
     tmp_path, monkeypatch
 ):
+    # 2026-09-14 (9e55d08, "kill context injection noise"): the file write and commit still
+    # happen, but the hook no longer injects an additionalContext pointer every turn -- "File
+    # write and commit still happen; just no more per-turn additionalContext noise." The session
+    # finds the file with --list/--grep, or in the git log, not through a per-turn injection.
     mod = load(tmp_path, monkeypatch)
     doc = "The Verification Plane\n\n" + ("Status: design spec. " * 120)
     assert mod.is_document(doc)
@@ -56,7 +60,9 @@ def test_a_pasted_document_becomes_a_file_the_session_is_told_about(
     assert len(files) == 1, "the pasted document was not written"
     assert files[0].read_text().rstrip().endswith("Status: design spec.")
     assert "the-verification-plane" in files[0].name
-    assert str(files[0]) in json.loads(out)["hookSpecificOutput"]["additionalContext"]
+    assert out.strip() == "", (
+        "the hook must stay silent, no additionalContext noise per turn"
+    )
 
 
 def test_a_save_order_captures_the_message_even_when_short(tmp_path, monkeypatch):

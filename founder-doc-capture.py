@@ -14,8 +14,9 @@ WHAT THIS DOES (UserPromptSubmit, never blocks, never fails a turn):
     echo) or that CARRIES a save order ("save this doc", "document this", "note this down", ...)
     is written verbatim to ~/.claude/docs/founder/<UTC stamp>-<slug>.md with a frontmatter header,
     then `git add` + `git commit` in the claude-estate repo, and pushed in the background.
-  * the session is told the path through additionalContext so the reply cites the file instead
-    of paraphrasing it, and the board row for the work links it.
+  * the write and the commit are silent (2026-09-14: no more per-turn additionalContext noise --
+    "File write and commit still happen; just no more per-turn additionalContext noise"); read the
+    path back with --list/--grep, and the board row for the work links it.
 
 Read it back with:  python3 ~/.claude/scripts/founder-doc-capture.py --list [--grep word]
 Backfill the directives log once:  python3 ~/.claude/scripts/founder-doc-capture.py --backfill
