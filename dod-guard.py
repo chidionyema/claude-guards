@@ -25,18 +25,24 @@ for that, and the interventions log is where it will be verified once the receip
 exists (crew board, DoD gates issue). It never blocks the same text twice and at most three
 times per session, so it cannot wedge a session.
 
-DoD v3 (founder, 2026-09-15): "done means commercially ready and viable", not "proven against
-a local daemon on someone's laptop." 2026-09-15's own ticket
+DoD v3, final cut (founder, 2026-09-15): "done means commercially ready and viable", not "proven
+against a local daemon on someone's laptop" -- and, same day, after a fork proved the first draft
+too weak: "a one-off curl the builder ran itself does not count, no matter how real the response."
+Two receipts. First, 2026-09-15's own ticket
 (docs/tickets/2026-09-15-typed-multidomain-mutation-ledger.md) said "Built, smoke-tested, and
 doored" on the strength of a BDD suite run against a real daemon -- while the backend that door
 depended on had no Dockerfile, no Deployment, no Service, and nothing running under that name in
-the live cluster. This guard narrows exactly that gap: a `Built:` line (INVENTORY) or the summary
-line (DONE) that claims the thing is live -- "on cluster", "live", "deployed", "door"/"doored",
-"running", "reachable" -- is refused unless `Evidence:` shows an actual live-environment check
-(a `kubectl`/`idp-kube get ...` reference, a `Running` status, a curl/HTTP status check, or an
-independent verifier's name such as `qa-agent`) rather than only a test command or a PR/commit
-link. Scoped to one line each (Built:/the summary line) on purpose, per LAW 38: a guard that
-blocks a correct reply because "live" showed up in an unrelated sentence is itself an outage.
+the live cluster. Second, the same day, the fork sent to deploy that backend for real replied
+`DONE:` citing a `curl` to its own `127.0.0.1:18790` launchd daemon as its "Founder receipt" --
+reachable by nobody but its own builder, and a self-declared DONE: to begin with. This guard
+narrows exactly that gap: a `Built:` line (INVENTORY) or the summary line (DONE) that claims the
+thing is live -- "on cluster", "live", "deployed", "door"/"doored", "running", "reachable" -- is
+refused unless `Evidence:` shows an independent live check: a `kubectl`/`idp-kube get ...`
+reference that shows `Running`, or an independent verifier's name (`qa-agent`, the estate's
+standing drill) -- never a bare test command, a PR/commit link, or a curl the builder ran against
+its own process, however real the response. Scoped to one line each (Built:/the summary line) on
+purpose, per LAW 38: a guard that blocks a correct reply because "live" showed up in an unrelated
+sentence is itself an outage.
 
   python3 dod-guard.py --selftest    # one case that must fail, one that must pass
 """
@@ -99,21 +105,29 @@ _LIVE_CLAIM = re.compile(
     r"\bon cluster\b|\blive\b|\bdeployed\b|\bdoor(?:ed)?\b|\brunning\b|\breachable\b",
     re.IGNORECASE,
 )
-# What actually looks like someone having checked the live environment, as opposed to a test
-# command or a PR/commit link: a kubectl/idp-kube get, an observed Running status, an HTTP/curl
-# status check, or the estate's own independent verifier role.
-_LIVE_EVIDENCE = re.compile(
-    r"\b(?:kubectl|idp-kube)\s+\S*\s*get\b"
-    r"|\bRunning\b"
-    r"|\bcurl\b[^\n]*\b(?:200|201|204|301|302|healthz|http)\b"
-    r"|\bHTTP/?\d?\s*\d{3}\b"
-    r"|\bqa-agent\b",
+# DoD v3, final cut (founder, same day, after the FleetView fork's own reply proved the first
+# draft too weak): "a one-off curl the builder ran itself does not count, no matter how real the
+# response." That fork's `DONE:` cited a `curl` to its own `127.0.0.1:18790` launchd daemon as its
+# "Founder receipt" -- reachable by nobody but its own builder. So a bare curl/HTTP status is no
+# longer live evidence on its own: what counts is a cluster-state check (kubectl/idp-kube get ...
+# showing Running) or the estate naming an independent, non-builder verifier (`qa-agent`, or its
+# standing drill) -- something the builder did not trigger and cannot fudge.
+_KUBE_GET = re.compile(r"\b(?:kubectl|idp-kube)\s+\S*\s*get\b", re.IGNORECASE)
+_KUBE_RUNNING = re.compile(r"\bRunning\b")
+_INDEPENDENT_VERIFIER = re.compile(
+    r"\bqa-agent\b|\blogin-drill\b|\bthe drill\b|\bindependently\s+verif\w*\b",
     re.IGNORECASE,
 )
 
 
+def _live_evidence_is_independent(evidence: str) -> bool:
+    if _INDEPENDENT_VERIFIER.search(evidence):
+        return True
+    return bool(_KUBE_GET.search(evidence) and _KUBE_RUNNING.search(evidence))
+
+
 def unverified_live_claim(fold: str, kind: str) -> str | None:
-    """The claim line, if `kind` asserts a live capability with no live-probe Evidence:."""
+    """The claim line, if `kind` asserts a live capability with no independent live-check Evidence:."""
     if kind == "INVENTORY":
         claim_line = line_value(fold, "Built:")
     elif kind == "DONE":
@@ -124,7 +138,7 @@ def unverified_live_claim(fold: str, kind: str) -> str | None:
     if not claim_line or not _LIVE_CLAIM.search(claim_line):
         return None
     evidence = line_value(fold, "Evidence:") or ""
-    if _LIVE_EVIDENCE.search(evidence):
+    if _live_evidence_is_independent(evidence):
         return None
     return claim_line.strip()
 
@@ -275,9 +289,10 @@ def offences(text: str) -> list[str]:
             'DoD v3: this claims the thing is live ("'
             + claim[:160]
             + '") but `Evidence:` '
-            "shows only a test command or a merge/PR link, not a live-environment check. Add a "
-            "`kubectl`/`idp-kube get ...` reference, an observed Running status, an HTTP/curl "
-            "status check, or `qa-agent`'s sign-off -- or say `Not done:` instead."
+            "does not show an independent live check. A test command, a PR/commit link, or a "
+            "curl the builder ran against its own process is not enough -- add a "
+            "`kubectl`/`idp-kube get ...` reference that shows Running, or `qa-agent`'s "
+            "sign-off, or say `Not done:` instead."
         )
     # LAW 31, and it applies to EVERY reply kind, not only the two above: handing him work is a
     # defect whatever word the reply opens with.
@@ -373,8 +388,23 @@ def selftest() -> int:
         "Use: open the FleetView page in Backstage.\n"
         "Expect: a live agent roster.\n"
         "Not done: nothing.\n"
-        "Evidence: `idp-kube get deploy fleetview-backend -n backstage` shows 1/1 Running; "
-        "`curl https://fleetview.internal/healthz` -> 200.\n"
+        "Evidence: `idp-kube get deploy fleetview-backend -n backstage` shows 1/1 Running.\n"
+    )
+    # DoD v3 final cut: the exact FleetView-fork shape -- a curl the builder ran against its own
+    # localhost daemon is not independent evidence, however real the response.
+    live_bad2 = (
+        "DONE: fleetview-backend is deployed and reachable.\n"
+        "Founder receipt: I confirmed it myself.\n"
+        "Evidence: `curl http://127.0.0.1:18790/health` -> 200 OK.\n"
+    )
+    live_good2 = (
+        "INVENTORY: fleetview backend is packaged.\n"
+        "Built: FleetView backend, on cluster and doored.\n"
+        "Use: open the FleetView page in Backstage.\n"
+        "Expect: a live agent roster.\n"
+        "Not done: nothing.\n"
+        "Evidence: qa-agent ticked the box in `~/.claude/state/qa-agent.json` after a real green "
+        "run against the cluster deployment.\n"
     )
     ok = True
     for name, text, expect_block in (
@@ -387,6 +417,8 @@ def selftest() -> int:
         ("staged_bad", staged_bad, True),
         ("live_bad", live_bad, True),
         ("live_good", live_good, False),
+        ("live_bad2", live_bad2, True),
+        ("live_good2", live_good2, False),
     ):
         got = bool(offences(text))
         print(
