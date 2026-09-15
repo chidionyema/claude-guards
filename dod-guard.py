@@ -7,44 +7,19 @@ working like clockwork". He handed over AGENTS_md_DoD_v2_1 (Definition of Done, 
 Its Golden Rule: merged code, green CI and passing tests are inventory, not done. Done is the
 founder having used the thing end to end and confirmed it.
 
-WHAT IT ENFORCES, mechanically, on the text above the fold of the last assistant message:
+WHAT IT ENFORCES is in policy/dod.rego now, not here -- see that file's header for why. This
+file is the adapter: it reads the transcript, cuts the last assistant message at the first `---`
+line (above_the_fold), reads its first word (first_word), and asks `data.dod.deny` about the
+rest. What Rego cannot do is the other half of this file: read the transcript off disk, and
+remember -- across invocations, which Rego has no state for -- that it never blocks the same
+text twice and at most three times per session, so it cannot wedge a session.
 
-  DONE:       needs a `Founder receipt:` line (the founder confirmed it, and where that is
-              recorded) AND an `Evidence:` line.
-  INVENTORY:  the new word for built-merged-green-awaiting-founder. Needs the five handoff
-              items from Gate 4, each as a labelled line: `Built:`, `Use:`, `Expect:`,
-              `Not done:`, `Evidence:`.
-  Evidence:   must carry something checkable: a URL, a commit hash, a file path, or a
-              command in backticks. A bare sentence is not evidence.
+FAILS OPEN on a missing or broken `opa`, same doctrine as blocker-guard.py (its own sibling
+adapter, migrated the same way on crew#281): a guard that blocks on its own blindness stops
+every DONE:/INVENTORY: reply the moment the binary moves. rule-guard.py and opa-hook.py fail
+CLOSED because they gate tool permissions, a different risk; this one gates prose.
 
-WORKING:, WAITING: and BLOCKED: replies are untouched. So is anything below the first `---`.
-
-WHAT IT CANNOT SEE (residual, stated per LAW 45 step 5). It checks the shape of the claim,
-not its truth. A false `Founder receipt:` line passes this guard; the founder is the oracle
-for that, and the interventions log is where it will be verified once the receipt tooling
-exists (crew board, DoD gates issue). It never blocks the same text twice and at most three
-times per session, so it cannot wedge a session.
-
-DoD v3, final cut (founder, 2026-09-15): "done means commercially ready and viable", not "proven
-against a local daemon on someone's laptop" -- and, same day, after a fork proved the first draft
-too weak: "a one-off curl the builder ran itself does not count, no matter how real the response."
-Two receipts. First, 2026-09-15's own ticket
-(docs/tickets/2026-09-15-typed-multidomain-mutation-ledger.md) said "Built, smoke-tested, and
-doored" on the strength of a BDD suite run against a real daemon -- while the backend that door
-depended on had no Dockerfile, no Deployment, no Service, and nothing running under that name in
-the live cluster. Second, the same day, the fork sent to deploy that backend for real replied
-`DONE:` citing a `curl` to its own `127.0.0.1:18790` launchd daemon as its "Founder receipt" --
-reachable by nobody but its own builder, and a self-declared DONE: to begin with. This guard
-narrows exactly that gap: a `Built:` line (INVENTORY) or the summary line (DONE) that claims the
-thing is live -- "on cluster", "live", "deployed", "door"/"doored", "running", "reachable" -- is
-refused unless `Evidence:` shows an independent live check: a `kubectl`/`idp-kube get ...`
-reference that shows `Running`, or an independent verifier's name (`qa-agent`, the estate's
-standing drill) -- never a bare test command, a PR/commit link, or a curl the builder ran against
-its own process, however real the response. Scoped to one line each (Built:/the summary line) on
-purpose, per LAW 38: a guard that blocks a correct reply because "live" showed up in an unrelated
-sentence is itself an outage.
-
-  python3 dod-guard.py --selftest    # one case that must fail, one that must pass
+    python3 dod-guard.py --selftest    # the eleven cases policy/dod_test.rego also proves
 """
 
 from __future__ import annotations
@@ -53,14 +28,14 @@ import hashlib
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 STATE = Path.home() / ".claude" / "state" / "dod-guard.json"
 MAX_BLOCKS_PER_SESSION = 3
-
-HANDOFF = ("Built:", "Use:", "Expect:", "Not done:", "Evidence:")
-CHECKABLE = re.compile(r"https?://\S+|\b[0-9a-f]{7,40}\b|`[^`]+`|(?:~|/)[\w./-]+")
+POLICY = Path(__file__).resolve().parent / "policy"
 
 
 def above_the_fold(text: str) -> str:
@@ -73,231 +48,42 @@ def first_word(text: str) -> str:
     return m.group(1) if m else ""
 
 
-def has_line(text: str, label: str) -> bool:
-    pat = re.compile(
-        r"^\s*(?:[-*\d.]+\s*)?\**\s*" + re.escape(label), re.IGNORECASE | re.MULTILINE
-    )
-    return bool(pat.search(text))
-
-
-def evidence_is_checkable(text: str) -> bool:
-    for line in text.splitlines():
-        if re.match(r"^\s*(?:[-*\d.]+\s*)?\**\s*Evidence:", line, re.IGNORECASE):
-            rest = line.split(":", 1)[1]
-            if CHECKABLE.search(rest):
-                return True
-    return False
-
-
-def line_value(text: str, label: str) -> str | None:
-    """The text after `label:` on its own line, or None if the line isn't present."""
-    pat = re.compile(r"^\s*(?:[-*\d.]+\s*)?\**\s*" + re.escape(label), re.IGNORECASE)
-    for line in text.splitlines():
-        if pat.match(line):
-            return line.split(":", 1)[1] if ":" in line else ""
-    return None
-
-
-# DoD v3 -- a claim that the thing is LIVE, not just built. Deliberately narrow phrases, because
-# this is checked against exactly one line (Built:, or DONE's own summary line), not the whole
-# reply: "live" showing up in an unrelated sentence elsewhere in the reply must never trip this.
-_LIVE_CLAIM = re.compile(
-    r"\bon cluster\b|\blive\b|\bdeployed\b|\bdoor(?:ed)?\b|\brunning\b|\breachable\b",
-    re.IGNORECASE,
-)
-# DoD v3, final cut (founder, same day, after the FleetView fork's own reply proved the first
-# draft too weak): "a one-off curl the builder ran itself does not count, no matter how real the
-# response." That fork's `DONE:` cited a `curl` to its own `127.0.0.1:18790` launchd daemon as its
-# "Founder receipt" -- reachable by nobody but its own builder. So a bare curl/HTTP status is no
-# longer live evidence on its own: what counts is a cluster-state check (kubectl/idp-kube get ...
-# showing Running) or the estate naming an independent, non-builder verifier (`qa-agent`, or its
-# standing drill) -- something the builder did not trigger and cannot fudge.
-_KUBE_GET = re.compile(r"\b(?:kubectl|idp-kube)\s+\S*\s*get\b", re.IGNORECASE)
-_KUBE_RUNNING = re.compile(r"\bRunning\b")
-_INDEPENDENT_VERIFIER = re.compile(
-    r"\bqa-agent\b|\blogin-drill\b|\bthe drill\b|\bindependently\s+verif\w*\b",
-    re.IGNORECASE,
-)
-
-
-def _live_evidence_is_independent(evidence: str) -> bool:
-    if _INDEPENDENT_VERIFIER.search(evidence):
-        return True
-    return bool(_KUBE_GET.search(evidence) and _KUBE_RUNNING.search(evidence))
-
-
-def unverified_live_claim(fold: str, kind: str) -> str | None:
-    """The claim line, if `kind` asserts a live capability with no independent live-check Evidence:."""
-    if kind == "INVENTORY":
-        claim_line = line_value(fold, "Built:")
-    elif kind == "DONE":
-        lines = fold.strip().splitlines()
-        claim_line = lines[0] if lines else None
-    else:
-        return None
-    if not claim_line or not _LIVE_CLAIM.search(claim_line):
-        return None
-    evidence = line_value(fold, "Evidence:") or ""
-    if _live_evidence_is_independent(evidence):
-        return None
-    return claim_line.strip()
-
-
-# LAW 31 -- "The founder does not run scripts". Enforced here because a rule the guard was blind
-# to is a rule that gets broken: on 2026-09-10 three replies in one session handed him a shell
-# command, an installer to run, and a policy to authorise, and nothing refused any of them.
-#
-# The scope is wider than "a script", because that is how the rule was missed each time. It
-# catches the four shapes a session actually reaches for:
-#
-#   1. A fenced block that is plainly a command to type (`bash`, `sh`, `zsh`, `shell`, `console`),
-#      or a fenced block whose body starts with a bare command word.
-#   2. A sentence telling him to run something, in the imperative or as a suggestion.
-#   3. A named estate tool offered as his action (`bin/idp-*`), which is the same thing wearing
-#      the platform's own name.
-#   4. An ask that he authorise, approve or paste -- the same handoff, phrased as a permission.
-#
-# What is NOT an offence, and this matters more than the rule: a command quoted as EVIDENCE of
-# what was run, a command inside a `Not done:` or `Evidence:` line, or a command shown as proof
-# in a table. The guard grades what the reply ASKS HIM TO DO, not every backtick it contains --
-# a guard that refuses correct work is an outage (R38).
-_FENCE_IS_A_COMMAND = re.compile(
-    r"^```(?:bash|sh|zsh|shell|console|terminal)\s*$", re.M
-)
-_FENCE_ANY = re.compile(r"^```.*$", re.M)
-# A fenced block's body, tagged or bare.
-_FENCED_BODIES = re.compile(r"^```[^\n]*\n(.*?)^```", re.M | re.S)
-# The first word of a line that is a command rather than prose: an estate tool, a known binary,
-# or a path-ish token followed by an argument.
-# The first word of a line that is a command rather than prose. Three shapes, because the third
-# is the one that got past the first version of this rule: a bare tool name with no path and no
-# argument (`concierge-install`) is still an instruction to type it.
-_LOOKS_LIKE_A_COMMAND = re.compile(
-    r"^(?:\$\s*)?(?:sudo\s+)?(?:"
-    r"bin/[\w.-]+"  # an estate tool by path
-    r"|\./\S+|/\S+"  # a path
-    r"|(?:python3?|pip3?|npm|npx|yarn|pnpm|brew|git|docker|kubectl|helm|flux|make|curl|wget|ssh|"
-    r"bash|sh|zsh|launchctl|systemsetup|gh|uv|uvicorn|pipx|conda|cargo|go|ruby|perl)\b"
-    r"|[a-z][a-z0-9]*-(?:install|up|down|deliver|run|build|deploy|bootstrap|start|stop|migrate)\b"
-    r"|[a-z][a-z0-9]*(?:-[a-z0-9]+){2,}\b"  # a hyphenated tool name, 2+ hyphens
-    r")",
-)
-
-# "run X", "you run", "please run", "just run" directed at him.
-_ASK_TO_RUN = re.compile(
-    r"\b(?:please\s+|just\s+|now\s+|you\s+|you'll\s+|you need to\s+|you should\s+|"
-    r"run this|then run|execute this|type this|paste this|copy this)\b[^.]{0,80}?"
-    r"\b(?:run|execute|type|paste|invoke|install)\b",
-    re.I,
-)
-# A named estate tool offered as his action, not as evidence.
-_NAMES_A_TOOL = re.compile(r"\b(?:run|use|execute|invoke)\s+`?bin/idp-[a-z0-9-]+", re.I)
-# Asking him to authorise or approve a change rather than doing it.
-_ASKS_PERMISSION = re.compile(
-    r"\b(?:authorise|authorize|approve|paste it|paste the|confirm and I|say go and I|"
-    r"your call to apply|tell me to apply)\b",
-    re.I,
-)
-
-
-def hands_the_founder_work(fold: str) -> list[str]:
-    """The lines where the reply asks HIM to do something a product should do itself.
-
-    Returns one string per offence, each quoting the line, so the session can see exactly which
-    sentence broke the rule rather than a general accusation.
-    """
-    found: list[str] = []
-    for raw in fold.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        # A command offered as evidence is not work handed over. The DoD already requires an
-        # `Evidence:` line, and refusing the command inside it would refuse correct work.
-        if re.match(
-            r"^(?:Evidence|Not done|Founder receipt|Built|Use|Expect)\s*:", line, re.I
-        ):
-            continue
-        if line.startswith("|") or line.startswith(">"):
-            continue  # a table row or a quotation, not an instruction
-        for pattern, why in (
-            (_NAMES_A_TOOL, "names an estate tool as his action"),
-            (_ASK_TO_RUN, "asks him to run something"),
-            (
-                _ASKS_PERMISSION,
-                "asks him to authorise something the estate can do itself",
-            ),
-        ):
-            if pattern.search(line):
-                found.append(f"LAW 31: {why}: {line[:160]}")
-                break
-    # The fence case, and it has to inspect the BODY rather than the tag: a tagged ```bash is the
-    # obvious shape, but the one used on 2026-09-10 was a BARE fence, which no tag-based rule can
-    # see. A block whose first non-blank line is a command word is an instruction to type it.
-    for body in _FENCED_BODIES.findall(fold):
-        stripped = body.strip()
-        if not stripped:
-            continue
-        first = stripped.splitlines()[0].strip()
-        if _LOOKS_LIKE_A_COMMAND.match(first):
-            found.append(
-                "LAW 31: the reply hands him a shell block to run: "
-                f"`{first[:110]}`. A consumer product is installed and used; it is not started by "
-                "a person typing commands."
-            )
-            break
-    return found
-
-
 def offences(text: str) -> list[str]:
+    """Ask policy/dod.rego about the reply. [] on any opa failure -- BLIND permits, per the
+    module docstring's fail-open doctrine."""
     fold = above_the_fold(text)
-    kind = first_word(fold)
-    out: list[str] = []
-    if kind == "DONE":
-        if not has_line(fold, "Founder receipt:"):
-            out.append(
-                "DONE: needs a `Founder receipt:` line. If the founder has not used it and "
-                "confirmed it, the word is INVENTORY:, not DONE:."
-            )
-        if not has_line(fold, "Evidence:"):
-            out.append("DONE: needs an `Evidence:` line.")
-    elif kind == "INVENTORY":
-        missing = [h for h in HANDOFF if not has_line(fold, h)]
-        if missing:
-            out.append(
-                "INVENTORY: needs all five handoff lines; missing "
-                + ", ".join(f"`{m}`" for m in missing)
-            )
-    elif kind == "STAGED":
-        # crew#281: a staged handoff carries its own default and timer, in the founder's words.
-        if not re.search(r"Reply 'go' to execute immediately, 'hold' to review", fold):
-            out.append(
-                "STAGED: needs the sentence `Reply 'go' to execute immediately, 'hold' to review.`"
-            )
-        if not re.search(r"Auto-activating in \d+ minutes", fold):
-            out.append("STAGED: needs `Auto-activating in <N> minutes.` with a number.")
-    if (
-        kind in ("DONE", "INVENTORY")
-        and has_line(fold, "Evidence:")
-        and not evidence_is_checkable(fold)
-    ):
-        out.append(
-            "`Evidence:` must contain a URL, a commit hash, a file path or a `command`."
+    opa = shutil.which("opa")
+    if not opa:
+        return []
+    try:
+        out = subprocess.run(  # noqa: S603  argv list, no shell, our own paths
+            [
+                opa,
+                "eval",
+                "--format",
+                "json",
+                "--ignore",
+                "fixtures",
+                "--ignore",
+                "*.json",
+                "--data",
+                str(POLICY),
+                "--stdin-input",
+                "data.dod.deny",
+            ],
+            input=json.dumps({"reply": fold, "kind": first_word(fold)}),
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
-    claim = unverified_live_claim(fold, kind)
-    if claim is not None:
-        out.append(
-            'DoD v3: this claims the thing is live ("'
-            + claim[:160]
-            + '") but `Evidence:` '
-            "does not show an independent live check. A test command, a PR/commit link, or a "
-            "curl the builder ran against its own process is not enough -- add a "
-            "`kubectl`/`idp-kube get ...` reference that shows Running, or `qa-agent`'s "
-            "sign-off, or say `Not done:` instead."
-        )
-    # LAW 31, and it applies to EVERY reply kind, not only the two above: handing him work is a
-    # defect whatever word the reply opens with.
-    out.extend(hands_the_founder_work(fold))
-    return out
+    except (OSError, subprocess.SubprocessError):
+        return []
+    if out.returncode != 0:
+        return []
+    try:
+        return sorted(json.loads(out.stdout)["result"][0]["expressions"][0]["value"])
+    except (ValueError, KeyError, IndexError, TypeError):
+        return []
 
 
 def last_assistant_text(transcript: Path) -> str:
