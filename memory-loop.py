@@ -123,12 +123,15 @@ def latest_checkpoint(transcript_path):
     d = os.path.join(os.path.dirname(transcript_path), "checkpoints")
     if not os.path.isdir(d):
         return None
-    #: RECOVERY-LATEST.md is session-recorder.py's own file, not this loop's -- its restore-hook
-    #: already injects it as "PICK UP WHERE THIS SESSION LEFT OFF" on the same SessionStart. Before
-    #: this exclusion it was also the newest file here by mtime, so this loop re-injected the exact
-    #: same checkpoint a second time under a different banner, on every session, for free.
+    #: RECOVERY-*.md (including RECOVERY-LATEST.md) is session-recorder.py's own file family, not
+    #: this loop's -- its restore-hook already injects the newest one as "PICK UP WHERE THIS SESSION
+    #: LEFT OFF" on the same SessionStart. Excluding only the literal name "RECOVERY-LATEST.md" left
+    #: every dated RECOVERY-<session>.md file eligible, and one of those is usually the newest file
+    #: here by mtime (LATEST.md is a copy written right after it) -- so this loop re-injected the same
+    #: checkpoint a second time under a different banner, on every session, for free. Measured
+    #: 2026-09-14: RECOVERY-LATEST.md and RECOVERY-e55b4bac.md were byte-identical at session start.
     files = [os.path.join(d, n) for n in os.listdir(d)
-             if n.endswith(".md") and n != "RECOVERY-LATEST.md"]
+             if n.endswith(".md") and not n.startswith("RECOVERY-")]
     if not files:
         return None
     f = max(files, key=lambda p: os.path.getmtime(p))

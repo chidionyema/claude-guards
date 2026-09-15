@@ -32,10 +32,53 @@ import time
 import urllib.request
 
 HOME = os.path.expanduser("~")
+
+
+def _idp_dir():
+    """The idp checkout on this machine (LAW 46: env first, never only a literal). Mirrors the
+    lookup founder_ledger_page.py already uses, same marker convention."""
+    cands = [os.environ["IDP_DIR"]] if os.environ.get("IDP_DIR") else []
+    cands += [
+        os.path.join(HOME, "dev", "code", "idp"),
+        os.path.join(HOME, "Documents", "code", "idp"),
+    ]
+    for c in cands:
+        if os.path.exists(os.path.join(c, "llm", "config.yaml")):
+            return c
+    return None
+
+
+def _estate_models():
+    """Every worker model this estate declares, in the platform's own file order. Founder
+    2026-09-14: read-shunt must be model-agnostic, no vendor pinned in this file, and every agent
+    running needs the same list -- so the list is not owned here, it is read from the one shared
+    router config (idp/llm/config.yaml, LAW 43/THE HEADLINE: onboard the existing router, do not
+    keep a private roster that drifts from it). Roles that cannot serve a chat digest (vision,
+    embed, the frontier `default`) fail empty/error on the first real call and the existing
+    fallback loop already skips past them -- no curated exclude list needed here either."""
+    idp = _idp_dir()
+    if not idp:
+        return []
+    try:
+        text = open(os.path.join(idp, "llm", "config.yaml"), encoding="utf-8").read()
+    except OSError:
+        return []
+    return re.findall(r"^\s*-\s*model_name:\s*(\S+)\s*$", text, re.MULTILINE)
+
+
 THRESHOLD = int(os.environ.get("READ_SHUNT_LINES", "350"))
 MAX_CHARS = int(os.environ.get("READ_SHUNT_MAX_CHARS", "400000"))
 TIMEOUT = float(os.environ.get("READ_SHUNT_TIMEOUT", "60"))
-MODEL = os.environ.get("READ_SHUNT_MODEL", "minimax_m27")
+# Founder 2026-09-14: no hardcoded vendor model here, model-agnostic, every agent running needs
+# the same behavior. Ledger proof (~/.claude/state/read-shunt.jsonl) showed the old hardcoded
+# default, minimax_m27, 402/429ing on every attempt 2026-09-11 through 2026-09-14 -- out of funds,
+# not a code fault -- and a hardcoded replacement (tried: groq) just moves the same failure mode to
+# a different vendor. The estate already owns one shared roster: idp/llm/config.yaml. ROSTER below
+# is read from there, in the platform's own file order; READ_SHUNT_MODEL/READ_SHUNT_FALLBACK still
+# override per LAW 46, and the two literal names here are the only ones this script keeps for when
+# the idp checkout cannot be found at all (a degraded default, not a routing choice).
+ROSTER = _estate_models() or ["fast", "minimax_m27", "gemini", "minimax"]
+MODEL = os.environ.get("READ_SHUNT_MODEL") or ROSTER[0]
 # MiniMax-M3 is a reasoning model: measured 2026-09-09 09:58Z, a 900-token budget was spent whole on
 # reasoning_content (899 tokens), content came back 2 chars and finish_reason was `length`. The request
 # now asks for reasoning_effort none; 1500 covers a 2500-char digest with room. Founder 2026-09-09:
@@ -47,7 +90,7 @@ MAX_TOKENS = int(os.environ.get("READ_SHUNT_MAX_TOKENS", "1500"))
 # Claude whole. The chain ends at the frontier only when every alias has refused.
 FALLBACKS = [
     m
-    for m in os.environ.get("READ_SHUNT_FALLBACK", "gemini,minimax").split(",")
+    for m in os.environ.get("READ_SHUNT_FALLBACK", ",".join(ROSTER)).split(",")
     if m.strip() and m.strip() != MODEL
 ]
 LEDGER = os.environ.get("READ_SHUNT_LEDGER") or os.path.join(
